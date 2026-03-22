@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+*.md
+.env
+.env.*
+storage/uploads/*
+storage/videos/*
+storage/hls/*
+!storage/uploads/.gitkeep
+!storage/videos/.gitkeep
+!storage/hls/.gitkeep
+*.db
+*.db-journal

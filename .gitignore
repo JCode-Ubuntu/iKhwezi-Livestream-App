@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.db-journal
+
+# Storage (keep structure, ignore content)
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+backend/storage/videos/*
+!backend/storage/videos/.gitkeep
+backend/storage/hls/*
+!backend/storage/hls/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
