@@ -13,6 +13,10 @@ export default defineConfig({
       '/storage': {
         target: 'http://localhost:3001',
         changeOrigin: true
+      },
+      '/hls': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
       }
     }
   },

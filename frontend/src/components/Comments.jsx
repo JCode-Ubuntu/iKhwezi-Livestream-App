@@ -2,6 +2,30 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Reply, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+const MAX_LEN = 280;
+
+function CommentSkeleton() {
+  return (
+    <div className="space-y-4 py-2">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="flex gap-3">
+          <div className="h-9 w-9 flex-shrink-0 rounded-full bg-slate-800/90">
+            <div className="h-full w-full animate-shimmer-slide rounded-full bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-40 rounded-sm bg-slate-800/90">
+              <div className="h-full w-full animate-shimmer-slide rounded-sm bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
+            </div>
+            <div className="h-3 w-full rounded-sm bg-slate-800/90">
+              <div className="h-full w-full animate-shimmer-slide rounded-sm bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Comments({ videoId, onClose }) {
   const { fetchWithAuth, showToast, user } = useAuth();
   const [comments, setComments] = useState([]);
@@ -10,11 +34,17 @@ function Comments({ videoId, onClose }) {
   const [replyingTo, setReplyingTo] = useState(null);
   const [expandedReplies, setExpandedReplies] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const typingTimer = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
     loadComments();
   }, [videoId]);
+
+  useEffect(() => () => {
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+  }, []);
 
   const loadComments = async () => {
     try {
@@ -31,6 +61,10 @@ function Comments({ videoId, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!newComment.trim() || submitting) return;
+    if (newComment.trim().length > MAX_LEN) {
+      showToast(`Comment must be ${MAX_LEN} characters or less`, 'error');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -90,54 +124,38 @@ function Comments({ videoId, onClose }) {
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(0, 0, 0, 0.8)',
-      backdropFilter: 'blur(8px)',
-      zIndex: 200,
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'flex-end',
-    }}>
+    <div
+      className="pointer-events-auto fixed inset-0 z-[200] flex flex-col justify-end bg-black/75 backdrop-blur"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Comments"
+    >
       <div 
         onClick={onClose}
-        style={{ flex: 1 }}
+        className="flex-1"
       />
       
-      <div style={{
-        background: '#1E2235',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '70vh',
-        display: 'flex',
-        flexDirection: 'column',
-        animation: 'slide-up 0.3s ease',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '16px 20px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        }}>
-          <h3 style={{ fontSize: 18, fontWeight: 600 }}>
-            {comments.length} Comments
-          </h3>
-          <button onClick={onClose} className="close-btn">
+      <div
+        className="flex max-h-[70vh] flex-col rounded-t-[1.75rem] border border-white/10 border-b-0 bg-[#0c1022]/95 shadow-glass backdrop-blur-3xl"
+        style={{ animation: 'slide-up 0.3s ease' }}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div>
+            <h3 className="text-lg font-bold tracking-tight text-white">
+              {comments.length} Comments
+            </h3>
+            {typing && (
+              <p className="mt-1 text-xs text-neon-cyan/90">Typing…</p>
+            )}
+          </div>
+          <button type="button" onClick={onClose} className="close-btn">
             <X size={20} />
           </button>
         </div>
 
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '12px 20px',
-        }}>
+        <div className="flex-1 overflow-y-auto px-5 py-3">
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#A0A0A0' }}>
-              Loading comments...
-            </div>
+            <CommentSkeleton />
           ) : comments.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: '#A0A0A0' }}>
               No comments yet. Be the first!
@@ -237,13 +255,7 @@ function Comments({ videoId, onClose }) {
 
         <form 
           onSubmit={handleSubmit}
-          style={{
-            display: 'flex',
-            gap: 12,
-            padding: '12px 20px 24px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-            background: '#161828',
-          }}
+          className="relative flex flex-nowrap items-center gap-3 border-t border-white/10 bg-[#0a0d18]/95 px-5 py-4 pb-6 backdrop-blur-xl"
         >
           {replyingTo && (
             <div style={{
@@ -274,11 +286,22 @@ function Comments({ videoId, onClose }) {
             ref={inputRef}
             type="text"
             value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value.slice(0, MAX_LEN);
+              setNewComment(v);
+              setTyping(true);
+              if (typingTimer.current) clearTimeout(typingTimer.current);
+              typingTimer.current = window.setTimeout(() => setTyping(false), 1200);
+            }}
+            onBlur={() => setTyping(false)}
             placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
-            className="input"
-            style={{ flex: 1, padding: '10px 16px' }}
+            className="input min-w-0 flex-1"
+            maxLength={MAX_LEN}
+            style={{ padding: '10px 16px' }}
           />
+          <span className="min-w-[3rem] text-right text-[11px] tabular-nums text-white/40" aria-live="polite">
+            {newComment.length}/{MAX_LEN}
+          </span>
           <button
             type="submit"
             disabled={!newComment.trim() || submitting}

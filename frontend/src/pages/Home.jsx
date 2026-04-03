@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoActions from '../components/VideoActions';
 import Comments from '../components/Comments';
 import GuestPrompt from '../components/GuestPrompt';
+import CosmicBackground from '../components/CosmicBackground';
+import FeedDiscovery from '../components/FeedDiscovery';
+import SkeletonStream from '../components/SkeletonStream';
+import ReactionsBar from '../components/ReactionsBar';
 import { ChevronLeft, ChevronRight, Volume2, VolumeX, Sparkles } from 'lucide-react';
 
 function Home() {
-  const { fetchWithAuth, isAuthenticated } = useAuth();
+  const { fetchWithAuth } = useAuth();
   const [videos, setVideos] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -50,11 +54,11 @@ function Home() {
     }
   }, [currentIndex, videos.length, hasMore, loading, page, loadVideos]);
 
-  const goToVideo = (index) => {
+  const goToVideo = useCallback((index) => {
     if (index >= 0 && index < videos.length) {
       setCurrentIndex(index);
     }
-  };
+  }, [videos.length]);
 
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
@@ -83,75 +87,51 @@ function Home() {
     } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
       goToVideo(currentIndex - 1);
     }
-  }, [currentIndex, videos.length]);
+  }, [currentIndex, videos.length, goToVideo]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const updateVideo = (updatedVideo) => {
+  const updateVideo = useCallback((updatedVideo) => {
     setVideos(prev => prev.map(v => v.id === updatedVideo.id ? updatedVideo : v));
-  };
+  }, []);
 
   const currentVideo = videos[currentIndex];
 
+  const fashionMood = useMemo(() => {
+    const t = `${currentVideo?.title || ''} ${currentVideo?.description || ''}`;
+    return /fashion|style|outfit|runway|couture/i.test(t) ? 'fashion' : 'default';
+  }, [currentVideo]);
+
+  const engagementPulse = useMemo(() => {
+    if (!currentVideo) return 0;
+    return (currentVideo.likeCount || 0) + (currentVideo.commentCount || 0) * 2 + (currentVideo.starCount || 0);
+  }, [currentVideo]);
+
   if (loading && videos.length === 0) {
     return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 20,
-        paddingBottom: 70,
-      }}>
-        <div style={{
-          width: 80,
-          height: 80,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'pulse-glow 2s ease-in-out infinite',
-        }}>
-          <Sparkles size={36} color="white" />
-        </div>
-        <p style={{ color: '#A0A0A0', fontSize: 16 }}>Loading amazing content...</p>
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden pb-[70px]">
+        <CosmicBackground intensity={1.2} />
+        <SkeletonStream rows={4} />
       </div>
     );
   }
 
   if (videos.length === 0) {
     return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 20,
-        padding: 40,
-        paddingBottom: 110,
-        textAlign: 'center',
-      }}>
-        <div style={{
-          width: 100,
-          height: 100,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6F4FFF20, #FFB80020)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <Sparkles size={48} color="#6F4FFF" />
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-10 pb-[110px] text-center">
+        <CosmicBackground />
+        <div className="glass-panel relative z-10 flex max-w-sm flex-col items-center gap-4 px-8 py-10">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-neon-indigo/30 to-neon-purple/20 shadow-neon-ring">
+            <Sparkles className="h-11 w-11 text-neon-cyan" />
+          </div>
+          <h2 className="text-2xl font-black tracking-tight text-glow-neon">No Videos Yet</h2>
+          <p className="text-lg leading-relaxed text-white/70">
+            Be the first to share amazing content on iKHWEZI!
+          </p>
         </div>
-        <h2 style={{ fontSize: 24, fontWeight: 700 }}>No Videos Yet</h2>
-        <p style={{ color: '#A0A0A0', maxWidth: 280 }}>
-          Be the first to share amazing content on iKHWEZI!
-        </p>
       </div>
     );
   }
@@ -159,31 +139,30 @@ function Home() {
   return (
     <div 
       ref={containerRef}
-      style={{
-        flex: 1,
-        position: 'relative',
-        overflow: 'hidden',
-        background: '#000',
-        marginBottom: 70,
-      }}
+      className="relative mb-[70px] min-h-0 flex-1 overflow-hidden bg-black"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div style={{
-        display: 'flex',
-        height: '100%',
-        transition: 'transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1)',
-        transform: `translateX(-${currentIndex * 100}%)`,
-      }}>
+      <CosmicBackground intensity={0.35} />
+      <FeedDiscovery
+        videos={videos}
+        currentIndex={currentIndex}
+        onPickIndex={goToVideo}
+        fashionTag={fashionMood}
+      />
+
+      <div
+        className="absolute inset-0 z-[1] flex"
+        style={{
+          transition: 'transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          transform: `translateX(-${currentIndex * 100}%)`,
+        }}
+      >
         {videos.map((video, index) => (
           <div
             key={video.id}
-            style={{
-              minWidth: '100%',
-              height: '100%',
-              position: 'relative',
-            }}
+            className="relative h-full min-w-full"
           >
             <VideoPlayer
               src={`/storage/uploads/${video.filename}`}
@@ -197,24 +176,26 @@ function Home() {
               onShowLogin={() => setShowGuestPrompt(true)}
             />
 
-            <div style={{
-              position: 'absolute',
-              left: 16,
-              bottom: 80,
-              right: 80,
-              zIndex: 10,
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                marginBottom: 12,
-              }}>
-                <div className="avatar" style={{ 
-                  width: 40, 
-                  height: 40,
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                }}>
+            <div
+              className="pointer-events-none absolute bottom-24 left-4 z-10 md:bottom-32"
+              style={{ right: '5.5rem' }}
+            >
+              <div className="pointer-events-auto mb-3 max-w-[min(70vw,18rem)]">
+                <ReactionsBar
+                  variant="compact"
+                  includeHeart={false}
+                  engagement={engagementPulse}
+                  className="inline-block"
+                />
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="avatar border border-white/20 shadow-[0_0_24px_rgba(99,102,241,0.35)]"
+                  style={{
+                    width: 40,
+                    height: 40,
+                  }}
+                >
                   {video.creator?.avatar ? (
                     <img src={video.creator.avatar} alt="" />
                   ) : (
@@ -249,6 +230,7 @@ function Home() {
                   fontSize: 16,
                   fontWeight: 600,
                   marginBottom: 6,
+                  marginTop: 12,
                   textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
@@ -298,46 +280,20 @@ function Home() {
       </div>
 
       <button
+        type="button"
         onClick={() => setMuted(!muted)}
-        style={{
-          position: 'absolute',
-          top: 16,
-          right: 16,
-          width: 40,
-          height: 40,
-          borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(10px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          zIndex: 10,
-        }}
+        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white shadow-glass backdrop-blur-xl transition-transform active:scale-95"
+        aria-label={muted ? 'Unmute' : 'Mute'}
       >
         {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
       </button>
 
       {currentIndex > 0 && (
         <button
+          type="button"
           onClick={() => goToVideo(currentIndex - 1)}
-          style={{
-            position: 'absolute',
-            left: 8,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 44,
-            height: 44,
-            borderRadius: '50%',
-            background: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            zIndex: 10,
-            opacity: 0.7,
-          }}
+          className="absolute left-2 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white opacity-70 backdrop-blur-xl transition-transform active:scale-95"
+          aria-label="Previous video"
         >
           <ChevronLeft size={24} />
         </button>
@@ -345,24 +301,10 @@ function Home() {
 
       {currentIndex < videos.length - 1 && (
         <button
+          type="button"
           onClick={() => goToVideo(currentIndex + 1)}
-          style={{
-            position: 'absolute',
-            right: 8,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 44,
-            height: 44,
-            borderRadius: '50%',
-            background: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            zIndex: 10,
-            opacity: 0.7,
-          }}
+          className="absolute right-2 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white opacity-70 backdrop-blur-xl transition-transform active:scale-95"
+          aria-label="Next video"
         >
           <ChevronRight size={24} />
         </button>
@@ -380,7 +322,8 @@ function Home() {
         {videos.slice(Math.max(0, currentIndex - 3), Math.min(videos.length, currentIndex + 4)).map((_, i) => {
           const actualIndex = Math.max(0, currentIndex - 3) + i;
           return (
-            <div
+            <button
+              type="button"
               key={actualIndex}
               onClick={() => goToVideo(actualIndex)}
               style={{
@@ -393,6 +336,7 @@ function Home() {
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
               }}
+              aria-label={`Go to video ${actualIndex + 1}`}
             />
           );
         })}

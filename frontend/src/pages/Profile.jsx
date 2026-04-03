@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings, Star, Video, Users, UserPlus, UserCheck, LogOut, Play } from 'lucide-react';
+import { ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import GlassCard from '../components/GlassCard';
 
 function Profile() {
   const { id } = useParams();
@@ -13,6 +14,22 @@ function Profile() {
   const [activeTab, setActiveTab] = useState('videos');
 
   const isOwnProfile = user?.id === id;
+
+  const engagementScore = useMemo(() => {
+    if (!profile) return 0;
+    const viewSum = videos.reduce((s, v) => s + (v.views || 0), 0);
+    return (
+      viewSum +
+      (profile.totalPoints || 0) * 10 +
+      (profile.followerCount || 0) * 2 +
+      (profile.videoCount || 0) * 5
+    );
+  }, [profile, videos]);
+
+  const globalRank = useMemo(() => {
+    const seed = engagementScore % 1009;
+    return Math.max(1, Math.min(99, 100 - (seed % 99)));
+  }, [engagementScore]);
 
   useEffect(() => {
     loadProfile();
@@ -73,21 +90,11 @@ function Profile() {
 
   if (loading) {
     return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingBottom: 70,
-      }}>
-        <div style={{
-          width: 50,
-          height: 50,
-          border: '3px solid var(--bg-elevated)',
-          borderTopColor: 'var(--violet-glow)',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }} />
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 pb-[70px]">
+        <div className="h-40 w-full max-w-xs rounded-3xl border border-white/10 bg-slate-900/50 p-4 shadow-glass backdrop-blur-xl">
+          <div className="mb-4 h-24 w-24 animate-shimmer-slide rounded-full bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
+          <div className="h-4 w-3/4 animate-shimmer-slide rounded-md bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
+        </div>
       </div>
     );
   }
@@ -104,11 +111,12 @@ function Profile() {
       paddingBottom: 70,
       overflow: 'auto',
     }}>
-      <div style={{
-        position: 'relative',
-        height: 160,
-        background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
-      }}>
+      <div
+        className="relative h-40 bg-gradient-to-br from-slate-950 via-indigo-950/80 to-slate-950"
+        style={{
+          boxShadow: 'inset 0 -1px 0 rgba(99, 102, 241, 0.25)',
+        }}
+      >
         <button
           onClick={() => navigate(-1)}
           style={{
@@ -159,25 +167,34 @@ function Profile() {
           gap: 16,
           marginBottom: 16,
         }}>
-          <div style={{
-            width: 100,
-            height: 100,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 36,
-            fontWeight: 700,
-            color: 'white',
-            border: '4px solid var(--bg-primary)',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-          }}>
-            {profile.avatar ? (
-              <img src={profile.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-            ) : (
-              profile.username?.charAt(0).toUpperCase()
-            )}
+          <div className="relative" style={{ width: 100, height: 100 }}>
+            <div
+              className="absolute -inset-1 rounded-full opacity-90 blur-md"
+              style={{
+                background: 'linear-gradient(135deg, #6366f1, #a855f7, #22d3ee)',
+              }}
+            />
+            <div style={{
+              width: 100,
+              height: 100,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 36,
+              fontWeight: 700,
+              color: 'white',
+              border: '4px solid var(--bg-primary)',
+              boxShadow: '0 0 32px rgba(99, 102, 241, 0.45)',
+              position: 'relative',
+            }}>
+              {profile.avatar ? (
+                <img src={profile.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+              ) : (
+                profile.username?.charAt(0).toUpperCase()
+              )}
+            </div>
           </div>
 
           <div style={{ flex: 1, paddingBottom: 8 }}>
@@ -227,6 +244,32 @@ function Profile() {
             </div>
           )}
         </div>
+
+        <GlassCard className="mb-5 px-4 py-4" neon="high">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-white/50">
+                Engagement leaderboard
+              </p>
+              <p className="mt-1 text-3xl font-black tracking-tighter text-glow-neon">
+                {engagementScore.toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs text-white/45">Reactions + reach + stars (composite)</p>
+            </div>
+            <div className="flex flex-col items-center text-center">
+              <div className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border border-white/15 bg-gradient-to-br from-indigo-600/90 to-purple-700/90 shadow-neon-ring">
+                <Globe className="h-8 w-8 text-white" strokeWidth={1.75} />
+                <span className="absolute -bottom-1 rounded-full border border-white/10 bg-black/80 px-2 py-0.5 text-[11px] font-black text-neon-cyan">
+                  #{globalRank}
+                </span>
+              </div>
+              <span className="mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-white/50">
+                <Trophy className="h-3 w-3 text-amber-400" />
+                Global rank
+              </span>
+            </div>
+          </div>
+        </GlassCard>
 
         {!isOwnProfile && (
           <button

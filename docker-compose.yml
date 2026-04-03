@@ -32,6 +32,7 @@ services:
       - "3000:80"
     depends_on:
       - backend
+      - nginx-rtmp
     restart: unless-stopped
     networks:
       - ikhwezi-network

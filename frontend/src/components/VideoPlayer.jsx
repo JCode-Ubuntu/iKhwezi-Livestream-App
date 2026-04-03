@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 function VideoPlayer({ src, isActive, onVideoEnd }) {
   const videoRef = useRef(null);
@@ -44,7 +44,11 @@ function VideoPlayer({ src, isActive, onVideoEnd }) {
     };
   }, [onVideoEnd]);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
 
@@ -55,11 +59,41 @@ function VideoPlayer({ src, isActive, onVideoEnd }) {
       video.pause();
       setIsPlaying(false);
     }
+  }, []);
+
+  const [magnify, setMagnify] = useState(false);
+  const longPressRef = useRef(null);
+  const heldLongRef = useRef(false);
+  const suppressClickRef = useRef(false);
+
+  const onPointerDown = () => {
+    heldLongRef.current = false;
+    longPressRef.current = window.setTimeout(() => {
+      heldLongRef.current = true;
+      setMagnify(true);
+      if (navigator.vibrate) try { navigator.vibrate(10); } catch { /* ignore */ }
+    }, 480);
+  };
+
+  const clearLongPress = () => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+    if (heldLongRef.current) {
+      suppressClickRef.current = true;
+      heldLongRef.current = false;
+    }
+    setMagnify(false);
   };
 
   return (
     <div 
       onClick={togglePlay}
+      onPointerDown={onPointerDown}
+      onPointerUp={clearLongPress}
+      onPointerLeave={clearLongPress}
+      onPointerCancel={clearLongPress}
       style={{
         position: 'absolute',
         inset: 0,
@@ -68,6 +102,7 @@ function VideoPlayer({ src, isActive, onVideoEnd }) {
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
+        overflow: 'hidden',
       }}
     >
       <video
@@ -80,6 +115,9 @@ function VideoPlayer({ src, isActive, onVideoEnd }) {
           width: '100%',
           height: '100%',
           objectFit: 'cover',
+          transform: magnify ? 'scale(1.12)' : 'scale(1)',
+          transformOrigin: 'center center',
+          transition: 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       />
       
@@ -125,4 +163,4 @@ function VideoPlayer({ src, isActive, onVideoEnd }) {
   );
 }
 
-export default VideoPlayer;
+export default React.memo(VideoPlayer);

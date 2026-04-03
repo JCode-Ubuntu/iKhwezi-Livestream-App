@@ -1,20 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Hls from 'hls.js';
 import { Radio, Users, ArrowLeft, RefreshCw, WifiOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import CosmicBackground from '../components/CosmicBackground';
+import ReactionsBar from '../components/ReactionsBar';
+import GlassCard from '../components/GlassCard';
+import { useAnimatedInteger } from '../hooks/useAnimatedInteger';
 
 function Live() {
   const navigate = useNavigate();
   const { fetchWithAuth } = useAuth();
   const videoRef = useRef(null);
+  const wrapRef = useRef(null);
   const hlsRef = useRef(null);
   const [liveStatus, setLiveStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewerCount, setViewerCount] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [touchY0, setTouchY0] = useState(null);
 
-  const HLS_URL = 'http://localhost:8080/hls/stream.m3u8';
+  const HLS_URL = `${window.location.origin}/hls/stream.m3u8`;
+
+  const displayViewers = useAnimatedInteger(viewerCount, 450);
 
   useEffect(() => {
     checkLiveStatus();
@@ -119,202 +128,161 @@ function Live() {
     checkLiveStatus();
   };
 
+  const onWheelZoom = useCallback((e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    setZoom((z) => Math.min(1.5, Math.max(1, z + (e.deltaY > 0 ? -0.06 : 0.06))));
+  }, []);
+
+  const onTouchStart = (e) => {
+    setTouchY0(e.touches[0].clientY);
+  };
+
+  const onTouchEnd = (e) => {
+    if (touchY0 == null) return;
+    const y = e.changedTouches[0].clientY;
+    const dy = touchY0 - y;
+    setTouchY0(null);
+    if (dy > 70) {
+      if (navigator.vibrate) try { navigator.vibrate(8); } catch { /* ignore */ }
+    }
+  };
+
   if (loading) {
     return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 20,
-        paddingBottom: 70,
-      }}>
-        <div style={{
-          width: 80,
-          height: 80,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #EF4444, #DC2626)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'pulse-glow 2s ease-in-out infinite',
-        }}>
-          <Radio size={36} color="white" />
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-5 pb-[70px]">
+        <CosmicBackground intensity={0.8} />
+        <div className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-black/40 shadow-glass backdrop-blur-xl">
+          <div className="h-14 w-14 animate-shimmer-slide rounded-full bg-gradient-to-r from-red-500/40 via-orange-400/30 to-red-500/40 bg-[length:200%_100%]" />
         </div>
-        <p style={{ color: '#A0A0A0', fontSize: 16 }}>Checking live status...</p>
+        <p className="relative z-10 text-lg text-white/60">Checking live status…</p>
       </div>
     );
   }
 
   if (!liveStatus?.isLive) {
     return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 24,
-        padding: 40,
-        paddingBottom: 110,
-        textAlign: 'center',
-      }}>
-        <div style={{
-          width: 120,
-          height: 120,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #1E2235, #252A40)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '3px solid #252A40',
-        }}>
-          <WifiOff size={48} color="#6B7280" />
-        </div>
-        
-        <div>
-          <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
-            No Live Stream
-          </h2>
-          <p style={{ color: '#A0A0A0', maxWidth: 280, lineHeight: 1.6 }}>
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-10 pb-[110px] text-center">
+        <CosmicBackground />
+        <GlassCard className="relative z-10 max-w-md px-8 py-10 text-center" neon="medium">
+          <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 shadow-neon-ring">
+            <WifiOff className="h-12 w-12 text-white/40" />
+          </div>
+          <h2 className="mb-2 text-3xl font-black tracking-tight text-glow-neon">No Live Stream</h2>
+          <p className="text-lg leading-relaxed text-white/65">
             The creator is not currently streaming. Check back soon for live content!
           </p>
-        </div>
-
-        <button
-          onClick={handleRetry}
-          className="btn btn-primary"
-          style={{ marginTop: 8 }}
-        >
-          <RefreshCw size={18} />
-          Check Again
-        </button>
-
-        <button
-          onClick={() => navigate('/')}
-          className="btn btn-ghost"
-        >
-          <ArrowLeft size={18} />
-          Back to Feed
-        </button>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="btn btn-primary mx-auto mt-6"
+          >
+            <RefreshCw size={18} />
+            Check Again
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="btn btn-ghost mx-auto mt-3 w-full max-w-xs"
+          >
+            <ArrowLeft size={18} />
+            Back to Feed
+          </button>
+        </GlassCard>
       </div>
     );
   }
 
+  const pulseGlow = Math.min(1, (viewerCount || 0) / 80 + displayViewers / 200);
+
   return (
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      background: '#000',
-      marginBottom: 70,
-      position: 'relative',
-    }}>
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        padding: '16px 20px',
-        background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        zIndex: 10,
-      }}>
+    <div className="relative mb-[70px] flex min-h-0 flex-1 flex-col bg-black">
+      <CosmicBackground intensity={0.25} />
+
+      <div
+        className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-4 pt-4"
+        style={{
+          paddingTop: 'max(1rem, env(safe-area-inset-top))',
+        }}
+      >
         <button
+          type="button"
           onClick={() => navigate('/')}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            background: 'rgba(255, 255, 255, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-          }}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white shadow-glass backdrop-blur-xl transition-transform active:scale-95"
+          aria-label="Back"
         >
           <ArrowLeft size={20} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            background: '#EF4444',
-            borderRadius: 20,
-            animation: 'live-pulse 1.5s ease-in-out infinite',
-          }}>
-            <Radio size={14} />
-            <span style={{ fontSize: 12, fontWeight: 700 }}>LIVE</span>
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-600/90 px-3 py-1.5 shadow-[0_0_24px_rgba(239,68,68,0.45)] animate-live-ring"
+            style={{
+              boxShadow: `0 0 ${16 + pulseGlow * 24}px rgba(239, 68, 68, ${0.35 + pulseGlow * 0.2})`,
+            }}
+          >
+            <Radio size={14} className="text-white" />
+            <span className="text-xs font-bold text-white">LIVE</span>
           </div>
 
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            background: 'rgba(255, 255, 255, 0.1)',
-            borderRadius: 20,
-          }}>
+          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 font-semibold text-white shadow-glass backdrop-blur-xl">
             <Users size={14} />
-            <span style={{ fontSize: 12, fontWeight: 600 }}>{viewerCount}</span>
+            <span className="text-xs tabular-nums">{displayViewers}</span>
           </div>
         </div>
       </div>
 
-      <video
-        ref={videoRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          background: '#000',
-        }}
-        playsInline
-        controls
-        autoPlay
-        muted
-      />
+      <div
+        ref={wrapRef}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        onWheel={onWheelZoom}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        style={{ touchAction: 'manipulation' }}
+      >
+        <video
+          ref={videoRef}
+          className="h-full w-full bg-black object-contain transition-transform duration-200 ease-out"
+          style={{ transform: `scale(${zoom})` }}
+          playsInline
+          controls
+          autoPlay
+          muted
+        />
+      </div>
 
       {error && (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-          background: 'rgba(0, 0, 0, 0.9)',
-        }}>
-          <WifiOff size={48} color="#EF4444" />
-          <p style={{ color: '#A0A0A0' }}>{error}</p>
-          <button onClick={handleRetry} className="btn btn-primary">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/90">
+          <WifiOff size={48} className="text-red-500" />
+          <p className="text-white/70">{error}</p>
+          <button type="button" onClick={handleRetry} className="btn btn-primary">
             <RefreshCw size={18} />
             Retry
           </button>
         </div>
       )}
 
-      <div style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: '60px 20px 20px',
-        background: 'linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent)',
-      }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-          {liveStatus.title || 'Live Stream'}
-        </h2>
-        <p style={{ color: '#A0A0A0', fontSize: 14 }}>
-          iKHWEZI Live • Started {liveStatus.startedAt ? new Date(liveStatus.startedAt).toLocaleTimeString() : 'recently'}
-        </p>
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-3 bg-gradient-to-t from-black via-black/80 to-transparent px-4 pb-8 pt-24">
+        <div className="pointer-events-auto flex justify-center pb-2">
+          <ReactionsBar
+            engagement={(viewerCount || 0) * 3}
+            variant="full"
+            includeHeart
+            className="max-w-full"
+          />
+        </div>
+        <GlassCard className="pointer-events-auto border-white/10 !bg-black/45 px-4 py-3" neon="low">
+          <h2 className="text-xl font-black tracking-tight text-white">
+            {liveStatus.title || 'Live Stream'}
+          </h2>
+          <p className="mt-1 text-sm text-white/55">
+            iKHWEZI Live •{' '}
+            {liveStatus.startedAt ? new Date(liveStatus.startedAt).toLocaleTimeString() : 'recently'}
+          </p>
+          <p className="mt-2 text-xs text-white/40">
+            Pinch or Ctrl+scroll to zoom the stream. Swipe up for quick reactions.
+          </p>
+        </GlassCard>
       </div>
     </div>
   );

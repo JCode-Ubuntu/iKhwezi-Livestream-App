@@ -267,4 +267,4 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
   );
 }
 
-export default VideoActions;
+export default React.memo(VideoActions);
