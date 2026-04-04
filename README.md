@@ -34,8 +34,8 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 
 ## Access Points
 
-- **User App**: http://localhost:3000
-- **Admin Panel**: http://localhost:3000/admin (Key: `ikhwezi_admin_26`)
+- **User App**: http://localhost:8080
+- **Admin Panel**: http://localhost:8080/admin (Key: `ikhwezi_admin_26`)
 - **API**: http://localhost:3001
 - **HLS Stream**: http://localhost:8080/hls/stream.m3u8
 

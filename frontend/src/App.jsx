@@ -1,7 +1,8 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
+import VideoRecorder from './components/VideoRecorder';
 
 const Home = lazy(() => import('./pages/Home'));
 const Live = lazy(() => import('./pages/Live'));
@@ -23,6 +24,7 @@ function LoadingScreen() {
 
 function App() {
   const { loading } = useAuth();
+  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
 
   if (loading) {
     return <LoadingScreen />;
@@ -43,7 +45,13 @@ function App() {
           </Routes>
         </div>
       </Suspense>
-      <Navigation />
+      <Navigation onCreateClick={() => setShowVideoRecorder(true)} />
+      {showVideoRecorder && (
+        <VideoRecorder
+          onClose={() => setShowVideoRecorder(false)}
+          onVideoUploaded={() => setShowVideoRecorder(false)}
+        />
+      )}
     </div>
   );
 }

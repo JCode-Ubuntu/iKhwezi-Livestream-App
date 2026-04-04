@@ -1,9 +1,9 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Radio, User, LogIn } from 'lucide-react';
+import { Home, Radio, User, LogIn, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-function Navigation() {
+function Navigation({ onCreateClick }) {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
 
@@ -14,9 +14,8 @@ function Navigation() {
   const navItems = [
     { path: '/', icon: Home, label: 'Home' },
     { path: '/live', icon: Radio, label: 'Live' },
-    isAuthenticated
-      ? { path: `/profile/${user?.id}`, icon: User, label: 'Profile' }
-      : { path: '/login', icon: LogIn, label: 'Login' },
+    // Always show profile for free access
+    user ? { path: `/profile/${user?.id}`, icon: User, label: 'Profile' } : { path: '/', icon: User, label: 'Profile' },
   ];
 
   return (
@@ -55,6 +54,26 @@ function Navigation() {
           </NavLink>
         );
       })}
+      <button
+        onClick={onCreateClick}
+        className="relative flex flex-col items-center gap-1 rounded-2xl px-4 py-2 transition-all duration-300 active:scale-95 text-white/50 hover:text-white/80"
+        style={{
+          background: 'transparent',
+        }}
+        title="Create a video"
+      >
+        <div className="relative">
+          <Plus size={24} strokeWidth={2} />
+          <div
+            className="absolute -top-1 -right-1 w-3 h-3 rounded-full"
+            style={{
+              background: 'linear-gradient(135deg, #10B981, #6F4FFF)',
+              boxShadow: '0 0 8px rgba(16, 185, 129, 0.5)'
+            }}
+          />
+        </div>
+        <span className="text-[11px] font-medium">Create</span>
+      </button>
     </nav>
   );
 }

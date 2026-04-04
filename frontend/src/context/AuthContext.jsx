@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('ikhwezi_token'));
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [isGuest, setIsGuest] = useState(false);
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
@@ -56,9 +57,42 @@ export function AuthProvider({ children }) {
     }
   }, [token, fetchWithAuth]);
 
+  const createGuestSession = useCallback(async () => {
+    try {
+      const guestUsername = `guest_${Math.random().toString(36).substring(7)}`;
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: guestUsername,
+          password: 'guest_password_' + Math.random(),
+          email: `${guestUsername}@guest.local`,
+          displayName: 'Guest User'
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('ikhwezi_token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+        setIsGuest(true);
+      }
+    } catch (err) {
+      console.error('Guest session creation failed:', err);
+      setLoading(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchMe();
-  }, [fetchMe]);
+    if (token) {
+      fetchMe();
+    } else {
+      createGuestSession();
+    }
+  }, []);
 
   const login = async (credentials) => {
     try {
@@ -122,6 +156,7 @@ export function AuthProvider({ children }) {
     token,
     loading,
     isAuthenticated: !!user,
+    isGuest,
     login,
     register,
     logout,

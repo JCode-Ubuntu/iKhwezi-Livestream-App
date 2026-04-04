@@ -98,6 +98,11 @@ function Home() {
     setVideos(prev => prev.map(v => v.id === updatedVideo.id ? updatedVideo : v));
   }, []);
 
+  // Hide GuestPrompt - free access mode
+  const handleShowGuestPrompt = () => {
+    // No-op: Guest prompt disabled for free access
+  };
+
   const currentVideo = videos[currentIndex];
 
   const fashionMood = useMemo(() => {
@@ -173,7 +178,7 @@ function Home() {
               video={video}
               onUpdate={updateVideo}
               onShowComments={() => setShowComments(true)}
-              onShowLogin={() => setShowGuestPrompt(true)}
+              onShowLogin={handleShowGuestPrompt}
             />
 
             <div
