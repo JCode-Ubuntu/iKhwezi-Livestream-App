@@ -1,0 +1,126 @@
+#!/bin/bash
+# AWS Lightsail Deployment Script for iKHWEZI
+# Save as: deploy.sh and run: chmod +x deploy.sh && ./deploy.sh
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}======================================${NC}"
+echo -e "${BLUE}iKHWEZI AWS Lightsail Deploy Script${NC}"
+echo -e "${BLUE}======================================${NC}"
+
+# ==================== CONFIGURATION ====================
+DOMAIN=${DOMAIN:-"your-domain.com"}
+AWS_REGION=${AWS_REGION:-"us-east-1"}
+JWT_SECRET=${JWT_SECRET:-"$(openssl rand -base64 32)"}
+ADMIN_KEY=${ADMIN_KEY:-"$(openssl rand -base64 16)"}
+
+echo -e "${BLUE}Configuration:${NC}"
+echo "Domain: $DOMAIN"
+echo "Region: $AWS_REGION"
+echo "JWT Secret: [Generated]"
+echo "Admin Key: [Generated]"
+
+# ==================== PREREQUISITES ====================
+echo -e "\n${BLUE}Checking prerequisites...${NC}"
+
+command -v docker >/dev/null 2>&1 || { echo -e "${RED}Docker not found${NC}"; exit 1; }
+command -v docker-compose >/dev/null 2>&1 || { echo -e "${RED}Docker Compose not found${NC}"; exit 1; }
+command -v git >/dev/null 2>&1 || { echo -e "${RED}Git not found${NC}"; exit 1; }
+
+echo -e "${GREEN}✓ All prerequisites met${NC}"
+
+# ==================== CLONE & SETUP ====================
+echo -e "\n${BLUE}Setting up application...${NC}"
+
+if [ ! -d "iKhwezi-Livestream-App" ]; then
+    echo "Cloning repository..."
+    git clone https://github.com/yourusername/iKhwezi-Livestream-App.git
+fi
+
+cd iKhwezi-Livestream-App
+
+# ==================== ENVIRONMENT ====================
+echo -e "\n${BLUE}Configuring environment...${NC}"
+
+if [ ! -f ".env" ]; then
+    cp .env.dist .env
+    sed -i "s/your-domain.com/$DOMAIN/g" .env
+    sed -i "s/your_jwt_secret_here_change_this_in_production/$JWT_SECRET/g" .env
+    sed -i "s/your_admin_key_here_change_this_in_production/$ADMIN_KEY/g" .env
+    echo -e "${GREEN}✓ Environment file created and configured${NC}"
+else
+    echo -e "${BLUE}Using existing .env file${NC}"
+fi
+
+# ==================== SSL/TLS (Optional) ====================
+if [ "$ENABLE_SSL" = "true" ]; then
+    echo -e "\n${BLUE}Setting up SSL/TLS with Let's Encrypt...${NC}"
+    
+    if command -v certbot >/dev/null 2>&1; then
+        sudo certbot certonly --standalone -d $DOMAIN -d www.$DOMAIN --agree-tos -m admin@$DOMAIN
+        echo -e "${GREEN}✓ SSL certificate installed${NC}"
+    else
+        echo -e "${RED}Certbot not found. Install with: sudo apt-get install certbot${NC}"
+    fi
+fi
+
+# ==================== BUILD & START ====================
+echo -e "\n${BLUE}Building Docker images...${NC}"
+
+docker-compose -f docker-compose.dist.yml build --no-cache
+echo -e "${GREEN}✓ Images built${NC}"
+
+echo -e "\n${BLUE}Starting services...${NC}"
+
+docker-compose -f docker-compose.dist.yml up -d
+echo -e "${GREEN}✓ Services started${NC}"
+
+# ==================== VERIFICATION ====================
+echo -e "\n${BLUE}Verifying deployment...${NC}"
+
+sleep 10
+
+if docker-compose -f docker-compose.dist.yml ps | grep -q "Up"; then
+    echo -e "${GREEN}✓ All services running${NC}"
+else
+    echo -e "${RED}✗ Some services failed to start${NC}"
+    docker-compose -f docker-compose.dist.yml logs
+    exit 1
+fi
+
+# ==================== SUMMARY ====================
+echo -e "\n${GREEN}======================================${NC}"
+echo -e "${GREEN}Deployment Complete!${NC}"
+echo -e "${GREEN}======================================${NC}"
+
+echo -e "\n${BLUE}Access Points:${NC}"
+echo "  Frontend: http://$DOMAIN:8080"
+echo "  Backend API: http://$DOMAIN:3001"
+echo "  RTMP/HLS: http://$DOMAIN:8081/hls"
+echo "  Admin Panel: http://$DOMAIN:8080/admin"
+
+echo -e "\n${BLUE}Credentials:${NC}"
+echo "  Admin Key: $ADMIN_KEY"
+echo "  JWT Secret: Stored in .env"
+
+echo -e "\n${BLUE}Next Steps:${NC}"
+echo "  1. Configure your domain DNS records pointing to this instance"
+echo "  2. Update firewall rules to allow ports 80, 443, 1935, 3001, 8080, 8081"
+echo "  3. Set up automated backups for volumes"
+echo "  4. Configure monitoring and logging"
+echo "  5. Enable HTTPS with SSL certificate"
+
+echo -e "\n${BLUE}Useful Commands:${NC}"
+echo "  View logs:     docker-compose -f docker-compose.dist.yml logs -f"
+echo "  Stop services: docker-compose -f docker-compose.dist.yml down"
+echo "  Update app:    git pull && docker-compose -f docker-compose.dist.yml up -d --build"
+
+echo -e "\n${BLUE}Documentation:${NC}"
+echo "  README: https://github.com/yourusername/iKhwezi-Livestream-App/blob/master/README.md"
+echo "  Issues: https://github.com/yourusername/iKhwezi-Livestream-App/issues"

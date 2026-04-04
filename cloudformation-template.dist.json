@@ -1,0 +1,199 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CloudFormation template for iKHWEZI deployment on AWS Lightsail",
+  "Parameters": {
+    "InstanceType": {
+      "Type": "String",
+      "Default": "medium",
+      "AllowedValues": ["small", "medium", "large", "xlarge"],
+      "Description": "Lightsail instance type"
+    },
+    "AvailabilityZone": {
+      "Type": "String",
+      "Default": "us-east-1a",
+      "Description": "AWS Availability Zone for Lightsail instance"
+    },
+    "DomainName": {
+      "Type": "String",
+      "Description": "Domain name for the application"
+    },
+    "EnableBackups": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": ["true", "false"],
+      "Description": "Enable automated backups"
+    }
+  },
+  "Mappings": {
+    "LightsailAMI": {
+      "us-east-1": {
+        "AMI": "ami-0c55b159cbfafe1f0"
+      },
+      "us-west-2": {
+        "AMI": "ami-0d1cd67c26f5fca19"
+      },
+      "eu-west-1": {
+        "AMI": "ami-0dad359ff462124ca"
+      }
+    }
+  },
+  "Resources": {
+    "IKhweziInstance": {
+      "Type": "AWS::Lightsail::Instance",
+      "Properties": {
+        "InstanceName": "ikhwezi-app-prod",
+        "AvailabilityZone": { "Ref": "AvailabilityZone" },
+        "BlueprintId": "ubuntu_20_04",
+        "BundleId": { "Ref": "InstanceType" },
+        "KeyPairName": "ikhwezi-prod-key",
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Sub": "#!/bin/bash\napt-get update\napt-get install -y docker.io docker-compose curl git\nusermod -aG docker ubuntu\nsystemctl start docker\nsystemctl enable docker\ncd /home/ubuntu && git clone https://github.com/yourusername/iKhwezi-Livestream-App.git\ncd iKhwezi-Livestream-App\ncp .env.dist .env\nsed -i 's/your-domain.com/${DomainName}/g' .env\ndocker-compose -f docker-compose.dist.yml up -d\n"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "iKHWEZI Production"
+          },
+          {
+            "Key": "Environment",
+            "Value": "production"
+          },
+          {
+            "Key": "Application",
+            "Value": "iKHWEZI"
+          }
+        ]
+      }
+    },
+    "IKhweziStaticIP": {
+      "Type": "AWS::Lightsail::StaticIp",
+      "Properties": {
+        "StaticIpName": "ikhwezi-prod-ip",
+        "AttachedTo": { "Ref": "IKhweziInstance" }
+      }
+    },
+    "IKhweziDisk": {
+      "Type": "AWS::Lightsail::Disk",
+      "Properties": {
+        "DiskName": "ikhwezi-storage-prod",
+        "AvailabilityZone": { "Ref": "AvailabilityZone" },
+        "SizeInGb": 100,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "iKHWEZI Database Storage"
+          }
+        ]
+      }
+    },
+    "IKhweziDiskAttachment": {
+      "Type": "AWS::Lightsail::DiskAttachment",
+      "Properties": {
+        "DiskName": { "Ref": "IKhweziDisk" },
+        "InstanceName": { "Ref": "IKhweziInstance" },
+        "DiskPath": "/mnt/ikhwezi-storage"
+      }
+    },
+    "IKhweziLoadBalancer": {
+      "Type": "AWS::Lightsail::LoadBalancer",
+      "Properties": {
+        "LoadBalancerName": "ikhwezi-lb-prod",
+        "InstancePort": 8080,
+        "Protocol": "HTTP",
+        "HealthCheckPath": "/",
+        "CertificateAlternativeNames": [
+          { "Ref": "DomainName" },
+          {
+            "Fn::Sub": "www.${DomainName}"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "iKHWEZI Load Balancer"
+          }
+        ]
+      }
+    },
+    "IKhweziS3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "ikhwezi-${AWS::AccountId}-prod"
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "DeleteOldVersions",
+              "NoncurrentVersionExpirationInDays": 30,
+              "Status": "Enabled"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "iKHWEZI Media Storage"
+          }
+        ]
+      }
+    },
+    "IKhweziBackupBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "ikhwezi-backups-${AWS::AccountId}-prod"
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "DeleteOldBackups",
+              "ExpirationInDays": 90,
+              "Status": "Enabled"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "iKHWEZI Database Backups"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "InstancePublicIP": {
+      "Description": "Lightsail Instance Public IP",
+      "Value": {
+        "Fn::GetAtt": ["IKhweziStaticIP", "IpAddress"]
+      }
+    },
+    "InstanceName": {
+      "Description": "Lightsail Instance Name",
+      "Value": { "Ref": "IKhweziInstance" }
+    },
+    "S3BucketName": {
+      "Description": "S3 Bucket for Media Storage",
+      "Value": { "Ref": "IKhweziS3Bucket" }
+    },
+    "BackupBucketName": {
+      "Description": "S3 Bucket for Backups",
+      "Value": { "Ref": "IKhweziBackupBucket" }
+    },
+    "LoadBalancerArn": {
+      "Description": "Load Balancer ARN",
+      "Value": {
+        "Fn::GetAtt": ["IKhweziLoadBalancer", "LoadBalancerArn"]
+      }
+    }
+  }
+}
