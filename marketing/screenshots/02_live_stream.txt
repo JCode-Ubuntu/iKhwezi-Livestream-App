@@ -1,0 +1,12 @@
+PLACEHOLDER: Live Stream Screenshot (1080x1920 PNG)
+
+Capture the live streaming interface showing:
+- Full-screen live video
+- LIVE badge with viewer count
+- Chat panel (partially visible)
+- Reaction emojis floating on screen
+- Duet and Co-Host buttons
+- Story creation button
+- Real-time social interactions
+
+Take actual screenshot during live stream.

@@ -38,6 +38,7 @@ function ReactionsBar({
   onHeartLike,
   includeHeart = true,
   className = '',
+  onReaction,
 }) {
   const emojis = useMemo(() => {
     if (includeHeart) return DEFAULT_EMOJIS;
@@ -69,8 +70,11 @@ function ReactionsBar({
           /* ignore */
         }
       }
+      if (onReaction) {
+        onReaction(char);
+      }
     },
-    [onHeartLike]
+    [onHeartLike, onReaction]
   );
 
   const isCompact = variant === 'compact';

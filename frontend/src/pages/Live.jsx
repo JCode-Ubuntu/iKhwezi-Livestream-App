@@ -3,14 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import Hls from 'hls.js';
 import { Radio, Users, ArrowLeft, RefreshCw, WifiOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import CosmicBackground from '../components/CosmicBackground';
 import ReactionsBar from '../components/ReactionsBar';
 import GlassCard from '../components/GlassCard';
+import Stories from '../components/Stories';
 import { useAnimatedInteger } from '../hooks/useAnimatedInteger';
 
 function Live() {
   const navigate = useNavigate();
-  const { fetchWithAuth } = useAuth();
+  const { fetchWithAuth, user } = useAuth();
+  const { socket, joinRoom, leaveRoom, sendChatMessage, sendReaction } = useSocket();
   const videoRef = useRef(null);
   const wrapRef = useRef(null);
   const hlsRef = useRef(null);
@@ -20,6 +23,12 @@ function Live() {
   const [viewerCount, setViewerCount] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [touchY0, setTouchY0] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [reactions, setReactions] = useState([]);
+  const [showChat, setShowChat] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [stories, setStories] = useState([]);
+  const [showStories, setShowStories] = useState(false);
 
   const HLS_URL = `${window.location.origin}/hls/stream.m3u8`;
 
@@ -37,6 +46,33 @@ function Live() {
     };
   }, []);
 
+  useEffect(() => {
+    if (socket) {
+      // Join the live room
+      joinRoom('live-stream');
+
+      // Listen for chat messages
+      socket.on('chat-message', (message) => {
+        setChatMessages(prev => [...prev.slice(-49), message]); // Keep last 50 messages
+      });
+
+      // Listen for reactions
+      socket.on('reaction', (reaction) => {
+        setReactions(prev => [...prev.slice(-9), reaction]); // Keep last 10 reactions
+        // Auto-remove reaction after animation
+        setTimeout(() => {
+          setReactions(prev => prev.filter(r => r !== reaction));
+        }, 3000);
+      });
+
+      return () => {
+        socket.off('chat-message');
+        socket.off('reaction');
+        leaveRoom('live-stream');
+      };
+    }
+  }, [socket]);
+
   const checkLiveStatus = async () => {
     try {
       const res = await fetchWithAuth('/live/status');
@@ -51,6 +87,31 @@ function Live() {
       console.error('Failed to check live status:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendChat = () => {
+    if (chatInput.trim() && user) {
+      sendChatMessage('live-stream', chatInput.trim(), user.id, user.username || user.displayName);
+      setChatInput('');
+    }
+  };
+
+  const handleReaction = (reaction) => {
+    if (user) {
+      sendReaction('live-stream', reaction, user.id, user.username || user.displayName);
+    }
+  };
+
+  const handleDuetRequest = () => {
+    if (user) {
+      requestDuet('live-stream', user.id, user.username || user.displayName);
+    }
+  };
+
+  const handleCoHostRequest = () => {
+    if (user) {
+      inviteCoHost('live-stream', user.id, user.username || user.displayName);
     }
   };
 
@@ -249,6 +310,23 @@ function Live() {
           autoPlay
           muted
         />
+
+        {/* Reaction Particles */}
+        <div className="absolute inset-0 pointer-events-none">
+          {reactions.map((reaction, index) => (
+            <div
+              key={`${reaction.timestamp}-${index}`}
+              className="absolute animate-bounce text-4xl"
+              style={{
+                left: `${Math.random() * 80 + 10}%`,
+                top: `${Math.random() * 80 + 10}%`,
+                animationDelay: `${Math.random() * 0.5}s`,
+              }}
+            >
+              {reaction.reaction}
+            </div>
+          ))}
+        </div>
       </div>
 
       {error && (
@@ -269,8 +347,58 @@ function Live() {
             variant="full"
             includeHeart
             className="max-w-full"
+            onReaction={handleReaction}
           />
         </div>
+
+        {/* Action Buttons */}
+        <div className="pointer-events-auto flex justify-center gap-2">
+          <button
+            onClick={handleDuetRequest}
+            className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-white shadow-glass backdrop-blur-xl transition-transform active:scale-95"
+          >
+            🎬 Duet
+          </button>
+          <button
+            onClick={handleCoHostRequest}
+            className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-white shadow-glass backdrop-blur-xl transition-transform active:scale-95"
+          >
+            👥 Co-Host
+          </button>
+        </div>
+
+        {/* Chat Panel */}
+        {showChat && (
+          <div className="pointer-events-auto max-h-64 overflow-hidden rounded-lg border border-white/10 bg-black/60 backdrop-blur-xl">
+            <div className="max-h-48 overflow-y-auto p-3">
+              {chatMessages.map((msg, index) => (
+                <div key={index} className="mb-2 text-sm">
+                  <span className="font-semibold text-blue-400">{msg.username}:</span>{' '}
+                  <span className="text-white">{msg.message}</span>
+                </div>
+              ))}
+            </div>
+            {user && (
+              <div className="flex gap-2 border-t border-white/10 p-3">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendChat()}
+                  placeholder="Type a message..."
+                  className="flex-1 rounded border border-white/10 bg-black/40 px-3 py-1 text-white placeholder-white/50"
+                />
+                <button
+                  onClick={handleSendChat}
+                  className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700"
+                >
+                  Send
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <GlassCard className="pointer-events-auto border-white/10 !bg-black/45 px-4 py-3" neon="low">
           <h2 className="text-xl font-black tracking-tight text-white">
             {liveStatus.title || 'Live Stream'}
@@ -284,6 +412,12 @@ function Live() {
           </p>
         </GlassCard>
       </div>
+
+      <Stories
+        isOpen={showStories}
+        onClose={() => setShowStories(false)}
+        stories={stories}
+      />
     </div>
   );
 }

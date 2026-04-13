@@ -7,8 +7,17 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { Sequelize, DataTypes, Op } = require('sequelize');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'ikhwezi_jwt_secret_2026_super_secure';
 const ADMIN_KEY = process.env.ADMIN_KEY || 'ikhwezi_admin_26';
@@ -69,6 +78,39 @@ const Follow = sequelize.define('Follow', {
   followingId: { type: DataTypes.UUID, allowNull: false }
 });
 
+const Story = sequelize.define('Story', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false },
+  type: { type: DataTypes.ENUM('image', 'video'), allowNull: false },
+  url: { type: DataTypes.STRING, allowNull: false },
+  caption: { type: DataTypes.TEXT, allowNull: true },
+  expiresAt: { type: DataTypes.DATE, allowNull: false }
+});
+
+const Challenge = sequelize.define('Challenge', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  title: { type: DataTypes.STRING, allowNull: false },
+  description: { type: DataTypes.TEXT, allowNull: true },
+  hashtag: { type: DataTypes.STRING, allowNull: false },
+  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  createdBy: { type: DataTypes.UUID, allowNull: false }
+});
+
+const WatchParty = sequelize.define('WatchParty', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  hostId: { type: DataTypes.UUID, allowNull: false },
+  name: { type: DataTypes.STRING, allowNull: false },
+  streamUrl: { type: DataTypes.STRING, allowNull: false },
+  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  maxParticipants: { type: DataTypes.INTEGER, defaultValue: 8 }
+});
+
+const WatchPartyParticipant = sequelize.define('WatchPartyParticipant', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  watchPartyId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.UUID, allowNull: false }
+});
+
 const Star = sequelize.define('Star', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   userId: { type: DataTypes.UUID, allowNull: false },
@@ -121,6 +163,18 @@ Star.belongsTo(User, { foreignKey: 'userId' });
 
 User.hasOne(Points, { foreignKey: 'creatorId', as: 'points' });
 Points.belongsTo(User, { foreignKey: 'creatorId' });
+
+User.hasMany(Story, { foreignKey: 'userId', as: 'stories' });
+Story.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
+
+User.hasMany(Challenge, { foreignKey: 'createdBy', as: 'challenges' });
+Challenge.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
+
+User.hasMany(WatchParty, { foreignKey: 'hostId', as: 'watchParties' });
+WatchParty.belongsTo(User, { foreignKey: 'hostId', as: 'host' });
+WatchParty.hasMany(WatchPartyParticipant, { foreignKey: 'watchPartyId', as: 'participants' });
+WatchPartyParticipant.belongsTo(WatchParty, { foreignKey: 'watchPartyId' });
+WatchPartyParticipant.belongsTo(User, { foreignKey: 'userId' });
 
 // Middleware
 app.use(cors());
@@ -745,6 +799,157 @@ app.post('/api/live/leave', authenticate, async (req, res) => {
   }
 });
 
+// ==================== STORY ROUTES ====================
+
+app.get('/api/stories', authenticate, async (req, res) => {
+  try {
+    const stories = await Story.findAll({
+      where: {
+        expiresAt: {
+          [Op.gt]: new Date()
+        }
+      },
+      include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+      order: [['createdAt', 'DESC']],
+      limit: 50
+    });
+    res.json(stories);
+  } catch (err) {
+    console.error('Stories fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch stories' });
+  }
+});
+
+app.post('/api/stories', authenticate, requireAuth, upload.single('story'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Story file required' });
+    }
+    
+    const { type, caption } = req.body;
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    
+    const story = await Story.create({
+      userId: req.user.id,
+      type: type || 'image',
+      url: `/storage/uploads/${req.file.filename}`,
+      caption: caption || '',
+      expiresAt
+    });
+    
+    res.json(story);
+  } catch (err) {
+    console.error('Story creation error:', err);
+    res.status(500).json({ error: 'Failed to create story' });
+  }
+});
+
+// ==================== CHALLENGE ROUTES ====================
+
+app.get('/api/challenges', authenticate, async (req, res) => {
+  try {
+    const challenges = await Challenge.findAll({
+      where: { isActive: true },
+      include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName'] }],
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(challenges);
+  } catch (err) {
+    console.error('Challenges fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch challenges' });
+  }
+});
+
+app.post('/api/challenges', authenticate, requireAuth, async (req, res) => {
+  try {
+    const { title, description, hashtag } = req.body;
+    
+    const challenge = await Challenge.create({
+      title,
+      description,
+      hashtag,
+      createdBy: req.user.id
+    });
+    
+    res.json(challenge);
+  } catch (err) {
+    console.error('Challenge creation error:', err);
+    res.status(500).json({ error: 'Failed to create challenge' });
+  }
+});
+
+// ==================== WATCH PARTY ROUTES ====================
+
+app.get('/api/watch-parties', authenticate, async (req, res) => {
+  try {
+    const watchParties = await WatchParty.findAll({
+      where: { isActive: true },
+      include: [
+        { model: User, as: 'host', attributes: ['id', 'username', 'displayName', 'avatar'] },
+        { model: WatchPartyParticipant, as: 'participants', include: [{ model: User, attributes: ['id', 'username'] }] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(watchParties);
+  } catch (err) {
+    console.error('Watch parties fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch watch parties' });
+  }
+});
+
+app.post('/api/watch-parties', authenticate, requireAuth, async (req, res) => {
+  try {
+    const { name, streamUrl, maxParticipants } = req.body;
+    
+    const watchParty = await WatchParty.create({
+      hostId: req.user.id,
+      name,
+      streamUrl,
+      maxParticipants: maxParticipants || 8
+    });
+    
+    res.json(watchParty);
+  } catch (err) {
+    console.error('Watch party creation error:', err);
+    res.status(500).json({ error: 'Failed to create watch party' });
+  }
+});
+
+app.post('/api/watch-parties/:id/join', authenticate, requireAuth, async (req, res) => {
+  try {
+    const watchParty = await WatchParty.findByPk(req.params.id);
+    if (!watchParty || !watchParty.isActive) {
+      return res.status(404).json({ error: 'Watch party not found' });
+    }
+    
+    const existing = await WatchPartyParticipant.findOne({
+      where: { watchPartyId: watchParty.id, userId: req.user.id }
+    });
+    
+    if (existing) {
+      return res.json({ message: 'Already joined' });
+    }
+    
+    const participantCount = await WatchPartyParticipant.count({
+      where: { watchPartyId: watchParty.id }
+    });
+    
+    if (participantCount >= watchParty.maxParticipants) {
+      return res.status(400).json({ error: 'Watch party is full' });
+    }
+    
+    await WatchPartyParticipant.create({
+      watchPartyId: watchParty.id,
+      userId: req.user.id
+    });
+    
+    res.json({ message: 'Joined watch party' });
+  } catch (err) {
+    console.error('Join watch party error:', err);
+    res.status(500).json({ error: 'Failed to join watch party' });
+  }
+});
+
 // ==================== ADMIN ROUTES ====================
 
 app.post('/api/admin/verify', requireAdmin, async (req, res) => {
@@ -1009,6 +1214,79 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ==================== SOCKET.IO REAL-TIME ====================
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Join a room for a specific video/stream
+  socket.on('join-room', (roomId) => {
+    socket.join(roomId);
+    console.log(`User ${socket.id} joined room ${roomId}`);
+  });
+
+  // Leave a room
+  socket.on('leave-room', (roomId) => {
+    socket.leave(roomId);
+    console.log(`User ${socket.id} left room ${roomId}`);
+  });
+
+  // Handle live chat messages
+  socket.on('chat-message', async (data) => {
+    const { roomId, message, userId, username } = data;
+    
+    // Broadcast to all users in the room
+    io.to(roomId).emit('chat-message', {
+      id: uuidv4(),
+      message,
+      userId,
+      username,
+      timestamp: new Date()
+    });
+  });
+
+  // Handle reactions
+  socket.on('reaction', (data) => {
+    const { roomId, reaction, userId, username } = data;
+    
+    // Broadcast reaction to room
+    io.to(roomId).emit('reaction', {
+      reaction,
+      userId,
+      username,
+      timestamp: new Date()
+    });
+  });
+
+  // Handle duet requests
+  socket.on('duet-request', (data) => {
+    const { roomId, userId, username } = data;
+    
+    // Notify host/moderators
+    io.to(roomId).emit('duet-request', {
+      userId,
+      username,
+      timestamp: new Date()
+    });
+  });
+
+  // Handle co-host invites
+  socket.on('co-host-invite', (data) => {
+    const { roomId, userId, username } = data;
+    
+    // Send invite to specific user
+    io.to(roomId).emit('co-host-invite', {
+      userId,
+      username,
+      timestamp: new Date()
+    });
+  });
+
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
 // ==================== INITIALIZE ====================
 
 const initialize = async () => {
@@ -1031,7 +1309,7 @@ const initialize = async () => {
       await LiveStatus.create({ streamKey: uuidv4(), isLive: false, viewerCount: 0 });
     }
     
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`iKHWEZI Backend running on port ${PORT}`);
     });
   } catch (err) {

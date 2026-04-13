@@ -1,0 +1,10 @@
+PLACEHOLDER: iKhwezi App Icon (512x512 PNG)
+
+This file should contain:
+- iKhwezi logo with cosmic theme
+- Stars and nebula background
+- Neon blue and purple accent colors
+- Transparent background
+- Square format with rounded corners handled by Play Store
+
+For Play Store main listing icon.

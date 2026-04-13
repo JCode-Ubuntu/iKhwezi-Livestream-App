@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 import Navigation from './components/Navigation';
 import VideoRecorder from './components/VideoRecorder';
 
@@ -31,28 +32,30 @@ function App() {
   }
 
   return (
-    <div className="page-container">
-      <Suspense fallback={<LoadingScreen />}>
-        <div className="page-enter flex min-h-0 flex-1 flex-col overflow-hidden">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/live" element={<Live />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/profile/:id" element={<Profile />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-      </Suspense>
-      <Navigation onCreateClick={() => setShowVideoRecorder(true)} />
-      {showVideoRecorder && (
+    <SocketProvider>
+      <div className="page-container">
+        <Suspense fallback={<LoadingScreen />}>
+          <div className="page-enter flex min-h-0 flex-1 flex-col overflow-hidden">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/live" element={<Live />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/profile/:id" element={<Profile />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </Suspense>
+        <Navigation onCreateClick={() => setShowVideoRecorder(true)} />
+        {showVideoRecorder && (
         <VideoRecorder
           onClose={() => setShowVideoRecorder(false)}
           onVideoUploaded={() => setShowVideoRecorder(false)}
         />
       )}
     </div>
+    </SocketProvider>
   );
 }
 

@@ -1,0 +1,11 @@
+PLACEHOLDER: Play Store Feature Graphic (1024x500 PNG)
+
+This file should contain:
+- App name: "iKhwezi Live Stream"
+- Tagline: "Stream the night. Shine the signal."
+- Key features: Live • Social • Interactive
+- Cosmic background with stars
+- App icon prominently displayed
+- Call-to-action elements
+
+For Play Store feature graphic requirement.

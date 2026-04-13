@@ -1,0 +1,11 @@
+PLACEHOLDER: Home Feed Screenshot (1080x1920 PNG)
+
+Capture the main video feed showing:
+- Vertical scrollable video list
+- Video thumbnails with play buttons
+- User interactions (likes, comments, shares)
+- Navigation tabs (For You, Following)
+- Cosmic dark theme
+- Social features visible
+
+Take actual screenshot from running app.
