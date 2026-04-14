@@ -71,6 +71,12 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  const joinUserRoom = (userId) => {
+    if (socketRef.current && userId) {
+      socketRef.current.emit('join-user-room', userId);
+    }
+  };
+
   const value = {
     socket: socketRef.current,
     joinRoom,
@@ -78,7 +84,8 @@ export const SocketProvider = ({ children }) => {
     sendChatMessage,
     sendReaction,
     requestDuet,
-    inviteCoHost
+    inviteCoHost,
+    joinUserRoom
   };
 
   return (

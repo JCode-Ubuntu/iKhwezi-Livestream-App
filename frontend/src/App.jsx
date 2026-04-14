@@ -51,12 +51,12 @@ function App() {
         </Suspense>
         <Navigation onCreateClick={() => setShowVideoRecorder(true)} />
         {showVideoRecorder && (
-        <VideoRecorder
-          onClose={() => setShowVideoRecorder(false)}
-          onVideoUploaded={() => setShowVideoRecorder(false)}
-        />
-      )}
-    </div>
+          <VideoRecorder
+            onClose={() => setShowVideoRecorder(false)}
+            onVideoUploaded={() => setShowVideoRecorder(false)}
+          />
+        )}
+      </div>
     </SocketProvider>
   );
 }

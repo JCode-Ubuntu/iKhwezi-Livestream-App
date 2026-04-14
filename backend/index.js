@@ -1067,7 +1067,7 @@ app.post('/api/messages/:userId', requireAuth, async (req, res) => {
       content: content.trim(),
     });
     // Real-time notification via socket
-    req.app.get('io')?.to(`user_${other}`).emit('new-dm', { ...msg.toJSON(), senderId: me });
+    io.to(`user_${other}`).emit('new-dm', { ...msg.toJSON(), senderId: me });
     res.status(201).json(msg);
   } catch (err) {
     res.status(500).json({ error: 'Failed to send message' });
@@ -1345,6 +1345,11 @@ app.get('/api/health', (req, res) => {
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
+
+  // Join personal user room for DM notifications
+  socket.on('join-user-room', (userId) => {
+    if (userId) socket.join(`user_${userId}`);
+  });
 
   // Join a room for a specific video/stream
   socket.on('join-room', (roomId) => {

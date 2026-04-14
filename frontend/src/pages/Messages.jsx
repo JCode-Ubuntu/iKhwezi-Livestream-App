@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, MessageCircle, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import CosmicBackground from '../components/CosmicBackground';
 
 /* ── Conversation list ── */
@@ -179,10 +180,30 @@ function ChatThread({ otherUser, onBack }) {
 /* ── Main Messages page ── */
 function Messages() {
   const navigate = useNavigate();
-  const { fetchWithAuth } = useAuth();
+  const { fetchWithAuth, user } = useAuth();
+  const { socket, joinUserRoom } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeUser, setActiveUser] = useState(null);
+
+  // Join personal socket room for real-time DMs
+  useEffect(() => {
+    if (user?.id) joinUserRoom(user.id);
+  }, [user?.id]);
+
+  // Listen for incoming DMs
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (msg) => {
+      setConversations(prev => {
+        const exists = prev.find(c => c.user?.id === msg.senderId);
+        if (exists) return prev; // will refresh on next load
+        return prev; // new conversation appears on refresh
+      });
+    };
+    socket.on('new-dm', handler);
+    return () => socket.off('new-dm', handler);
+  }, [socket]);
 
   useEffect(() => {
     fetchWithAuth('/messages/conversations')
@@ -196,19 +217,19 @@ function Messages() {
     <div className="relative flex flex-col bg-[#050816]" style={{ height: 'calc(100vh - 70px)' }}>
       <CosmicBackground intensity={0.15} />
 
-      {/* Header */}
-      <div className="relative z-10 flex items-center gap-3 border-b border-white/8 px-4 py-3 bg-[#050816]/90 backdrop-blur-xl">
-        <button
-          type="button"
-          onClick={() => activeUser ? setActiveUser(null) : navigate(-1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition-transform active:scale-95"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <h1 className="text-lg font-black tracking-tight text-white">
-          {activeUser ? null : 'Messages'}
-        </h1>
-      </div>
+      {/* Header — only shown on conversation list */}
+      {!activeUser && (
+        <div className="relative z-10 flex items-center gap-3 border-b border-white/8 px-4 py-3 bg-[#050816]/90 backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition-transform active:scale-95"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <h1 className="text-lg font-black tracking-tight text-white">Messages</h1>
+        </div>
+      )}
 
       <div className="relative z-10 flex-1 overflow-hidden">
         {activeUser ? (

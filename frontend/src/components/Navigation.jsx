@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Radio, User, LogIn, Plus, LogOut, MessageCircle } from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { Home, Radio, User, Plus, LogOut, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GuestPrompt from './GuestPrompt';
 
 function Navigation({ onCreateClick }) {
   const { isAuthenticated, user, isGuest, trackGuestInteraction, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   if (location.pathname === '/admin') {

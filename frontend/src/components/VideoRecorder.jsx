@@ -12,6 +12,7 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
   const [mode, setMode] = useState('select'); // select, record, upload, preview
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [caption, setCaption] = useState('');
@@ -25,8 +26,9 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       if (stream) stream.getTracks().forEach(track => track.stop());
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
-  }, [stream]);
+  }, [stream, previewUrl]);
 
   const startCamera = async (facing = facingMode) => {
     // Stop existing stream first
@@ -68,6 +70,7 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
         setRecordedBlob(blob);
+        setPreviewUrl(URL.createObjectURL(blob));
         setMode('preview');
         if (stream) { stream.getTracks().forEach(track => track.stop()); setStream(null); }
       };
@@ -107,7 +110,9 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
     const file = e.target.files?.[0];
     if (file) {
       if (file.type.startsWith('video/')) {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
         setRecordedBlob(file);
+        setPreviewUrl(URL.createObjectURL(file));
         setMode('preview');
       } else {
         showToast('Please select a video file', 'error');
@@ -327,7 +332,7 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
           }}>
             <div style={{ position: 'relative' }}>
               <video
-                src={URL.createObjectURL(recordedBlob)}
+                src={previewUrl}
                 controls
                 style={{
                   width: '100%',
@@ -395,7 +400,9 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
               </button>
               <button
                 onClick={() => {
+                  if (previewUrl) URL.revokeObjectURL(previewUrl);
                   setRecordedBlob(null);
+                  setPreviewUrl(null);
                   setCaption('');
                   setMode('select');
                 }}
