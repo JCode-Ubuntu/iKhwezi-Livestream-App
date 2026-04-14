@@ -990,6 +990,44 @@ app.post('/api/admin/stream-key/rotate', requireAdmin, async (req, res) => {
   }
 });
 
+// Auto-triggered by nginx-rtmp when OBS starts streaming
+app.post('/api/live/on-publish', async (req, res) => {
+  try {
+    let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
+    if (!liveStatus) {
+      liveStatus = await LiveStatus.create({ streamKey: uuidv4(), isLive: true, title: 'Live Stream', startedAt: new Date(), viewerCount: 0 });
+    } else {
+      liveStatus.isLive = true;
+      liveStatus.startedAt = new Date();
+      liveStatus.viewerCount = 0;
+      if (!liveStatus.title) liveStatus.title = 'Live Stream';
+      await liveStatus.save();
+    }
+    console.log('Stream started via on_publish');
+    res.status(200).send('OK');
+  } catch (err) {
+    console.error('on_publish error:', err);
+    res.status(200).send('OK'); // Always 200 or nginx-rtmp will reject the stream
+  }
+});
+
+// Auto-triggered by nginx-rtmp when OBS stops streaming
+app.post('/api/live/on-publish-done', async (req, res) => {
+  try {
+    const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
+    if (liveStatus) {
+      liveStatus.isLive = false;
+      liveStatus.viewerCount = 0;
+      await liveStatus.save();
+    }
+    console.log('Stream ended via on_publish_done');
+    res.status(200).send('OK');
+  } catch (err) {
+    console.error('on_publish_done error:', err);
+    res.status(200).send('OK');
+  }
+});
+
 app.post('/api/admin/live/start', requireAdmin, async (req, res) => {
   try {
     const { title } = req.body;
