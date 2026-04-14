@@ -229,6 +229,10 @@ function Live() {
   if (!liveStatus?.isLive) {
     return (
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-10 pb-[110px] text-center">
+        {/* TEST BANNER */}
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, textAlign: 'center', padding: '4px 0', fontSize: 11, fontWeight: 700, letterSpacing: 2, background: 'linear-gradient(90deg,#6F4FFF,#00CFFF,#FFB800,#FF3CAC,#6F4FFF)', color: '#fff' }}>
+          ✦ IKHWEZI 3.0 · DEPLOY CONFIRMED · v{Date.now().toString().slice(-5)} ✦
+        </div>
         <CosmicBackground />
         <GlassCard className="relative z-10 max-w-md px-8 py-10 text-center" neon="medium">
           <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 shadow-neon-ring">
