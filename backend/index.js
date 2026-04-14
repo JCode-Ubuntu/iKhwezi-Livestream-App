@@ -6,7 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { Sequelize, DataTypes, Op } = require('sequelize');
+const { Sequelize, DataTypes, Op, QueryTypes } = require('sequelize');
 const http = require('http');
 const { Server } = require('socket.io');
 
@@ -41,6 +41,7 @@ const User = sequelize.define('User', {
   bio: { type: DataTypes.TEXT, allowNull: true },
   isCreator: { type: DataTypes.BOOLEAN, defaultValue: false },
   isBanned: { type: DataTypes.BOOLEAN, defaultValue: false },
+  isGuest: { type: DataTypes.BOOLEAN, defaultValue: false },
   lastActive: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 });
 
@@ -284,7 +285,8 @@ app.post('/api/auth/register', async (req, res) => {
       password: hashedPassword,
       username,
       displayName: displayName || username,
-      isCreator: true
+      isCreator: true,
+      isGuest: req.body.isGuest || false
     });
     
     await Points.create({ creatorId: user.id, totalPoints: 0, lifetimePoints: 0 });
@@ -300,7 +302,8 @@ app.post('/api/auth/register', async (req, res) => {
         username: user.username,
         displayName: user.displayName,
         avatar: user.avatar,
-        isCreator: user.isCreator
+        isCreator: user.isCreator,
+        isGuest: user.isGuest
       }
     });
   } catch (err) {
@@ -344,7 +347,8 @@ app.post('/api/auth/login', async (req, res) => {
         username: user.username,
         displayName: user.displayName,
         avatar: user.avatar,
-        isCreator: user.isCreator
+        isCreator: user.isCreator,
+        isGuest: user.isGuest
       }
     });
   } catch (err) {
@@ -364,6 +368,7 @@ app.get('/api/auth/me', authenticate, requireAuth, async (req, res) => {
     avatar: req.user.avatar,
     bio: req.user.bio,
     isCreator: req.user.isCreator,
+    isGuest: req.user.isGuest,
     points: points?.totalPoints || 0
   });
 });
@@ -1289,9 +1294,87 @@ io.on('connection', (socket) => {
 
 // ==================== INITIALIZE ====================
 
+const deduplicateUsernames = async () => {
+  try {
+    const tableExists = await sequelize.getQueryInterface().showAllTables();
+    if (!tableExists.map((name) => name.toLowerCase()).includes('users')) {
+      return;
+    }
+
+    const duplicates = await sequelize.query(
+      'SELECT username, COUNT(*) as count FROM Users GROUP BY username HAVING COUNT(*) > 1',
+      { type: QueryTypes.SELECT }
+    );
+
+    for (const duplicate of duplicates) {
+      const users = await sequelize.query(
+        'SELECT id, username, createdAt FROM Users WHERE username = :username ORDER BY createdAt ASC',
+        {
+          replacements: { username: duplicate.username },
+          type: QueryTypes.SELECT
+        }
+      );
+
+      for (let i = 1; i < users.length; i++) {
+        const user = users[i];
+        const suffix = String(user.id).replace(/-/g, '').slice(0, 6);
+        let candidate = `${user.username}_${suffix}`;
+        let counter = 1;
+
+        while (true) {
+          const exists = await sequelize.query(
+            'SELECT id FROM Users WHERE username = :username LIMIT 1',
+            {
+              replacements: { username: candidate },
+              type: QueryTypes.SELECT
+            }
+          );
+
+          if (exists.length === 0) {
+            break;
+          }
+
+          candidate = `${user.username}_${suffix}${counter}`;
+          counter += 1;
+        }
+
+        await sequelize.query(
+          'UPDATE Users SET username = :newUsername WHERE id = :id',
+          {
+            replacements: { newUsername: candidate, id: user.id },
+            type: QueryTypes.UPDATE
+          }
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('Username deduplication skipped:', err.message);
+  }
+};
+
+const ensureGuestColumn = async () => {
+  const tables = await sequelize.getQueryInterface().showAllTables();
+  const normalized = tables.map((name) => String(name).toLowerCase());
+  if (!normalized.includes('users')) {
+    return;
+  }
+
+  const columns = await sequelize.query("PRAGMA table_info('Users')", {
+    type: QueryTypes.SELECT
+  });
+  const hasGuest = columns.some((column) => String(column.name).toLowerCase() === 'isguest');
+
+  if (!hasGuest) {
+    await sequelize.query('ALTER TABLE Users ADD COLUMN isGuest TINYINT(1) NOT NULL DEFAULT 0');
+  }
+};
+
 const initialize = async () => {
   try {
-    await sequelize.sync({ alter: true });
+    await sequelize.authenticate();
+    await deduplicateUsernames();
+    await ensureGuestColumn();
+    await sequelize.sync();
     console.log('Database synchronized');
     
     // Ensure storage directories exist

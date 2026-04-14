@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Camera, Upload, Play, Square, Trash2, Send } from 'lucide-react';
+import { X, Camera, Upload, Play, Square } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function VideoRecorder({ onClose, onVideoUploaded }) {
@@ -14,8 +14,7 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [uploading, setUploading] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [caption, setCaption] = useState('');
   const [stream, setStream] = useState(null);
   
   const MAX_DURATION = 60000; // 1 minute in ms
@@ -105,8 +104,8 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
   };
 
   const handleUploadVideo = async () => {
-    if (!recordedBlob || !title.trim()) {
-      showToast('Add a title before uploading', 'error');
+    if (!recordedBlob) {
+      showToast('Please select a video to upload', 'error');
       return;
     }
     
@@ -114,8 +113,8 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
       setUploading(true);
       const formData = new FormData();
       formData.append('video', recordedBlob, 'video.webm');
-      formData.append('title', title);
-      formData.append('description', description);
+      formData.append('title', caption || 'Untitled');
+      formData.append('description', caption);
       
       const response = await fetch('/api/videos', {
         method: 'POST',
@@ -298,104 +297,97 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
         )}
 
         {mode === 'preview' && recordedBlob && (
-          <div style={{ textAlign: 'center' }}>
-            <video
-              src={URL.createObjectURL(recordedBlob)}
-              controls
-              style={{
-                width: '100%',
-                maxHeight: 400,
-                borderRadius: 12,
-                background: '#000',
-                marginBottom: 20,
-                objectFit: 'cover'
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Video title (required)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                marginBottom: 12,
-                borderRadius: 8,
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                background: 'rgba(0, 0, 0, 0.3)',
-                color: 'white',
-                fontSize: 14,
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                e.target.style.background = 'rgba(99, 102, 241, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                e.target.style.background = 'rgba(0, 0, 0, 0.3)';
-              }}
-            />
-            <textarea
-              placeholder="Add a description (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                marginBottom: 20,
-                borderRadius: 8,
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                background: 'rgba(0, 0, 0, 0.3)',
-                color: 'white',
-                fontSize: 14,
-                minHeight: 80,
-                fontFamily: 'inherit',
-                resize: 'none'
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                e.target.style.background = 'rgba(99, 102, 241, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                e.target.style.background = 'rgba(0, 0, 0, 0.3)';
-              }}
-            />
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16
+          }}>
+            <div style={{ position: 'relative' }}>
+              <video
+                src={URL.createObjectURL(recordedBlob)}
+                controls
+                style={{
+                  width: '100%',
+                  maxHeight: 300,
+                  borderRadius: 12,
+                  background: '#000',
+                  objectFit: 'cover'
+                }}
+              />
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <textarea
+                placeholder="Add a caption (optional)"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                maxLength={300}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  color: 'white',
+                  fontSize: 15,
+                  fontFamily: 'inherit',
+                  resize: 'none',
+                  minHeight: 100,
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+                  e.target.style.background = 'rgba(99, 102, 241, 0.12)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.target.style.background = 'rgba(0, 0, 0, 0.3)';
+                }}
+              />
+              <div style={{
+                textAlign: 'right',
+                fontSize: 12,
+                color: 'rgba(255, 255, 255, 0.5)',
+                marginTop: 8
+              }}>
+                {caption.length}/300
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
               <button
                 onClick={handleUploadVideo}
-                disabled={uploading || !title.trim()}
+                disabled={uploading}
                 className="btn btn-primary"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  opacity: uploading || !title.trim() ? 0.5 : 1,
-                  cursor: uploading || !title.trim() ? 'not-allowed' : 'pointer'
+                  flex: 1,
+                  padding: '14px 20px',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  opacity: uploading ? 0.7 : 1,
+                  cursor: uploading ? 'not-allowed' : 'pointer'
                 }}
               >
-                <Send size={18} />
-                {uploading ? 'Uploading...' : 'Upload Video'}
+                {uploading ? '⏳ Uploading...' : '🚀 Share'}
               </button>
               <button
                 onClick={() => {
                   setRecordedBlob(null);
-                  setTitle('');
-                  setDescription('');
+                  setCaption('');
                   setMode('select');
                 }}
                 disabled={uploading}
                 className="btn btn-outline"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
+                  flex: 1,
+                  padding: '14px 20px',
+                  fontSize: 15,
+                  fontWeight: 600,
                   opacity: uploading ? 0.5 : 1,
                   cursor: uploading ? 'not-allowed' : 'pointer'
                 }}
               >
-                <Trash2 size={18} />
-                Discard
+                ✕ Discard
               </button>
             </div>
           </div>

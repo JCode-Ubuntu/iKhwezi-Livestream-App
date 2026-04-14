@@ -8,11 +8,12 @@ import CosmicBackground from '../components/CosmicBackground';
 import ReactionsBar from '../components/ReactionsBar';
 import GlassCard from '../components/GlassCard';
 import Stories from '../components/Stories';
+import GuestPrompt from '../components/GuestPrompt';
 import { useAnimatedInteger } from '../hooks/useAnimatedInteger';
 
 function Live() {
   const navigate = useNavigate();
-  const { fetchWithAuth, user } = useAuth();
+  const { fetchWithAuth, user, isGuest, trackGuestInteraction } = useAuth();
   const { socket, joinRoom, leaveRoom, sendChatMessage, sendReaction } = useSocket();
   const videoRef = useRef(null);
   const wrapRef = useRef(null);
@@ -29,6 +30,7 @@ function Live() {
   const [chatInput, setChatInput] = useState('');
   const [stories, setStories] = useState([]);
   const [showStories, setShowStories] = useState(false);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   const HLS_URL = `${window.location.origin}/hls/stream.m3u8`;
 
@@ -98,9 +100,12 @@ function Live() {
   };
 
   const handleReaction = (reaction) => {
-    if (user) {
-      sendReaction('live-stream', reaction, user.id, user.username || user.displayName);
+    if (!user) {
+      trackGuestInteraction();
+      setShowUpgradePrompt(true);
+      return;
     }
+    sendReaction('live-stream', reaction, user.id, user.username || user.displayName);
   };
 
   const handleDuetRequest = () => {
@@ -418,6 +423,13 @@ function Live() {
         onClose={() => setShowStories(false)}
         stories={stories}
       />
+
+      {showUpgradePrompt && (
+        <GuestPrompt 
+          onClose={() => setShowUpgradePrompt(false)} 
+          context="interaction"
+        />
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
+  const [guestInteractions, setGuestInteractions] = useState(0);
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
@@ -67,7 +68,8 @@ export function AuthProvider({ children }) {
           username: guestUsername,
           password: 'guest_password_' + Math.random(),
           email: `${guestUsername}@guest.local`,
-          displayName: 'Guest User'
+          displayName: 'Guest User',
+          isGuest: true
         }),
       });
       
@@ -111,6 +113,8 @@ export function AuthProvider({ children }) {
       localStorage.setItem('ikhwezi_token', data.token);
       setToken(data.token);
       setUser(data.user);
+      setIsGuest(false);
+      setGuestInteractions(0);
       showToast('Welcome back!', 'success');
       return { success: true };
     } catch (err) {
@@ -136,6 +140,8 @@ export function AuthProvider({ children }) {
       localStorage.setItem('ikhwezi_token', data.token);
       setToken(data.token);
       setUser(data.user);
+      setIsGuest(false);
+      setGuestInteractions(0);
       showToast('Welcome to iKHWEZI!', 'success');
       return { success: true };
     } catch (err) {
@@ -148,8 +154,16 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('ikhwezi_token');
     setToken(null);
     setUser(null);
+    setIsGuest(false);
+    setGuestInteractions(0);
     showToast('Logged out', 'success');
   };
+
+  const trackGuestInteraction = useCallback(() => {
+    if (isGuest) {
+      setGuestInteractions(prev => prev + 1);
+    }
+  }, [isGuest]);
 
   const value = {
     user,
@@ -157,6 +171,8 @@ export function AuthProvider({ children }) {
     loading,
     isAuthenticated: !!user,
     isGuest,
+    guestInteractions,
+    trackGuestInteraction,
     login,
     register,
     logout,

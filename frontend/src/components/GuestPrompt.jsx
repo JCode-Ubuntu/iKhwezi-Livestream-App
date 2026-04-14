@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, LogIn, UserPlus, Star, Heart, MessageCircle, UserCheck } from 'lucide-react';
+import { X, LogIn, UserPlus, Star, Heart, MessageCircle, UserCheck, Zap } from 'lucide-react';
 
-function GuestPrompt({ onClose }) {
+function GuestPrompt({ onClose, context = 'default' }) {
   const navigate = useNavigate();
 
   const features = [
@@ -11,6 +11,24 @@ function GuestPrompt({ onClose }) {
     { icon: MessageCircle, text: 'Comment and reply', color: '#6F4FFF' },
     { icon: UserCheck, text: 'Follow creators you love', color: '#10B981' },
   ];
+
+  // Contextual messages based on how the prompt was triggered
+  const messages = {
+    default: {
+      title: 'Join iKHWEZI',
+      subtitle: 'Sign in to unlock all features'
+    },
+    interaction: {
+      title: '✨ Create Your Account',
+      subtitle: 'Get access to all features and personalize your experience'
+    },
+    create: {
+      title: '🎬 Ready to Create?',
+      subtitle: 'Sign up to start uploading and going live'
+    }
+  };
+
+  const msg = messages[context] || messages.default;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -29,15 +47,16 @@ function GuestPrompt({ onClose }) {
           justifyContent: 'center',
           margin: '0 auto 20px',
           boxShadow: '0 10px 40px rgba(111, 79, 255, 0.4)',
+          animation: 'pulse 2s infinite'
         }}>
-          <Star size={36} color="white" fill="white" />
+          <Zap size={36} color="white" fill="white" />
         </div>
 
         <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
-          Join iKHWEZI
+          {msg.title}
         </h2>
         <p style={{ color: '#A0A0A0', marginBottom: 24 }}>
-          Sign in to unlock all features
+          {msg.subtitle}
         </p>
 
         <div style={{ marginBottom: 24, textAlign: 'left' }}>
@@ -78,7 +97,7 @@ function GuestPrompt({ onClose }) {
             style={{ width: '100%' }}
           >
             <UserPlus size={18} />
-            Create Account
+            Create Free Account
           </button>
           <button
             onClick={() => { onClose(); navigate('/login'); }}

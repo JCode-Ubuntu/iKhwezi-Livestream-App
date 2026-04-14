@@ -11,7 +11,7 @@ import ReactionsBar from '../components/ReactionsBar';
 import { ChevronLeft, ChevronRight, Volume2, VolumeX, Sparkles } from 'lucide-react';
 
 function Home() {
-  const { fetchWithAuth } = useAuth();
+  const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction } = useAuth();
   const [videos, setVideos] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -19,10 +19,19 @@ function Home() {
   const [hasMore, setHasMore] = useState(true);
   const [showComments, setShowComments] = useState(false);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+  const [guestPromptContext, setGuestPromptContext] = useState('default');
   const [muted, setMuted] = useState(true);
   const containerRef = useRef(null);
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
+
+  // Show prompt after 3 guest interactions
+  useEffect(() => {
+    if (isGuest && guestInteractions >= 3 && !showGuestPrompt) {
+      setGuestPromptContext('interaction');
+      setShowGuestPrompt(true);
+    }
+  }, [guestInteractions, isGuest, showGuestPrompt]);
 
   const loadVideos = useCallback(async (pageNum = 1, append = false) => {
     try {
@@ -98,9 +107,11 @@ function Home() {
     setVideos(prev => prev.map(v => v.id === updatedVideo.id ? updatedVideo : v));
   }, []);
 
-  // Hide GuestPrompt - free access mode
+  // Track guest interactions and show prompt
   const handleShowGuestPrompt = () => {
-    // No-op: Guest prompt disabled for free access
+    trackGuestInteraction();
+    setGuestPromptContext('interaction');
+    setShowGuestPrompt(true);
   };
 
   const currentVideo = videos[currentIndex];
@@ -355,7 +366,7 @@ function Home() {
       )}
 
       {showGuestPrompt && (
-        <GuestPrompt onClose={() => setShowGuestPrompt(false)} />
+        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
       )}
     </div>
   );
