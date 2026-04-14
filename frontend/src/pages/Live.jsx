@@ -266,7 +266,7 @@ function Live() {
       <CosmicBackground intensity={0.25} />
 
       <div
-        className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-4 pt-4"
+        className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-4"
         style={{
           paddingTop: 'max(1rem, env(safe-area-inset-top))',
         }}
@@ -298,13 +298,14 @@ function Live() {
         </div>
       </div>
 
+      {/* Video — fixed height so controls sit below it */}
       <div
         ref={wrapRef}
-        className="relative min-h-0 flex-1 overflow-hidden"
+        className="relative w-full overflow-hidden bg-black"
+        style={{ touchAction: 'manipulation', height: '56vw', minHeight: 200, maxHeight: '58vh' }}
         onWheel={onWheelZoom}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        style={{ touchAction: 'manipulation' }}
       >
         <video
           ref={videoRef}
@@ -345,8 +346,9 @@ function Live() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-3 bg-gradient-to-t from-black via-black/80 to-transparent px-4 pb-8 pt-24">
-        <div className="pointer-events-auto flex justify-center pb-2">
+      {/* Controls panel — below the video, not overlapping */}
+      <div className="flex flex-col gap-3 overflow-y-auto bg-black/90 px-4 pb-4 pt-3">
+        <div className="flex justify-center">
           <ReactionsBar
             engagement={(viewerCount || 0) * 3}
             variant="full"
@@ -357,16 +359,16 @@ function Live() {
         </div>
 
         {/* Action Buttons */}
-        <div className="pointer-events-auto flex justify-center gap-2">
+        <div className="flex justify-center gap-2">
           <button
             onClick={handleDuetRequest}
-            className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-white shadow-glass backdrop-blur-xl transition-transform active:scale-95"
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition-transform active:scale-95"
           >
             🎬 Duet
           </button>
           <button
             onClick={handleCoHostRequest}
-            className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-white shadow-glass backdrop-blur-xl transition-transform active:scale-95"
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition-transform active:scale-95"
           >
             👥 Co-Host
           </button>
@@ -374,8 +376,8 @@ function Live() {
 
         {/* Chat Panel */}
         {showChat && (
-          <div className="pointer-events-auto max-h-64 overflow-hidden rounded-lg border border-white/10 bg-black/60 backdrop-blur-xl">
-            <div className="max-h-48 overflow-y-auto p-3">
+          <div className="max-h-56 overflow-hidden rounded-lg border border-white/10 bg-black/60 backdrop-blur-xl">
+            <div className="max-h-40 overflow-y-auto p-3">
               {chatMessages.map((msg, index) => (
                 <div key={index} className="mb-2 text-sm">
                   <span className="font-semibold text-blue-400">{msg.username}:</span>{' '}
@@ -404,16 +406,13 @@ function Live() {
           </div>
         )}
 
-        <GlassCard className="pointer-events-auto border-white/10 !bg-black/45 px-4 py-3" neon="low">
+        <GlassCard className="border-white/10 !bg-black/45 px-4 py-3" neon="low">
           <h2 className="text-xl font-black tracking-tight text-white">
             {liveStatus.title || 'Live Stream'}
           </h2>
           <p className="mt-1 text-sm text-white/55">
             iKHWEZI Live •{' '}
             {liveStatus.startedAt ? new Date(liveStatus.startedAt).toLocaleTimeString() : 'recently'}
-          </p>
-          <p className="mt-2 text-xs text-white/40">
-            Pinch or Ctrl+scroll to zoom the stream. Swipe up for quick reactions.
           </p>
         </GlassCard>
       </div>
