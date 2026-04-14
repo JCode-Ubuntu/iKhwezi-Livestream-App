@@ -77,6 +77,7 @@ function ConversationList({ conversations, onSelect, loading }) {
 /* ── Chat thread ── */
 function ChatThread({ otherUser, onBack }) {
   const { fetchWithAuth, user, showToast } = useAuth();
+  const { socket, joinUserRoom } = useSocket();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -90,23 +91,58 @@ function ChatThread({ otherUser, onBack }) {
   }, [fetchWithAuth, otherUser.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Join our own room so we receive real-time DMs
+  useEffect(() => {
+    if (user?.id) joinUserRoom(user.id);
+  }, [user?.id, joinUserRoom]);
+
+  // Real-time incoming DM
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (msg) => {
+      // Only append if this message is from the user we're chatting with
+      if (msg.senderId === otherUser.id) {
+        setMessages(prev => [...prev, msg]);
+      }
+    };
+    socket.on('new-dm', handler);
+    return () => socket.off('new-dm', handler);
+  }, [socket, otherUser.id]);
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const send = async (e) => {
     e.preventDefault();
     if (!input.trim() || sending) return;
+    const content = input.trim();
     setSending(true);
+    // Optimistic update
+    const optimistic = {
+      id: `tmp-${Date.now()}`,
+      senderId: user?.id,
+      receiverId: otherUser.id,
+      content,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, optimistic]);
+    setInput('');
     try {
       const res = await fetchWithAuth(`/messages/${otherUser.id}`, {
         method: 'POST',
-        body: JSON.stringify({ content: input.trim() }),
+        body: JSON.stringify({ content }),
       });
       if (res.ok) {
         const msg = await res.json();
-        setMessages(prev => [...prev, msg]);
-        setInput('');
+        // Replace optimistic message with real one
+        setMessages(prev => prev.map(m => m.id === optimistic.id ? msg : m));
+      } else {
+        // Roll back
+        setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+        showToast('Failed to send', 'error');
       }
     } catch {
+      setMessages(prev => prev.filter(m => m.id !== optimistic.id));
       showToast('Failed to send', 'error');
     } finally {
       setSending(false);
@@ -191,19 +227,18 @@ function Messages() {
     if (user?.id) joinUserRoom(user.id);
   }, [user?.id]);
 
-  // Listen for incoming DMs
+  // Listen for incoming DMs — refresh conversation list to show latest message + unread
   useEffect(() => {
     if (!socket) return;
-    const handler = (msg) => {
-      setConversations(prev => {
-        const exists = prev.find(c => c.user?.id === msg.senderId);
-        if (exists) return prev; // will refresh on next load
-        return prev; // new conversation appears on refresh
-      });
+    const handler = () => {
+      fetchWithAuth('/messages/conversations')
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setConversations(data); })
+        .catch(() => {});
     };
     socket.on('new-dm', handler);
     return () => socket.off('new-dm', handler);
-  }, [socket]);
+  }, [socket, fetchWithAuth]);
 
   useEffect(() => {
     fetchWithAuth('/messages/conversations')

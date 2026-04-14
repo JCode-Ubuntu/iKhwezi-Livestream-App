@@ -1,95 +1,44 @@
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
 const SocketContext = createContext();
 
 export const useSocket = () => {
   const context = useContext(SocketContext);
-  if (!context) {
-    throw new Error('useSocket must be used within a SocketProvider');
-  }
+  if (!context) throw new Error('useSocket must be used within a SocketProvider');
   return context;
 };
 
 export const SocketProvider = ({ children }) => {
-  const socketRef = useRef();
+  const [socket, setSocket] = useState(null);
+  const socketRef = useRef(null);
 
   useEffect(() => {
-    // Connect to backend
-    socketRef.current = io('http://localhost:3001', {
-      transports: ['websocket', 'polling']
+    // Use same origin so nginx can proxy /socket.io to the backend container
+    const s = io(window.location.origin, {
+      transports: ['websocket', 'polling'],
+      path: '/socket.io',
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1500,
     });
-
-    socketRef.current.on('connect', () => {
-      console.log('Connected to server');
-    });
-
-    socketRef.current.on('disconnect', () => {
-      console.log('Disconnected from server');
-    });
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
+    socketRef.current = s;
+    setSocket(s);
+    s.on('connect', () => console.log('Socket connected:', s.id));
+    s.on('disconnect', (r) => console.log('Socket disconnected:', r));
+    s.on('connect_error', (e) => console.warn('Socket error:', e.message));
+    return () => { s.disconnect(); socketRef.current = null; };
   }, []);
 
-  const joinRoom = (roomId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('join-room', roomId);
-    }
-  };
-
-  const leaveRoom = (roomId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('leave-room', roomId);
-    }
-  };
-
-  const sendChatMessage = (roomId, message, userId, username) => {
-    if (socketRef.current) {
-      socketRef.current.emit('chat-message', { roomId, message, userId, username });
-    }
-  };
-
-  const sendReaction = (roomId, reaction, userId, username) => {
-    if (socketRef.current) {
-      socketRef.current.emit('reaction', { roomId, reaction, userId, username });
-    }
-  };
-
-  const requestDuet = (roomId, userId, username) => {
-    if (socketRef.current) {
-      socketRef.current.emit('duet-request', { roomId, userId, username });
-    }
-  };
-
-  const inviteCoHost = (roomId, userId, username) => {
-    if (socketRef.current) {
-      socketRef.current.emit('co-host-invite', { roomId, userId, username });
-    }
-  };
-
-  const joinUserRoom = (userId) => {
-    if (socketRef.current && userId) {
-      socketRef.current.emit('join-user-room', userId);
-    }
-  };
-
-  const value = {
-    socket: socketRef.current,
-    joinRoom,
-    leaveRoom,
-    sendChatMessage,
-    sendReaction,
-    requestDuet,
-    inviteCoHost,
-    joinUserRoom
-  };
+  const joinRoom     = useCallback((id)                => socketRef.current?.emit('join-room',     id), []);
+  const leaveRoom    = useCallback((id)                => socketRef.current?.emit('leave-room',    id), []);
+  const joinUserRoom = useCallback((id)                => { if (id) socketRef.current?.emit('join-user-room', id); }, []);
+  const sendChatMessage = useCallback((room, msg, uid, uname) => socketRef.current?.emit('chat-message', { roomId: room, message: msg, userId: uid, username: uname }), []);
+  const sendReaction    = useCallback((room, rxn, uid, uname) => socketRef.current?.emit('reaction',     { roomId: room, reaction: rxn, userId: uid, username: uname }), []);
+  const requestDuet     = useCallback((room, uid, uname)      => socketRef.current?.emit('duet-request', { roomId: room, userId: uid, username: uname }), []);
+  const inviteCoHost    = useCallback((room, uid, uname)      => socketRef.current?.emit('co-host-invite', { roomId: room, userId: uid, username: uname }), []);
 
   return (
-    <SocketContext.Provider value={value}>
+    <SocketContext.Provider value={{ socket, joinRoom, leaveRoom, joinUserRoom, sendChatMessage, sendReaction, requestDuet, inviteCoHost }}>
       {children}
     </SocketContext.Provider>
   );
