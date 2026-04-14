@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Camera, Upload, Play, Square } from 'lucide-react';
+import { X, Camera, Upload, Play, Square, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function VideoRecorder({ onClose, onVideoUploaded }) {
@@ -16,48 +16,60 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
   const [uploading, setUploading] = useState(false);
   const [caption, setCaption] = useState('');
   const [stream, setStream] = useState(null);
+  const [facingMode, setFacingMode] = useState('user'); // 'user' = front, 'environment' = back
   
-  const MAX_DURATION = 60000; // 1 minute in ms
+  const MAX_DURATION = 60000;
   const timerIntervalRef = useRef(null);
 
   useEffect(() => {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      if (stream) stream.getTracks().forEach(track => track.stop());
     };
   }, [stream]);
 
-  const startRecording = async () => {
+  const startCamera = async (facing = facingMode) => {
+    // Stop existing stream first
+    if (stream) stream.getTracks().forEach(t => t.stop());
     try {
       const userStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
+        video: { facingMode: facing },
         audio: true
       });
-      
       setStream(userStream);
-      videoRef.current.srcObject = userStream;
+      if (videoRef.current) videoRef.current.srcObject = userStream;
+      return userStream;
+    } catch (err) {
+      showToast('Camera access denied', 'error');
+      return null;
+    }
+  };
+
+  const flipCamera = async () => {
+    if (isRecording) return; // don't flip mid-recording
+    const newFacing = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacing);
+    await startCamera(newFacing);
+  };
+
+  const startRecording = async () => {
+    try {
+      const userStream = await startCamera(facingMode);
+      if (!userStream) return;
       
       const mediaRecorder = new MediaRecorder(userStream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
+        if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
         setRecordedBlob(blob);
         setMode('preview');
-        
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-          setStream(null);
-        }
+        if (stream) { stream.getTracks().forEach(track => track.stop()); setStream(null); }
       };
       
       mediaRecorder.start();
@@ -264,14 +276,25 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               {!isRecording ? (
-                <button
-                  onClick={startRecording}
-                  className="btn btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  <Play size={18} />
-                  Start Recording
-                </button>
+                <>
+                  <button
+                    onClick={startRecording}
+                    className="btn btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <Play size={18} />
+                    Start Recording
+                  </button>
+                  <button
+                    onClick={flipCamera}
+                    className="btn btn-outline"
+                    style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+                  >
+                    <RefreshCw size={18} />
+                    Flip
+                  </button>
+                </>
               ) : (
                 <>
                   <button

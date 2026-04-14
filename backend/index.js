@@ -120,6 +120,16 @@ const Star = sequelize.define('Star', {
   amount: { type: DataTypes.INTEGER, defaultValue: 1 }
 });
 
+const DirectMessage = sequelize.define('DirectMessage', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  senderId: { type: DataTypes.UUID, allowNull: false },
+  receiverId: { type: DataTypes.UUID, allowNull: false },
+  content: { type: DataTypes.TEXT, allowNull: false },
+  mediaUrl: { type: DataTypes.STRING, allowNull: true },
+  mediaType: { type: DataTypes.STRING, allowNull: true }, // 'image' | 'video'
+  readAt: { type: DataTypes.DATE, allowNull: true }
+});
+
 const Points = sequelize.define('Points', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   creatorId: { type: DataTypes.UUID, allowNull: false, unique: true },
@@ -987,6 +997,80 @@ app.post('/api/admin/stream-key/rotate', requireAdmin, async (req, res) => {
     res.json({ streamKey: liveStatus.streamKey });
   } catch (err) {
     res.status(500).json({ error: 'Failed to rotate stream key' });
+  }
+});
+
+// ==================== DIRECT MESSAGES ====================
+
+// Get all conversations for the current user
+app.get('/api/messages/conversations', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const msgs = await DirectMessage.findAll({
+      where: { [Op.or]: [{ senderId: userId }, { receiverId: userId }] },
+      order: [['createdAt', 'DESC']],
+    });
+    // Group by the other user, pick latest message per conversation
+    const convMap = new Map();
+    for (const m of msgs) {
+      const otherId = m.senderId === userId ? m.receiverId : m.senderId;
+      if (!convMap.has(otherId)) convMap.set(otherId, m);
+    }
+    const otherIds = [...convMap.keys()];
+    const others = await User.findAll({ where: { id: otherIds }, attributes: ['id', 'username', 'displayName', 'avatar'] });
+    const otherMap = Object.fromEntries(others.map(u => [u.id, u]));
+    const conversations = otherIds.map(id => ({
+      user: otherMap[id],
+      lastMessage: convMap.get(id),
+      unread: msgs.filter(m => m.senderId === id && m.receiverId === userId && !m.readAt).length,
+    }));
+    res.json(conversations);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load conversations' });
+  }
+});
+
+// Get messages between current user and another user
+app.get('/api/messages/:userId', requireAuth, async (req, res) => {
+  try {
+    const me = req.user.id;
+    const other = req.params.userId;
+    const messages = await DirectMessage.findAll({
+      where: {
+        [Op.or]: [
+          { senderId: me, receiverId: other },
+          { senderId: other, receiverId: me },
+        ],
+      },
+      order: [['createdAt', 'ASC']],
+    });
+    // Mark as read
+    await DirectMessage.update({ readAt: new Date() }, {
+      where: { senderId: other, receiverId: me, readAt: null },
+    });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load messages' });
+  }
+});
+
+// Send a message
+app.post('/api/messages/:userId', requireAuth, async (req, res) => {
+  try {
+    const me = req.user.id;
+    const other = req.params.userId;
+    const { content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+    const msg = await DirectMessage.create({
+      senderId: me,
+      receiverId: other,
+      content: content.trim(),
+    });
+    // Real-time notification via socket
+    req.app.get('io')?.to(`user_${other}`).emit('new-dm', { ...msg.toJSON(), senderId: me });
+    res.status(201).json(msg);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 

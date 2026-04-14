@@ -11,6 +11,7 @@ const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Admin = lazy(() => import('./pages/Admin'));
+const Messages = lazy(() => import('./pages/Messages'));
 
 function LoadingScreen() {
   return (
@@ -39,6 +40,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/live" element={<Live />} />
+              <Route path="/messages" element={<Messages />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/profile/:id" element={<Profile />} />

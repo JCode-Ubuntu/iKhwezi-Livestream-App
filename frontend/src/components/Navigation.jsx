@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Radio, User, LogIn, Plus } from 'lucide-react';
+import { Home, Radio, User, LogIn, Plus, LogOut, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GuestPrompt from './GuestPrompt';
 
 function Navigation({ onCreateClick }) {
-  const { isAuthenticated, user, isGuest, trackGuestInteraction } = useAuth();
+  const { isAuthenticated, user, isGuest, trackGuestInteraction, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
@@ -17,6 +17,7 @@ function Navigation({ onCreateClick }) {
   const navItems = [
     { path: '/', icon: Home, label: 'Home' },
     { path: '/live', icon: Radio, label: 'Live' },
+    { path: '/messages', icon: MessageCircle, label: 'Messages', authOnly: true },
   ];
 
   const handleCreateClick = () => {
@@ -54,7 +55,7 @@ function Navigation({ onCreateClick }) {
           </div>
         )}
 
-        {navItems.map((item) => {
+        {navItems.filter(item => !item.authOnly || (isAuthenticated && !isGuest)).map((item) => {
           const Icon = item.icon;
           const isActive =
             location.pathname === item.path ||
@@ -105,6 +106,18 @@ function Navigation({ onCreateClick }) {
           </div>
           <span className="text-[11px] font-medium">Create</span>
         </button>
+
+        {isAuthenticated && !isGuest && (
+          <button
+            type="button"
+            onClick={() => { if (window.confirm('Log out?')) logout(); }}
+            className="relative flex flex-col items-center gap-1 rounded-2xl px-4 py-2 transition-all duration-300 active:scale-95 text-white/40 hover:text-red-400"
+            title="Log out"
+          >
+            <LogOut size={22} strokeWidth={2} />
+            <span className="text-[11px] font-medium">Logout</span>
+          </button>
+        )}
 
         <NavLink
           to={user ? `/profile/${user?.id}` : '/'}
