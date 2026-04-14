@@ -8,6 +8,7 @@ function Navigation({ onCreateClick }) {
   const { isAuthenticated, user, isGuest, trackGuestInteraction, logout } = useAuth();
   const location = useLocation();
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   if (location.pathname === '/admin') {
     return null;
@@ -109,7 +110,7 @@ function Navigation({ onCreateClick }) {
         {isAuthenticated && !isGuest && (
           <button
             type="button"
-            onClick={() => { if (window.confirm('Log out?')) logout(); }}
+            onClick={() => setShowLogoutConfirm(true)}
             className="relative flex flex-col items-center gap-1 rounded-2xl px-4 py-2 transition-all duration-300 active:scale-95 text-white/40 hover:text-red-400"
             title="Log out"
           >
@@ -142,10 +143,56 @@ function Navigation({ onCreateClick }) {
       </nav>
 
       {showUpgradePrompt && (
-        <GuestPrompt 
-          onClose={() => setShowUpgradePrompt(false)} 
+        <GuestPrompt
+          onClose={() => setShowUpgradePrompt(false)}
           context="create"
         />
+      )}
+
+      {showLogoutConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 500,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: 320,
+              background: '#0f1124', borderRadius: 20,
+              padding: 28, border: '1px solid rgba(255,255,255,0.1)',
+              textAlign: 'center',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <LogOut size={32} style={{ margin: '0 auto 12px', color: '#EF4444' }} />
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: 'white', marginBottom: 8 }}>Log out?</h3>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>You'll need to sign in again to post and interact.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 12,
+                  background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                  color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                }}
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={() => { setShowLogoutConfirm(false); logout(); }}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 12,
+                  background: '#EF4444', border: 'none',
+                  color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                }}
+              >Log out</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
