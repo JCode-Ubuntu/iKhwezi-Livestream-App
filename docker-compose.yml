@@ -12,7 +12,7 @@ services:
       - JWT_SECRET=ikhwezi_jwt_secret_2026_super_secure
       - ADMIN_KEY=ikhwezi_admin_26
       - RTMP_SERVER=rtmp://nginx-rtmp:1935/live
-      - HLS_URL=http://localhost:8080/hls
+      - HLS_URL=https://ikhwezi.site/hls
     volumes:
       - backend-storage:/app/storage
     depends_on:

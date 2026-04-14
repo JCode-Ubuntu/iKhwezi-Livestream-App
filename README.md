@@ -34,6 +34,12 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 
 ## Access Points
 
+### Live (Production)
+- **User App**: https://ikhwezi.site
+- **Admin Panel**: https://ikhwezi.site/admin (Key: `ikhwezi_admin_26`)
+- **Server IP**: 13.62.54.198 (AWS Lightsail — Stockholm)
+
+### Local (Development)
 - **User App**: http://localhost:8080
 - **Admin Panel**: http://localhost:8080/admin (Key: `ikhwezi_admin_26`)
 - **API**: http://localhost:3001
@@ -44,7 +50,7 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 1. Open OBS Studio
 2. Settings → Stream
 3. Service: Custom
-4. Server: `rtmp://localhost:1935/live`
+4. Server: `rtmp://13.62.54.198:1935/live` (live) or `rtmp://localhost:1935/live` (local)
 5. Stream Key: (Get from Admin Panel)
 
 ## Features
