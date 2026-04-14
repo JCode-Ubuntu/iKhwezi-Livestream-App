@@ -398,3 +398,11 @@ function Home() {
         />
       )}
 
+      {showGuestPrompt && (
+        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
+      )}
+    </div>
+  );
+}
+
+export default Home;
