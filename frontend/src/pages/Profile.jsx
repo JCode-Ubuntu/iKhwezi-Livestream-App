@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe } from 'lucide-react';
+import { ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
+import VideoEditModal from '../components/VideoEditModal';
 
 function Profile() {
   const { id } = useParams();
@@ -14,6 +15,7 @@ function Profile() {
   const [activeTab, setActiveTab] = useState('videos');
 
   const isOwnProfile = user?.id === id;
+  const [editVideo, setEditVideo] = useState(null);
 
   const engagementScore = useMemo(() => {
     if (!profile) return 0;
@@ -347,7 +349,6 @@ function Profile() {
               videos.map((video) => (
                 <div
                   key={video.id}
-                  onClick={() => navigate('/')}
                   style={{
                     aspectRatio: '9/16',
                     background: 'var(--bg-card)',
@@ -359,12 +360,9 @@ function Profile() {
                 >
                   <video
                     src={`/storage/uploads/${video.filename}`}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     muted
+                    onClick={() => navigate('/')}
                   />
                   <div style={{
                     position: 'absolute',
@@ -373,16 +371,26 @@ function Profile() {
                     display: 'flex',
                     alignItems: 'flex-end',
                     padding: 8,
+                    justifyContent: 'space-between',
                   }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 12,
-                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
                       <Play size={12} fill="white" />
                       {video.views || 0}
                     </div>
+                    {isOwnProfile && (
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setEditVideo(video); }}
+                        style={{
+                          width: 26, height: 26, borderRadius: 6,
+                          background: 'rgba(99,102,241,0.85)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                        }}
+                      >
+                        <Pencil size={12} color="white" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -422,6 +430,21 @@ function Profile() {
           to { transform: rotate(360deg); }
         }
       `}</style>
+
+      {editVideo && (
+        <VideoEditModal
+          video={editVideo}
+          onClose={() => setEditVideo(null)}
+          onUpdated={(updated) => {
+            setVideos(prev => prev.map(v => v.id === updated.id ? { ...v, ...updated } : v));
+            setEditVideo(null);
+          }}
+          onDeleted={(deletedId) => {
+            setVideos(prev => prev.filter(v => v.id !== deletedId));
+            setEditVideo(null);
+          }}
+        />
+      )}
     </div>
   );
 }

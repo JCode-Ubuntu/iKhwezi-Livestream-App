@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoActions from '../components/VideoActions';
@@ -6,7 +6,7 @@ import Comments from '../components/Comments';
 import GuestPrompt from '../components/GuestPrompt';
 import CosmicBackground from '../components/CosmicBackground';
 import SkeletonStream from '../components/SkeletonStream';
-import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp } from 'lucide-react';
+import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, MessageCircle, PenLine } from 'lucide-react';
 
 /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Hero Carousel â€” top trending / sponsored videos
@@ -143,6 +143,7 @@ function GridThumb({ video, onClick }) {
 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate, showGuestPrompt }) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const [showComments, setShowComments] = useState(false);
   const containerRef = useRef(null);
   const touchStartY = useRef(0);
 
@@ -208,7 +209,7 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
             <VideoActions
               video={video}
               onUpdate={onUpdate}
-              onShowComments={showGuestPrompt}
+              onShowComments={() => setShowComments(true)}
               onShowLogin={showGuestPrompt}
             />
             <div className="pointer-events-none absolute bottom-24 left-4 z-10" style={{ right: '5.5rem' }}>
@@ -233,6 +234,11 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
       {currentIndex < videos.length - 1 && (
         <button type="button" onClick={() => go(1)} className="absolute left-1/2 bottom-24 -translate-x-1/2 z-10 text-white/50 text-2xl">â–¼</button>
       )}
+
+      {/* Comments sheet - inside FullscreenFeed so currentVideo is always valid */}
+      {showComments && currentVideo && (
+        <Comments videoId={currentVideo.id} onClose={() => setShowComments(false)} />
+      )}
     </div>
   );
 }
@@ -246,7 +252,6 @@ function Home() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [showComments, setShowComments] = useState(false);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [guestPromptContext, setGuestPromptContext] = useState('default');
   const [muted, setMuted] = useState(true);
@@ -393,18 +398,3 @@ function Home() {
         />
       )}
 
-      {showComments && videos[fullscreenIndex] && (
-        <Comments
-          videoId={videos[fullscreenIndex].id}
-          onClose={() => setShowComments(false)}
-        />
-      )}
-
-      {showGuestPrompt && (
-        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
-      )}
-    </div>
-  );
-}
-
-export default Home;

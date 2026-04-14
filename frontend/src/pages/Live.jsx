@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Hls from 'hls.js';
-import { Radio, Users, ArrowLeft, RefreshCw, WifiOff } from 'lucide-react';
+import { Radio, Users, ArrowLeft, RefreshCw, WifiOff, Camera, FlipHorizontal, X, Video as VideoIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import CosmicBackground from '../components/CosmicBackground';
@@ -31,6 +31,10 @@ function Live() {
   const [stories, setStories] = useState([]);
   const [showStories, setShowStories] = useState(false);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const [facingMode, setFacingMode] = useState('user');
+  const cameraRef = useRef(null);
+  const streamRef = useRef(null);
 
   const HLS_URL = `${window.location.origin}/hls/stream.m3u8`;
 
@@ -192,6 +196,45 @@ function Live() {
     setError(null);
     setLoading(true);
     checkLiveStatus();
+  };
+
+  const startCameraPreview = async (facing) => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (cameraRef.current) {
+        cameraRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+    }
+  };
+
+  const stopCameraPreview = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setShowCameraPreview(false);
+  };
+
+  const flipCamera = () => {
+    const next = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(next);
+    startCameraPreview(next);
+  };
+
+  const handleGoLive = () => {
+    if (isGuest) { trackGuestInteraction(); setShowUpgradePrompt(true); return; }
+    setFacingMode('user');
+    setShowCameraPreview(true);
+    setTimeout(() => startCameraPreview('user'), 50);
   };
 
   const onWheelZoom = useCallback((e) => {
@@ -371,6 +414,14 @@ function Live() {
           >
             👥 Co-Host
           </button>
+          <button
+            type="button"
+            onClick={handleGoLive}
+            className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-600/80 px-4 py-2 text-white transition-transform active:scale-95"
+          >
+            <VideoIcon size={14} />
+            Go Live
+          </button>
         </div>
 
         {/* Chat Panel */}
@@ -427,6 +478,84 @@ function Live() {
           onClose={() => setShowUpgradePrompt(false)} 
           context="interaction"
         />
+      )}
+
+      {/* Camera preview overlay for Go Live */}
+      {showCameraPreview && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: '#000', display: 'flex', flexDirection: 'column',
+        }}>
+          <video
+            ref={cameraRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              flex: 1, width: '100%', objectFit: 'cover',
+              transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+            }}
+          />
+          {/* Camera controls overlay */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0,
+            padding: '16px',
+            paddingTop: 'max(16px, env(safe-area-inset-top))',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <button
+              type="button"
+              onClick={stopCameraPreview}
+              style={{
+                width: 40, height: 40, borderRadius: 20,
+                background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', cursor: 'pointer',
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{
+              background: 'rgba(239,68,68,0.9)', borderRadius: 20,
+              padding: '6px 14px', fontSize: 12, fontWeight: 700,
+              color: 'white', letterSpacing: 1,
+              boxShadow: '0 0 16px rgba(239,68,68,0.5)',
+            }}>
+              PREVIEW
+            </div>
+
+            <button
+              type="button"
+              onClick={flipCamera}
+              style={{
+                width: 40, height: 40, borderRadius: 20,
+                background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', cursor: 'pointer',
+              }}
+            >
+              <FlipHorizontal size={20} />
+            </button>
+          </div>
+
+          {/* Bottom info */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            padding: '24px 20px',
+            paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
+              <Camera size={14} />
+              {facingMode === 'user' ? 'Front camera' : 'Back camera'} — tap flip to switch
+            </div>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textAlign: 'center' }}>
+              To go live, use OBS Studio and stream to your server RTMP endpoint.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

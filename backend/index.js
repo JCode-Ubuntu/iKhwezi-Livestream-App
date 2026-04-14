@@ -130,6 +130,17 @@ const DirectMessage = sequelize.define('DirectMessage', {
   readAt: { type: DataTypes.DATE, allowNull: true }
 });
 
+const TextPost = sequelize.define('TextPost', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false },
+  content: { type: DataTypes.TEXT, allowNull: false },
+  backgroundColor: { type: DataTypes.STRING, defaultValue: '#1a1a2e' },
+  textColor: { type: DataTypes.STRING, defaultValue: '#ffffff' },
+  fontStyle: { type: DataTypes.STRING, defaultValue: 'normal' }, // normal | bold | italic
+  likeCount: { type: DataTypes.INTEGER, defaultValue: 0 },
+  commentCount: { type: DataTypes.INTEGER, defaultValue: 0 },
+});
+
 const Points = sequelize.define('Points', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   creatorId: { type: DataTypes.UUID, allowNull: false, unique: true },
@@ -186,6 +197,9 @@ WatchParty.belongsTo(User, { foreignKey: 'hostId', as: 'host' });
 WatchParty.hasMany(WatchPartyParticipant, { foreignKey: 'watchPartyId', as: 'participants' });
 WatchPartyParticipant.belongsTo(WatchParty, { foreignKey: 'watchPartyId' });
 WatchPartyParticipant.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasMany(TextPost, { foreignKey: 'userId', as: 'textPosts' });
+TextPost.belongsTo(User, { foreignKey: 'userId', as: 'author' });
 
 // Middleware
 app.use(cors());
@@ -1071,6 +1085,90 @@ app.post('/api/messages/:userId', requireAuth, async (req, res) => {
     res.status(201).json(msg);
   } catch (err) {
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ==================== TEXT POSTS ====================
+
+app.get('/api/posts', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const offset = (page - 1) * limit;
+    const posts = await TextPost.findAll({
+      include: [{ model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+    res.json(posts);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load posts' });
+  }
+});
+
+app.post('/api/posts', authenticate, requireAuth, async (req, res) => {
+  try {
+    const { content, backgroundColor, textColor, fontStyle } = req.body;
+    if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
+    if (content.trim().length > 500) return res.status(400).json({ error: 'Max 500 characters' });
+    const post = await TextPost.create({
+      userId: req.user.id,
+      content: content.trim(),
+      backgroundColor: backgroundColor || '#1a1a2e',
+      textColor: textColor || '#ffffff',
+      fontStyle: fontStyle || 'normal',
+    });
+    const withAuthor = await TextPost.findByPk(post.id, {
+      include: [{ model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+    });
+    res.status(201).json(withAuthor);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create post' });
+  }
+});
+
+app.delete('/api/posts/:id', authenticate, requireAuth, async (req, res) => {
+  try {
+    const post = await TextPost.findByPk(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (post.userId !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    await post.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete post' });
+  }
+});
+
+// ==================== VIDEO EDIT ====================
+
+app.put('/api/videos/:id', authenticate, requireAuth, async (req, res) => {
+  try {
+    const video = await Video.findByPk(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    if (video.userId !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    const { title, description, caption } = req.body;
+    await video.update({
+      ...(title !== undefined && { title: title.trim() }),
+      ...(description !== undefined && { description: description.trim() }),
+      ...(caption !== undefined && { caption: caption.trim() }),
+    });
+    res.json(video);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update video' });
+  }
+});
+
+app.delete('/api/videos/:id', authenticate, requireAuth, async (req, res) => {
+  try {
+    const video = await Video.findByPk(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    if (video.userId !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    const filePath = path.join(__dirname, 'storage/uploads', video.filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    await video.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete video' });
   }
 });
 
