@@ -29,7 +29,7 @@ function FeedDiscovery({ videos, currentIndex, onPickIndex, fashionTag = 'defaul
   if (!videos.length) return null;
 
   return (
-    <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex flex-col gap-2 px-3 pt-14">
+    <div className="pointer-events-none absolute left-0 right-0 top-0 z-[2] flex flex-col gap-2 px-3 pt-14">
       <div
         className={`pointer-events-auto rounded-3xl bg-gradient-to-br ${halo} p-0.5`}
       >

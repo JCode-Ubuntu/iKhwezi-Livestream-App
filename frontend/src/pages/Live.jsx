@@ -229,10 +229,6 @@ function Live() {
   if (!liveStatus?.isLive) {
     return (
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-10 pb-[110px] text-center">
-        {/* TEST BANNER */}
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, textAlign: 'center', padding: '4px 0', fontSize: 11, fontWeight: 700, letterSpacing: 2, background: 'linear-gradient(90deg,#6F4FFF,#00CFFF,#FFB800,#FF3CAC,#6F4FFF)', color: '#fff' }}>
-          ✦ IKHWEZI 3.0 · DEPLOY CONFIRMED · v{Date.now().toString().slice(-5)} ✦
-        </div>
         <CosmicBackground />
         <GlassCard className="relative z-10 max-w-md px-8 py-10 text-center" neon="medium">
           <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 shadow-neon-ring">
@@ -266,18 +262,13 @@ function Live() {
   const pulseGlow = Math.min(1, (viewerCount || 0) / 80 + displayViewers / 200);
 
   return (
-    <div className="relative mb-[70px] flex min-h-0 flex-1 flex-col" style={{ background: 'linear-gradient(135deg, #0a0118 0%, #0d0f2b 30%, #010b1a 60%, #1a0030 100%)' }}>
-      {/* TEST BANNER — remove after confirming deploy */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, textAlign: 'center', padding: '4px 0', fontSize: 11, fontWeight: 700, letterSpacing: 2, background: 'linear-gradient(90deg, #6F4FFF, #00CFFF, #FFB800, #FF3CAC, #6F4FFF)', backgroundSize: '300% 100%', animation: 'shimmer 2s linear infinite', color: '#fff' }}>
-        ✦ IKHWEZI 3.0 · GUEST MODE ACTIVE · DEPLOY TEST ✦
-      </div>
+    <div className="relative mb-[70px] flex min-h-0 flex-1 flex-col bg-black">
       <CosmicBackground intensity={0.25} />
 
+      {/* Header — in normal flow so it never overlaps video */}
       <div
-        className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-4"
-        style={{
-          paddingTop: 'max(1rem, env(safe-area-inset-top))',
-        }}
+        className="relative z-20 flex items-center justify-between px-4"
+        style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: '0.5rem' }}
       >
         <button
           type="button"
@@ -355,7 +346,7 @@ function Live() {
       )}
 
       {/* Controls panel — below the video, not overlapping */}
-      <div className="flex flex-col gap-3 overflow-y-auto px-4 pb-4 pt-3" style={{ background: 'linear-gradient(180deg, rgba(10,1,24,0.98) 0%, rgba(13,15,43,0.99) 100%)', borderTop: '1px solid rgba(111,79,255,0.3)', boxShadow: '0 -8px 40px rgba(111,79,255,0.15)' }}>
+      <div className="flex flex-col gap-3 overflow-y-auto bg-black/95 px-4 pb-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex justify-center">
           <ReactionsBar
             engagement={(viewerCount || 0) * 3}
