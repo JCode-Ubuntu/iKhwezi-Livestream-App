@@ -360,7 +360,7 @@ function Home() {
       <CosmicBackground intensity={0.2} />
 
       {/* ── Stories Tray ── */}
-      <div className="relative z-10 border-b border-white/5 bg-[#050816]/80 backdrop-blur-sm">
+      <div className="relative z-10 border-b border-white/5 bg-[#050816]/80">
         <StoryTray onAddStory={() => setShowStoryCreator(true)} />
       </div>
 

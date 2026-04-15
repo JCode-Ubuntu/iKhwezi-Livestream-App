@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Pause, Eye, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -102,7 +103,7 @@ export function StoryTray({ onAddStory }) {
           })}
       </div>
 
-      {viewerIndex !== null && groups[viewerIndex] && (
+      {viewerIndex !== null && groups[viewerIndex] && createPortal(
         <StoryViewer
           groups={groups}
           startGroupIndex={viewerIndex}
@@ -110,7 +111,8 @@ export function StoryTray({ onAddStory }) {
           onClose={handleViewerClose}
           fetchWithAuth={fetchWithAuth}
           onDelete={load}
-        />
+        />,
+        document.body
       )}
     </>
   );
@@ -238,7 +240,8 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
 
   return (
     <div
-      className="fixed inset-0 z-[500] flex flex-col bg-black select-none"
+      className="fixed inset-0 flex flex-col bg-black select-none"
+      style={{ zIndex: 9999 }}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
