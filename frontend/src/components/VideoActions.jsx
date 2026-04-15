@@ -152,6 +152,7 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
       <div 
         onClick={handleFollow}
         style={{
+          position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',

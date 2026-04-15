@@ -9,6 +9,7 @@ import SkeletonStream from '../components/SkeletonStream';
 import { StoryTray } from '../components/Stories';
 import StoryCreator from '../components/StoryCreator';
 import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, MessageCircle, PenLine } from 'lucide-react';
+import FeedDiscovery from '../components/FeedDiscovery';
 
 /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Hero Carousel â€” top trending / sponsored videos
@@ -177,7 +178,7 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
 
   return (
     <div
-      className="fixed inset-0 z-[200] bg-black"
+      className="fixed inset-0 z-[200] overflow-hidden bg-black"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -236,6 +237,11 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
       {currentIndex < videos.length - 1 && (
         <button type="button" onClick={() => go(1)} className="absolute left-1/2 bottom-24 -translate-x-1/2 z-10 text-white/50 text-2xl">â–¼</button>
       )}
+
+      {/* Trending discovery — lets users jump to any trending video while in fullscreen */}
+      <div className="absolute inset-x-0 z-[9]" style={{ top: 68 }}>
+        <FeedDiscovery videos={videos} currentIndex={currentIndex} onPickIndex={setCurrentIndex} />
+      </div>
 
       {/* Comments sheet - inside FullscreenFeed so currentVideo is always valid */}
       {showComments && currentVideo && (
@@ -350,7 +356,7 @@ function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050816] pb-[70px]">
+    <div className="relative h-full overflow-y-auto bg-[#050816] pb-[70px]">
       <CosmicBackground intensity={0.2} />
 
       {/* ── Stories Tray ── */}
@@ -362,7 +368,11 @@ function Home() {
       <HeroCarousel
         videos={heroVideos}
         muted={muted}
-        onOpen={(i) => setFullscreenIndex(i)}
+        onOpen={(heroIdx) => {
+          const vid = heroVideos[heroIdx];
+          const realIdx = videos.findIndex(v => v.id === vid?.id);
+          setFullscreenIndex(realIdx >= 0 ? realIdx : heroIdx);
+        }}
       />
 
       {/* â”€â”€ Grid Section Header â”€â”€ */}
@@ -374,13 +384,16 @@ function Home() {
         <span className="text-xs text-white/30">{gridVideos.length} videos</span>
       </div>
 
-      {/* â”€â”€ 4-Column Grid â”€â”€ */}
-      <div className="grid grid-cols-4 gap-1 px-1" style={{ gridAutoRows: 'auto' }}>
+      {/* ââ 3-Column Grid ââ */}
+      <div className="grid grid-cols-3 gap-2 px-2" style={{ gridAutoRows: 'auto' }}>
         {gridVideos.map((video, index) => (
           <GridThumb
             key={video.id}
             video={video}
-            onClick={() => setFullscreenIndex(heroVideos.length + index)}
+            onClick={() => {
+              const realIdx = videos.findIndex(v => v.id === video.id);
+              setFullscreenIndex(realIdx >= 0 ? realIdx : heroVideos.length + index);
+            }}
           />
         ))}
       </div>
