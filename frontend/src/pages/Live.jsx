@@ -36,7 +36,9 @@ function Live() {
   const cameraRef = useRef(null);
   const streamRef = useRef(null);
 
-  const HLS_URL = `${window.location.origin}/hls/stream.m3u8`;
+  const HLS_URL = liveStatus?.streamKey
+    ? `${window.location.origin}/hls/${liveStatus.streamKey}.m3u8`
+    : `${window.location.origin}/hls/stream.m3u8`;
 
   const displayViewers = useAnimatedInteger(viewerCount, 450);
 
@@ -85,9 +87,12 @@ function Live() {
       const data = await res.json();
       setLiveStatus(data);
       setViewerCount(data.viewerCount || 0);
-      
+
       if (data.isLive && videoRef.current) {
-        initHls();
+        const hlsUrl = data.streamKey
+          ? `${window.location.origin}/hls/${data.streamKey}.m3u8`
+          : `${window.location.origin}/hls/stream.m3u8`;
+        initHls(hlsUrl);
       }
     } catch (err) {
       console.error('Failed to check live status:', err);
@@ -124,7 +129,7 @@ function Live() {
     }
   };
 
-  const initHls = () => {
+  const initHls = (url) => {
     if (!videoRef.current) return;
 
     if (hlsRef.current) {
@@ -138,7 +143,7 @@ function Live() {
         backBufferLength: 90,
       });
 
-      hls.loadSource(HLS_URL);
+      hls.loadSource(url);
       hls.attachMedia(videoRef.current);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -166,7 +171,7 @@ function Live() {
 
       hlsRef.current = hls;
     } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-      videoRef.current.src = HLS_URL;
+      videoRef.current.src = url;
       videoRef.current.addEventListener('loadedmetadata', () => {
         videoRef.current.play().catch(() => {});
         joinLive();

@@ -854,7 +854,8 @@ app.get('/api/live/status', async (req, res) => {
       isLive: liveStatus.isLive,
       title: liveStatus.title,
       viewerCount: liveStatus.viewerCount,
-      startedAt: liveStatus.startedAt
+      startedAt: liveStatus.startedAt,
+      streamKey: liveStatus.streamKey,
     });
   } catch (err) {
     console.error('Live status error:', err);
