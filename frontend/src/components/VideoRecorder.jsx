@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Camera, Upload, Play, Square, RefreshCw } from 'lucide-react';
+import { X, Camera, Upload, Play, Square, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function VideoRecorder({ onClose, onVideoUploaded }) {
@@ -168,9 +168,44 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
           overflow: 'auto'
         }}
       >
+        {/* Back arrow — goes to select mode from record/preview; closes from select */}
+        <button
+          onClick={() => {
+            if (mode !== 'select') {
+              if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
+              if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
+              setRecordedBlob(null);
+              setCaption('');
+              setIsRecording(false);
+              setMode('select');
+            } else {
+              onClose();
+            }
+          }}
+          style={{
+            position: 'absolute',
+            left: 16,
+            top: 16,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'white',
+            zIndex: 10,
+          }}
+          title={mode !== 'select' ? 'Back' : 'Close'}
+        >
+          <ArrowLeft size={20} />
+        </button>
+
+        {/* Close button (always available) */}
         <button
           onClick={onClose}
-          className="close-btn"
           style={{
             position: 'absolute',
             right: 16,
@@ -184,14 +219,16 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            color: '#6366f1'
+            color: '#6366f1',
+            zIndex: 10,
           }}
+          title="Close"
         >
           <X size={20} />
         </button>
 
         {mode === 'select' && (
-          <div style={{ textAlign: 'center' }}>
+          <div style={{ textAlign: 'center', paddingTop: 48 }}>
             <div
               style={{
                 width: 80,
@@ -250,7 +287,7 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
         )}
 
         {mode === 'record' && (
-          <div style={{ textAlign: 'center' }}>
+          <div style={{ textAlign: 'center', paddingTop: 48 }}>
             <video
               ref={videoRef}
               autoPlay

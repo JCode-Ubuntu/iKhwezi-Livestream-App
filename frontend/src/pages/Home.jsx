@@ -6,6 +6,8 @@ import Comments from '../components/Comments';
 import GuestPrompt from '../components/GuestPrompt';
 import CosmicBackground from '../components/CosmicBackground';
 import SkeletonStream from '../components/SkeletonStream';
+import { StoryTray } from '../components/Stories';
+import StoryCreator from '../components/StoryCreator';
 import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, MessageCircle, PenLine } from 'lucide-react';
 
 /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -256,6 +258,7 @@ function Home() {
   const [guestPromptContext, setGuestPromptContext] = useState('default');
   const [muted, setMuted] = useState(true);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
+  const [showStoryCreator, setShowStoryCreator] = useState(false);
   const loadingMore = useRef(false);
 
   useEffect(() => {
@@ -350,7 +353,12 @@ function Home() {
     <div className="min-h-screen bg-[#050816] pb-[70px]">
       <CosmicBackground intensity={0.2} />
 
-      {/* â”€â”€ Hero Carousel â”€â”€ */}
+      {/* ── Stories Tray ── */}
+      <div className="relative z-10 border-b border-white/5 bg-[#050816]/80 backdrop-blur-sm">
+        <StoryTray onAddStory={() => setShowStoryCreator(true)} />
+      </div>
+
+      {/* ── Hero Carousel ── */}
       <HeroCarousel
         videos={heroVideos}
         muted={muted}
@@ -400,6 +408,13 @@ function Home() {
 
       {showGuestPrompt && (
         <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
+      )}
+
+      {showStoryCreator && (
+        <StoryCreator
+          onClose={() => setShowStoryCreator(false)}
+          onPosted={() => setShowStoryCreator(false)}
+        />
       )}
     </div>
   );

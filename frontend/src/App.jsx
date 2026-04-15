@@ -5,6 +5,7 @@ import { SocketProvider } from './context/SocketContext';
 import Navigation from './components/Navigation';
 import VideoRecorder from './components/VideoRecorder';
 import TextComposer from './components/TextComposer';
+import StoryCreator from './components/StoryCreator';
 
 const Home = lazy(() => import('./pages/Home'));
 const Live = lazy(() => import('./pages/Live'));
@@ -30,6 +31,7 @@ function App() {
   const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const [showTextComposer, setShowTextComposer] = useState(false);
+  const [showStoryCreator, setShowStoryCreator] = useState(false);
 
   if (loading) {
     return <LoadingScreen />;
@@ -98,6 +100,20 @@ function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => { setShowCreateSheet(false); setShowStoryCreator(true); }}
+                  style={{
+                    flex: 1, padding: '18px 12px', borderRadius: 14,
+                    background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+                    border: 'none', cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                  }}
+                >
+                  <span style={{ fontSize: 28 }}>✨</span>
+                  <span style={{ color: 'white', fontWeight: 600, fontSize: 14 }}>Story</span>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>24h moment</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => { setShowCreateSheet(false); setShowTextComposer(true); }}
                   style={{
                     flex: 1, padding: '18px 12px', borderRadius: 14,
@@ -108,7 +124,7 @@ function App() {
                 >
                   <span style={{ fontSize: 28 }}>✍️</span>
                   <span style={{ color: 'white', fontWeight: 600, fontSize: 14 }}>Text Post</span>
-                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Share your thoughts</span>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Share thoughts</span>
                 </button>
               </div>
             </div>
@@ -125,6 +141,12 @@ function App() {
           <TextComposer
             onClose={() => setShowTextComposer(false)}
             onPosted={() => setShowTextComposer(false)}
+          />
+        )}
+        {showStoryCreator && (
+          <StoryCreator
+            onClose={() => setShowStoryCreator(false)}
+            onPosted={() => setShowStoryCreator(false)}
           />
         )}
       </div>

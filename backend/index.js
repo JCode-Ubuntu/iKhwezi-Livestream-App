@@ -88,6 +88,12 @@ const Story = sequelize.define('Story', {
   expiresAt: { type: DataTypes.DATE, allowNull: false }
 });
 
+const StoryView = sequelize.define('StoryView', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  storyId: { type: DataTypes.UUID, allowNull: false },
+  viewerId: { type: DataTypes.UUID, allowNull: false },
+});
+
 const Challenge = sequelize.define('Challenge', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   title: { type: DataTypes.STRING, allowNull: false },
@@ -188,6 +194,9 @@ Points.belongsTo(User, { foreignKey: 'creatorId' });
 
 User.hasMany(Story, { foreignKey: 'userId', as: 'stories' });
 Story.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
+Story.hasMany(StoryView, { foreignKey: 'storyId', as: 'views' });
+StoryView.belongsTo(Story, { foreignKey: 'storyId' });
+StoryView.belongsTo(User, { foreignKey: 'viewerId', as: 'viewer' });
 
 User.hasMany(Challenge, { foreignKey: 'createdBy', as: 'challenges' });
 Challenge.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
@@ -227,6 +236,17 @@ const upload = multer({
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowed.includes(ext)) cb(null, true);
     else cb(new Error('Invalid file type'));
+  }
+});
+
+const storyUpload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.mp4', '.mov', '.webm', '.avi', '.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Invalid file type for story'));
   }
 });
 
@@ -723,6 +743,30 @@ app.post('/api/videos/:id/comments', authenticate, requireAuth, async (req, res)
 
 // ==================== USER PROFILE ROUTES ====================
 
+app.get('/api/users/search', authenticate, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const users = await User.findAll({
+      where: {
+        isBanned: false,
+        isGuest: false,
+        [Op.or]: [
+          { username: { [Op.like]: `%${q}%` } },
+          { displayName: { [Op.like]: `%${q}%` } },
+        ],
+      },
+      attributes: ['id', 'username', 'displayName', 'avatar'],
+      limit,
+    });
+    res.json(users);
+  } catch (err) {
+    console.error('User search error:', err);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
 app.get('/api/users/:id', authenticate, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id, {
@@ -830,46 +874,129 @@ app.post('/api/live/leave', authenticate, async (req, res) => {
 
 // ==================== STORY ROUTES ====================
 
+// GET /api/stories — grouped by user, each with their active stories
 app.get('/api/stories', authenticate, async (req, res) => {
   try {
+    const now = new Date();
     const stories = await Story.findAll({
-      where: {
-        expiresAt: {
-          [Op.gt]: new Date()
-        }
-      },
-      include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+      where: { expiresAt: { [Op.gt]: now } },
+      include: [
+        { model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] },
+        { model: StoryView, as: 'views', attributes: ['viewerId'] },
+      ],
       order: [['createdAt', 'DESC']],
-      limit: 50
+      limit: 200,
     });
-    res.json(stories);
+
+    // Group by userId
+    const grouped = {};
+    for (const story of stories) {
+      const uid = story.userId;
+      if (!grouped[uid]) {
+        grouped[uid] = {
+          user: story.creator,
+          stories: [],
+          hasUnviewed: false,
+        };
+      }
+      const viewerIds = story.views.map(v => v.viewerId);
+      const viewed = req.user ? viewerIds.includes(req.user.id) : false;
+      grouped[uid].stories.push({
+        id: story.id,
+        type: story.type,
+        url: story.url,
+        caption: story.caption,
+        createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+        viewCount: story.views.length,
+        viewed,
+      });
+      if (!viewed) grouped[uid].hasUnviewed = true;
+    }
+
+    // Sort: unviewed first, then own profile
+    const result = Object.values(grouped).sort((a, b) => {
+      if (req.user) {
+        const aOwn = a.user.id === req.user.id ? -1 : 0;
+        const bOwn = b.user.id === req.user.id ? -1 : 0;
+        if (aOwn !== bOwn) return aOwn - bOwn;
+      }
+      return (b.hasUnviewed ? 1 : 0) - (a.hasUnviewed ? 1 : 0);
+    });
+
+    res.json(result);
   } catch (err) {
     console.error('Stories fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch stories' });
   }
 });
 
-app.post('/api/stories', authenticate, requireAuth, upload.single('story'), async (req, res) => {
+app.post('/api/stories', authenticate, requireAuth, storyUpload.single('story'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Story file required' });
     }
-    
-    const { type, caption } = req.body;
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-    
+
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const isVideo = ['.mp4', '.mov', '.webm', '.avi'].includes(ext);
+    const { caption } = req.body;
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
     const story = await Story.create({
       userId: req.user.id,
-      type: type || 'image',
+      type: isVideo ? 'video' : 'image',
       url: `/storage/uploads/${req.file.filename}`,
       caption: caption || '',
-      expiresAt
+      expiresAt,
     });
-    
-    res.json(story);
+
+    const full = await Story.findByPk(story.id, {
+      include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+    });
+    res.json(full);
   } catch (err) {
     console.error('Story creation error:', err);
     res.status(500).json({ error: 'Failed to create story' });
+  }
+});
+
+app.post('/api/stories/:id/view', authenticate, requireAuth, async (req, res) => {
+  try {
+    const story = await Story.findByPk(req.params.id);
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    if (new Date() > story.expiresAt) return res.status(410).json({ error: 'Story expired' });
+
+    // Only record once per viewer
+    const existing = await StoryView.findOne({
+      where: { storyId: story.id, viewerId: req.user.id },
+    });
+    if (!existing) {
+      await StoryView.create({ storyId: story.id, viewerId: req.user.id });
+    }
+    const viewCount = await StoryView.count({ where: { storyId: story.id } });
+    res.json({ viewed: true, viewCount });
+  } catch (err) {
+    console.error('Story view error:', err);
+    res.status(500).json({ error: 'Failed to record view' });
+  }
+});
+
+app.delete('/api/stories/:id', authenticate, requireAuth, async (req, res) => {
+  try {
+    const story = await Story.findByPk(req.params.id);
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    if (story.userId !== req.user.id) return res.status(403).json({ error: 'Not your story' });
+
+    // Delete file from disk
+    const filePath = path.join(__dirname, 'storage/uploads', path.basename(story.url));
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    await StoryView.destroy({ where: { storyId: story.id } });
+    await story.destroy();
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error('Story delete error:', err);
+    res.status(500).json({ error: 'Failed to delete story' });
   }
 });
 

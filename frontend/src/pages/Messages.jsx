@@ -1,9 +1,102 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, MessageCircle, Search } from 'lucide-react';
+import { ArrowLeft, Send, MessageCircle, Search, Edit, X, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import CosmicBackground from '../components/CosmicBackground';
+
+/* ── New Conversation Search Modal ── */
+function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef(null);
+
+  const doSearch = useCallback(async (q) => {
+    if (!q.trim()) { setResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await fetchWithAuth(`/users/search?q=${encodeURIComponent(q)}&limit=20`);
+      if (res.ok) setResults(await res.json());
+    } catch {}
+    finally { setSearching(false); }
+  }, [fetchWithAuth]);
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(query), 350);
+    return () => clearTimeout(debounceRef.current);
+  }, [query, doSearch]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[400] flex flex-col bg-[#050816]/95 backdrop-blur-xl"
+      style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 border-b border-white/8 px-4 py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition-transform active:scale-95"
+        >
+          <X size={18} />
+        </button>
+        <h2 className="text-base font-bold text-white">New Message</h2>
+      </div>
+
+      {/* Search box */}
+      <div className="px-4 py-3 border-b border-white/8">
+        <div className="flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2.5 border border-white/10 focus-within:border-neon-indigo/50 transition-colors">
+          <Search size={15} className="flex-shrink-0 text-white/40" />
+          <input
+            autoFocus
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search people…"
+            className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
+          />
+          {searching && (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-neon-indigo border-t-transparent flex-shrink-0" />
+          )}
+        </div>
+      </div>
+
+      {/* Results */}
+      <div className="flex-1 overflow-y-auto">
+        {results.length === 0 && query.trim() && !searching && (
+          <div className="flex flex-col items-center justify-center py-16 gap-2 text-white/40">
+            <UserCircle2 size={40} />
+            <p className="text-sm">No users found</p>
+          </div>
+        )}
+        {results.length === 0 && !query.trim() && (
+          <div className="flex flex-col items-center justify-center py-16 gap-2 text-white/40">
+            <Search size={36} />
+            <p className="text-sm">Search for a person to message</p>
+          </div>
+        )}
+        {results.map(u => (
+          <button
+            key={u.id}
+            type="button"
+            onClick={() => { onSelect(u); onClose(); }}
+            className="flex w-full items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/8 transition-colors border-b border-white/4 text-left"
+          >
+            <div className="avatar flex-shrink-0" style={{ width: 44, height: 44, fontSize: 16 }}>
+              {u.avatar ? <img src={u.avatar} alt="" className="w-full h-full object-cover rounded-full" /> : u.username?.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-white truncate">{u.displayName || u.username}</p>
+              <p className="text-xs text-white/40 truncate">@{u.username}</p>
+            </div>
+            <Send size={16} className="text-neon-indigo flex-shrink-0" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* ── Conversation list ── */
 function ConversationList({ conversations, onSelect, loading }) {
@@ -221,6 +314,7 @@ function Messages() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeUser, setActiveUser] = useState(null);
+  const [showNewMsg, setShowNewMsg] = useState(false);
 
   // Join personal socket room for real-time DMs
   useEffect(() => {
@@ -262,7 +356,15 @@ function Messages() {
           >
             <ArrowLeft size={18} />
           </button>
-          <h1 className="text-lg font-black tracking-tight text-white">Messages</h1>
+          <h1 className="flex-1 text-lg font-black tracking-tight text-white">Messages</h1>
+          <button
+            type="button"
+            onClick={() => setShowNewMsg(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-neon-indigo/40 bg-neon-indigo/15 text-neon-indigo transition-all active:scale-95 hover:bg-neon-indigo/25"
+            title="New message"
+          >
+            <Edit size={16} />
+          </button>
         </div>
       )}
 
@@ -273,6 +375,14 @@ function Messages() {
           <ConversationList conversations={conversations} onSelect={setActiveUser} loading={loading} />
         )}
       </div>
+
+      {showNewMsg && (
+        <NewConversationModal
+          fetchWithAuth={fetchWithAuth}
+          onSelect={(u) => { setActiveUser(u); }}
+          onClose={() => setShowNewMsg(false)}
+        />
+      )}
     </div>
   );
 }

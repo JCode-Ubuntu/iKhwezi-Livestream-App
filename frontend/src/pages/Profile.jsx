@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil } from 'lucide-react';
+import { ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
 import VideoEditModal from '../components/VideoEditModal';
@@ -16,6 +16,7 @@ function Profile() {
 
   const isOwnProfile = user?.id === id;
   const [editVideo, setEditVideo] = useState(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const engagementScore = useMemo(() => {
     if (!profile) return 0;
@@ -141,7 +142,7 @@ function Profile() {
 
         {isOwnProfile && (
           <button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutConfirm(true)}
             style={{
               position: 'absolute',
               top: 16,
@@ -149,15 +150,17 @@ function Profile() {
               width: 40,
               height: 40,
               borderRadius: '50%',
-              background: 'rgba(0, 0, 0, 0.3)',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'white',
+              color: '#EF4444',
               zIndex: 10,
             }}
+            title="Log out"
           >
-            <LogOut size={20} />
+            <LogOut size={18} />
           </button>
         )}
       </div>
@@ -424,6 +427,93 @@ function Profile() {
           </div>
         )}
       </div>
+
+      {/* ── Account / Logout section (own profile only) ── */}
+      {isOwnProfile && (
+        <div style={{ padding: '0 20px 24px' }}>
+          <div style={{
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            paddingTop: 20,
+            marginTop: 4,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Settings size={14} style={{ color: 'rgba(255,255,255,0.4)' }} />
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>
+                Account
+              </span>
+            </div>
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                padding: '14px 20px',
+                borderRadius: 14,
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: '#EF4444',
+                fontWeight: 600,
+                fontSize: 15,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              <LogOut size={18} />
+              Log Out
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Logout confirmation modal */}
+      {showLogoutConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 500,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: 320,
+              background: '#0f1124', borderRadius: 20,
+              padding: 28, border: '1px solid rgba(255,255,255,0.1)',
+              textAlign: 'center',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <LogOut size={32} style={{ margin: '0 auto 12px', color: '#EF4444' }} />
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: 'white', marginBottom: 8 }}>Log out?</h3>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>You'll need to sign in again to post and interact.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 12,
+                  background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                  color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                }}
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={() => { setShowLogoutConfirm(false); handleLogout(); }}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 12,
+                  background: '#EF4444', border: 'none',
+                  color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                }}
+              >Log out</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin {
