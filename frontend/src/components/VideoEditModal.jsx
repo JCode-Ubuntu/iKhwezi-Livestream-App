@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Trash2, AlertTriangle } from 'lucide-react';
+import { X, Save, Trash2, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function VideoEditModal({ video, onClose, onUpdated, onDeleted }) {
@@ -58,9 +58,16 @@ export default function VideoEditModal({ video, onClose, onUpdated, onDeleted })
       <div onClick={onClose} className="flex-1" />
       <div className="flex max-h-[85vh] flex-col rounded-t-[1.75rem] border border-white/10 border-b-0 bg-[#0c1022]/96 shadow-glass backdrop-blur-3xl" style={{ animation: 'slide-up 0.3s ease' }}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-          <h3 className="text-lg font-black text-white">Edit Video</h3>
-          <button type="button" onClick={onClose} className="close-btn"><X size={20} /></button>
+        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-white/65 transition-transform active:scale-95"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <h3 className="flex-1 text-lg font-black text-white">Edit Video</h3>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">

@@ -82,7 +82,8 @@ export default function StoryCreator({ onClose, onPosted }) {
         <button
           type="button"
           onClick={goBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition active:scale-95"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition active:scale-95"
+          style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}
           title={mode === 'preview' ? 'Back' : 'Close'}
         >
           <ArrowLeft size={18} />

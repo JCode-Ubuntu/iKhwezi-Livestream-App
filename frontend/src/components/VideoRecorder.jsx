@@ -186,8 +186,9 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
             position: 'absolute',
             left: 16,
             top: 16,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.15)',
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(10px)',
             width: 40,
             height: 40,
             borderRadius: '50%',
@@ -195,7 +196,7 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            color: 'white',
+            color: 'rgba(255,255,255,0.75)',
             zIndex: 10,
           }}
           title={mode !== 'select' ? 'Back' : 'Close'}

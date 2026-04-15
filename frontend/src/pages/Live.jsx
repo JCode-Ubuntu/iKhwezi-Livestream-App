@@ -293,6 +293,7 @@ function Live() {
             type="button"
             onClick={() => navigate('/')}
             className="btn btn-ghost mx-auto mt-3 w-full max-w-xs"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, color: 'rgba(255,255,255,0.75)' }}
           >
             <ArrowLeft size={18} />
             Back to Feed
@@ -316,7 +317,8 @@ function Live() {
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white shadow-glass backdrop-blur-xl transition-transform active:scale-95"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-white/75 transition-transform active:scale-95"
+          style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)' }}
           aria-label="Back"
         >
           <ArrowLeft size={20} />

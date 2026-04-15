@@ -129,11 +129,13 @@ function Profile() {
             width: 40,
             height: 40,
             borderRadius: '50%',
-            background: 'rgba(0, 0, 0, 0.3)',
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(10px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white',
+            color: 'rgba(255,255,255,0.75)',
             zIndex: 10,
           }}
         >

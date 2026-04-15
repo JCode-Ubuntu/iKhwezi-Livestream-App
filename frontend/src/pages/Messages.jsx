@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, MessageCircle, Search, Edit, X, UserCircle2 } from 'lucide-react';
+import { ArrowLeft, Send, MessageCircle, Search, Edit, X, UserCircle2, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import CosmicBackground from '../components/CosmicBackground';
@@ -38,11 +38,13 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
         <button
           type="button"
           onClick={onClose}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition-transform active:scale-95"
-        >
-          <X size={18} />
-        </button>
-        <h2 className="text-base font-bold text-white">New Message</h2>
+          className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', flexShrink: 0 }}
+            onClick={onClose}
+          >
+            <X size={18} />
+          </button>
+          <h2 className="text-base font-bold text-white">New Message</h2>
       </div>
 
       {/* Search box */}
@@ -99,7 +101,7 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
 }
 
 /* ── Conversation list ── */
-function ConversationList({ conversations, onSelect, loading }) {
+function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
   const [search, setSearch] = useState('');
   const filtered = conversations.filter(c =>
     (c.user?.username || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -127,10 +129,23 @@ function ConversationList({ conversations, onSelect, loading }) {
           </div>
         )}
         {!loading && filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-white/40">
-            <MessageCircle size={40} />
-            <p className="text-sm">No conversations yet</p>
-            <p className="text-xs text-center px-8">Follow a creator and tap their profile to start a conversation</p>
+          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center px-8">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neon-indigo/10 border border-neon-indigo/20">
+              <MessageCircle size={30} className="text-neon-indigo/60" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white/60 mb-1">No conversations yet</p>
+              <p className="text-xs text-white/35">Tap the button below to start chatting</p>
+            </div>
+            <button
+              type="button"
+              onClick={onNewMsg}
+              className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-white active:scale-95 transition-transform"
+              style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)' }}
+            >
+              <Plus size={15} />
+              New Message
+            </button>
           </div>
         )}
         {filtered.map(conv => (
@@ -175,6 +190,7 @@ function ChatThread({ otherUser, onBack }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -248,11 +264,21 @@ function ChatThread({ otherUser, onBack }) {
 
   const formatTime = (d) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  // Focus input when thread opens
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 200);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="flex flex-col h-full">
+    // position:absolute inset-0 is intentional — h-full inside flex-1 overflow-hidden
+    // does not reliably resolve across all browsers; absolute positioning guarantees fill
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#050816' }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/8">
-        <button type="button" onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition-transform active:scale-95">
+      <div className="flex flex-shrink-0 items-center gap-3 px-4 py-3 border-b border-white/8 bg-[#050816]/95">
+        <button type="button" onClick={onBack}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95"
+          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}>
           <ArrowLeft size={18} />
         </button>
         <div className="avatar" style={{ width: 36, height: 36, fontSize: 14 }}>
@@ -265,7 +291,7 @@ function ChatThread({ otherUser, onBack }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2" style={{ minHeight: 0 }}>
         {messages.map(msg => {
           const mine = msg.senderId === user?.id;
           return (
@@ -289,23 +315,49 @@ function ChatThread({ otherUser, onBack }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <form onSubmit={send} className="flex items-center gap-2 border-t border-white/8 bg-[#050816]/95 px-4 py-3 pb-safe">
+      {/* Input bar — flex-shrink-0 prevents it from being squished or clipped */}
+      <div
+        className="flex flex-shrink-0 items-center gap-2 border-t border-white/8 bg-[#050816]"
+        style={{ padding: '10px 12px', paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}
+      >
         <input
+          ref={inputRef}
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="Message…"
-          className="flex-1 rounded-full bg-white/6 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/35 outline-none focus:border-neon-indigo/50"
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }}
+          placeholder="Type a message…"
+          autoComplete="off"
           maxLength={1000}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            background: 'rgba(255,255,255,0.07)',
+            border: '1.5px solid rgba(255,255,255,0.12)',
+            borderRadius: 24,
+            padding: '10px 18px',
+            color: 'white',
+            fontSize: 14,
+            outline: 'none',
+          }}
+          onFocus={e => (e.target.style.borderColor = '#6366f1')}
+          onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.12)')}
         />
         <button
-          type="submit"
+          type="button"
+          onClick={send}
           disabled={!input.trim() || sending}
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-neon-indigo text-white transition-all disabled:opacity-40 active:scale-95"
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95"
+          style={{
+            background: input.trim()
+              ? 'linear-gradient(135deg,#6366f1,#a855f7)'
+              : 'rgba(255,255,255,0.08)',
+            border: 'none',
+            cursor: input.trim() ? 'pointer' : 'default',
+          }}
         >
-          <Send size={16} />
+          <Send size={16} color={input.trim() ? 'white' : 'rgba(255,255,255,0.3)'} />
         </button>
-      </form>
+      </div>
     </div>
   );
 }
@@ -360,8 +412,8 @@ function Messages() {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition-transform active:scale-95"
-          >
+            className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', flexShrink: 0 }}>
             <ArrowLeft size={18} />
           </button>
           <h1 className="flex-1 text-lg font-black tracking-tight text-white">Messages</h1>
@@ -376,11 +428,11 @@ function Messages() {
         </div>
       )}
 
-      <div className="relative z-10 flex-1 overflow-hidden">
+      <div className="relative z-10 overflow-hidden" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {activeUser ? (
           <ChatThread otherUser={activeUser} onBack={() => setActiveUser(null)} />
         ) : (
-          <ConversationList conversations={conversations} onSelect={setActiveUser} loading={loading} />
+          <ConversationList conversations={conversations} onSelect={setActiveUser} loading={loading} onNewMsg={() => setShowNewMsg(true)} />
         )}
       </div>
 

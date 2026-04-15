@@ -47,12 +47,15 @@ function Login() {
           width: 40,
           height: 40,
           borderRadius: '50%',
-          background: 'var(--bg-elevated)',
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          backdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'var(--text-secondary)',
+          color: 'rgba(255,255,255,0.7)',
           marginBottom: 24,
+          cursor: 'pointer',
         }}
       >
         <ArrowLeft size={20} />

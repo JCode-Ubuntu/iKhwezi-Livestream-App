@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Reply, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Send, Reply, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const MAX_LEN = 280;
@@ -140,17 +140,24 @@ function Comments({ videoId, onClose }) {
         style={{ animation: 'slide-up 0.3s ease' }}
       >
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-          <div>
-            <h3 className="text-lg font-bold tracking-tight text-white">
-              {comments.length} Comments
-            </h3>
-            {typing && (
-              <p className="mt-1 text-xs text-neon-cyan/90">Typing…</p>
-            )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-white/65 transition-transform active:scale-95"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h3 className="text-lg font-bold tracking-tight text-white">
+                {comments.length} Comments
+              </h3>
+              {typing && (
+                <p className="mt-0.5 text-xs text-neon-cyan/90">Typing…</p>
+              )}
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="close-btn">
-            <X size={20} />
-          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-3">
