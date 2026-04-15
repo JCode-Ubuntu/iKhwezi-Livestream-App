@@ -14,9 +14,20 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: [
+      'https://ikhwezi.site',
+      'http://ikhwezi.site',
+      'http://localhost:5173',
+      'http://localhost:4173',
+      'http://localhost:8080',
+    ],
+    methods: ['GET', 'POST'],
+    credentials: false,
+  },
+  // Allow both WebSocket and long-polling so connections survive
+  // intermediate proxies that strip WebSocket upgrade headers
+  transports: ['polling', 'websocket'],
+  allowEIO3: true,
 });
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'ikhwezi_jwt_secret_2026_super_secure';

@@ -15,12 +15,16 @@ export const SocketProvider = ({ children }) => {
   const userRoomRef = useRef(null); // track the last joined user room for auto-rejoin
 
   useEffect(() => {
-    // Use same origin so nginx can proxy /socket.io to the backend container
+    // Start with polling so a connection is guaranteed even if the intermediate
+    // HTTPS proxy does not forward WebSocket upgrades. Socket.IO will then
+    // auto-upgrade to WebSocket once the polling handshake succeeds.
     const s = io(window.location.origin, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       path: '/socket.io',
-      reconnectionAttempts: 10,
+      reconnectionAttempts: 15,
       reconnectionDelay: 1500,
+      timeout: 20000,
+      withCredentials: false,
     });
     socketRef.current = s;
     setSocket(s);
