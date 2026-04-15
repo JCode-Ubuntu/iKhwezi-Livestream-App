@@ -12,6 +12,7 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
+  const userRoomRef = useRef(null); // track the last joined user room for auto-rejoin
 
   useEffect(() => {
     // Use same origin so nginx can proxy /socket.io to the backend container
@@ -23,7 +24,11 @@ export const SocketProvider = ({ children }) => {
     });
     socketRef.current = s;
     setSocket(s);
-    s.on('connect', () => console.log('Socket connected:', s.id));
+    s.on('connect', () => {
+      console.log('Socket connected:', s.id);
+      // Re-join user room automatically after reconnect
+      if (userRoomRef.current) s.emit('join-user-room', userRoomRef.current);
+    });
     s.on('disconnect', (r) => console.log('Socket disconnected:', r));
     s.on('connect_error', (e) => console.warn('Socket error:', e.message));
     return () => { s.disconnect(); socketRef.current = null; };
@@ -31,7 +36,11 @@ export const SocketProvider = ({ children }) => {
 
   const joinRoom     = useCallback((id)                => socketRef.current?.emit('join-room',     id), []);
   const leaveRoom    = useCallback((id)                => socketRef.current?.emit('leave-room',    id), []);
-  const joinUserRoom = useCallback((id)                => { if (id) socketRef.current?.emit('join-user-room', id); }, []);
+  const joinUserRoom = useCallback((id) => {
+    if (!id) return;
+    userRoomRef.current = id; // remember for auto-rejoin
+    socketRef.current?.emit('join-user-room', id);
+  }, []);
   const sendChatMessage = useCallback((room, msg, uid, uname) => socketRef.current?.emit('chat-message', { roomId: room, message: msg, userId: uid, username: uname }), []);
   const sendReaction    = useCallback((room, rxn, uid, uname) => socketRef.current?.emit('reaction',     { roomId: room, reaction: rxn, userId: uid, username: uname }), []);
   const requestDuet     = useCallback((room, uid, uname)      => socketRef.current?.emit('duet-request', { roomId: room, userId: uid, username: uname }), []);

@@ -185,10 +185,14 @@ function ChatThread({ otherUser, onBack }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Join our own room so we receive real-time DMs
+  // Join our own room — re-join immediately and also whenever socket reconnects
   useEffect(() => {
-    if (user?.id) joinUserRoom(user.id);
-  }, [user?.id, joinUserRoom]);
+    if (!socket || !user?.id) return;
+    const rejoin = () => joinUserRoom(user.id);
+    rejoin();
+    socket.on('connect', rejoin);
+    return () => socket.off('connect', rejoin);
+  }, [socket, user?.id, joinUserRoom]);
 
   // Real-time incoming DM
   useEffect(() => {
@@ -316,10 +320,14 @@ function Messages() {
   const [activeUser, setActiveUser] = useState(null);
   const [showNewMsg, setShowNewMsg] = useState(false);
 
-  // Join personal socket room for real-time DMs
+  // Join personal socket room — re-join immediately and also whenever socket reconnects
   useEffect(() => {
-    if (user?.id) joinUserRoom(user.id);
-  }, [user?.id]);
+    if (!socket || !user?.id) return;
+    const rejoin = () => joinUserRoom(user.id);
+    rejoin();
+    socket.on('connect', rejoin);
+    return () => socket.off('connect', rejoin);
+  }, [socket, user?.id, joinUserRoom]);
 
   // Listen for incoming DMs — refresh conversation list to show latest message + unread
   useEffect(() => {
