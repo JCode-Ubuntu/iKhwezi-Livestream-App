@@ -222,7 +222,16 @@ User.hasMany(TextPost, { foreignKey: 'userId', as: 'textPosts' });
 TextPost.belongsTo(User, { foreignKey: 'userId', as: 'author' });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://ikhwezi.site',
+    'http://ikhwezi.site',
+    'http://localhost:5173',
+    'http://localhost:4173',
+    'http://localhost:8080',
+  ],
+  credentials: false,
+}));
 app.use(express.json());
 app.use('/storage', express.static(path.join(__dirname, 'storage')));
 

@@ -152,13 +152,13 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
 
   const currentVideo = videos[currentIndex];
 
-  const go = (dir) => {
+  const go = useCallback((dir) => {
     setCurrentIndex(i => {
       const next = i + dir;
       if (next < 0 || next >= videos.length) return i;
       return next;
     });
-  };
+  }, [videos.length]);
 
   const handleTouchStart = (e) => { touchStartY.current = e.touches[0].clientY; };
   const handleTouchEnd = (e) => {
@@ -174,7 +174,7 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [go, onClose]);
 
   return (
     <div

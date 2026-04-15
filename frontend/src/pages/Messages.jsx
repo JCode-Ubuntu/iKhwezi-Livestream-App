@@ -39,12 +39,11 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
           type="button"
           onClick={onClose}
           className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', flexShrink: 0 }}
-            onClick={onClose}
-          >
-            <X size={18} />
-          </button>
-          <h2 className="text-base font-bold text-white">New Message</h2>
+          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', flexShrink: 0 }}
+        >
+          <X size={18} />
+        </button>
+        <h2 className="text-base font-bold text-white">New Message</h2>
       </div>
 
       {/* Search box */}
