@@ -138,8 +138,10 @@ function Comments({ videoId, onClose }) {
       <div
         className="flex max-h-[70vh] flex-col rounded-t-[1.75rem] border border-white/10 border-b-0 bg-[#0c1022]/95 shadow-glass backdrop-blur-3xl"
         style={{ animation: 'slide-up 0.3s ease' }}
+        onTouchStart={e => e.stopPropagation()}
+        onTouchEnd={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -260,9 +262,10 @@ function Comments({ videoId, onClose }) {
           )}
         </div>
 
-        <form 
+        <form
           onSubmit={handleSubmit}
-          className="relative flex flex-nowrap items-center gap-3 border-t border-white/10 bg-[#0a0d18]/95 px-5 py-4 pb-6 backdrop-blur-xl"
+          className="relative flex flex-shrink-0 flex-nowrap items-center gap-3 border-t border-white/10 bg-[#0a0d18]/95 px-5 backdrop-blur-xl"
+          style={{ paddingTop: 12, paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}
         >
           {replyingTo && (
             <div style={{
@@ -300,11 +303,21 @@ function Comments({ videoId, onClose }) {
               if (typingTimer.current) clearTimeout(typingTimer.current);
               typingTimer.current = window.setTimeout(() => setTyping(false), 1200);
             }}
-            onBlur={() => setTyping(false)}
+            onBlur={e => { setTyping(false); e.target.style.borderColor = 'rgba(255,255,255,0.15)'; }}
+            onFocus={e => (e.target.style.borderColor = '#6366f1')}
             placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
-            className="input min-w-0 flex-1"
             maxLength={MAX_LEN}
-            style={{ padding: '10px 16px' }}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              background: 'rgba(255,255,255,0.07)',
+              border: '1.5px solid rgba(255,255,255,0.15)',
+              borderRadius: 20,
+              padding: '10px 16px',
+              color: 'white',
+              fontSize: 14,
+              outline: 'none',
+            }}
           />
           <span className="min-w-[3rem] text-right text-[11px] tabular-nums text-white/40" aria-live="polite">
             {newComment.length}/{MAX_LEN}

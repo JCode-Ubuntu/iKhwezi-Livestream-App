@@ -1222,6 +1222,7 @@ app.post('/api/messages/:userId', requireAuth, async (req, res) => {
     const other = req.params.userId;
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+    if (content.trim().length > 1000) return res.status(400).json({ error: 'Message too long (max 1000 characters)' });
     const msg = await DirectMessage.create({
       senderId: me,
       receiverId: other,

@@ -8,7 +8,7 @@ import CosmicBackground from '../components/CosmicBackground';
 import SkeletonStream from '../components/SkeletonStream';
 import { StoryTray } from '../components/Stories';
 import StoryCreator from '../components/StoryCreator';
-import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, MessageCircle, PenLine } from 'lucide-react';
+import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, MessageCircle, PenLine, X, ChevronUp, ChevronDown } from 'lucide-react';
 import FeedDiscovery from '../components/FeedDiscovery';
 
 /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -186,17 +186,17 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
       <button
         type="button"
         onClick={onClose}
-        className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white backdrop-blur-xl"
-        style={{ paddingTop: 'max(0px,env(safe-area-inset-top))' }}
+        className="absolute left-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform active:scale-95"
+        style={{ top: 'max(16px, env(safe-area-inset-top))', background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
       >
-        âœ•
+        <X size={20} />
       </button>
       {/* Mute */}
       <button
         type="button"
         onClick={() => setMuted(m => !m)}
-        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white backdrop-blur-xl"
-        style={{ paddingTop: 'max(0px,env(safe-area-inset-top))' }}
+        className="absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform active:scale-95"
+        style={{ top: 'max(16px, env(safe-area-inset-top))', background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
       >
         {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
@@ -232,10 +232,24 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
 
       {/* Nav arrows */}
       {currentIndex > 0 && (
-        <button type="button" onClick={() => go(-1)} className="absolute left-1/2 top-16 -translate-x-1/2 z-10 text-white/50 text-2xl">â–²</button>
+        <button
+          type="button"
+          onClick={() => go(-1)}
+          className="absolute left-1/2 z-10 -translate-x-1/2 flex items-center justify-center rounded-full text-white/85 transition-all active:scale-95"
+          style={{ top: 72, width: 40, height: 40, background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
+        >
+          <ChevronUp size={20} />
+        </button>
       )}
       {currentIndex < videos.length - 1 && (
-        <button type="button" onClick={() => go(1)} className="absolute left-1/2 bottom-24 -translate-x-1/2 z-10 text-white/50 text-2xl">â–¼</button>
+        <button
+          type="button"
+          onClick={() => go(1)}
+          className="absolute left-1/2 z-10 -translate-x-1/2 flex items-center justify-center rounded-full text-white/85 transition-all active:scale-95"
+          style={{ bottom: 96, width: 40, height: 40, background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
+        >
+          <ChevronDown size={20} />
+        </button>
       )}
 
       {/* Trending discovery — lets users jump to any trending video while in fullscreen */}
