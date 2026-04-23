@@ -363,7 +363,6 @@ function Live() {
           playsInline
           controls
           autoPlay
-          muted
         />
 
         {/* Reaction Particles */}

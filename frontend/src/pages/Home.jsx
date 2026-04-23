@@ -35,7 +35,7 @@ function HeroCarousel({ videos, onOpen, muted }) {
         src={`/storage/uploads/${v.filename}`}
         className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
         autoPlay
-        muted
+        muted={muted}
         loop
         playsInline
         style={{ filter: 'brightness(0.55)' }}
@@ -208,7 +208,11 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
       >
         {videos.map((video, index) => (
           <div key={video.id} className="relative h-screen w-full">
-            <VideoPlayer src={`/storage/uploads/${video.filename}`} isActive={index === currentIndex} />
+            <VideoPlayer
+              src={`/storage/uploads/${video.filename}`}
+              isActive={index === currentIndex}
+              muted={muted}
+            />
             <VideoActions
               video={video}
               onUpdate={onUpdate}

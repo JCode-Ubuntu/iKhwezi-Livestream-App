@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
-function VideoPlayer({ src, isActive, onVideoEnd }) {
+function VideoPlayer({ src, isActive, muted = true, onVideoEnd }) {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -108,7 +108,7 @@ function VideoPlayer({ src, isActive, onVideoEnd }) {
       <video
         ref={videoRef}
         src={src}
-        muted
+        muted={muted}
         playsInline
         loop
         style={{
