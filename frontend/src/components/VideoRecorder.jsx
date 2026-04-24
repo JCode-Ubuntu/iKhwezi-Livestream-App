@@ -2,6 +2,24 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Camera, Upload, Play, Square, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+function getExtensionFromMimeType(mimeType = '') {
+  if (mimeType.includes('mp4')) return 'mp4';
+  if (mimeType.includes('quicktime')) return 'mov';
+  if (mimeType.includes('ogg')) return 'ogv';
+  if (mimeType.includes('webm')) return 'webm';
+  return 'mp4';
+}
+
+function getUploadFile(videoBlob) {
+  if (videoBlob instanceof File) {
+    return videoBlob;
+  }
+
+  const extension = getExtensionFromMimeType(videoBlob?.type);
+  const mimeType = videoBlob?.type || `video/${extension}`;
+  return new File([videoBlob], `recording.${extension}`, { type: mimeType });
+}
+
 function VideoRecorder({ onClose, onVideoUploaded }) {
   const { fetchWithAuth, showToast } = useAuth();
   const videoRef = useRef(null);
@@ -129,7 +147,8 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
     try {
       setUploading(true);
       const formData = new FormData();
-      formData.append('video', recordedBlob, 'video.webm');
+      const uploadFile = getUploadFile(recordedBlob);
+      formData.append('video', uploadFile, uploadFile.name);
       formData.append('title', caption || 'Untitled');
       formData.append('description', caption);
       

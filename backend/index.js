@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const { Sequelize, DataTypes, Op, QueryTypes } = require('sequelize');
 const http = require('http');
@@ -269,6 +270,52 @@ const storyUpload = multer({
     else cb(new Error('Invalid file type for story'));
   }
 });
+
+const runFfmpeg = (args) => new Promise((resolve, reject) => {
+  const process = spawn('ffmpeg', args, { stdio: 'ignore' });
+
+  process.on('error', reject);
+  process.on('close', (code) => {
+    if (code === 0) {
+      resolve();
+      return;
+    }
+    reject(new Error(`ffmpeg exited with code ${code}`));
+  });
+});
+
+const normalizeUploadedVideo = async (file) => {
+  if (!file) return file;
+
+  const sourcePath = file.path;
+  const targetFilename = `${path.parse(file.filename).name}.mp4`;
+  const targetPath = path.join(path.dirname(sourcePath), targetFilename);
+
+  if (targetPath !== sourcePath && fs.existsSync(targetPath)) {
+    fs.unlinkSync(targetPath);
+  }
+
+  await runFfmpeg([
+    '-y',
+    '-i', sourcePath,
+    '-c:v', 'libx264',
+    '-c:a', 'aac',
+    '-movflags', '+faststart',
+    '-pix_fmt', 'yuv420p',
+    targetPath,
+  ]);
+
+  if (fs.existsSync(sourcePath) && sourcePath !== targetPath) {
+    fs.unlinkSync(sourcePath);
+  }
+
+  return {
+    ...file,
+    filename: targetFilename,
+    path: targetPath,
+    destination: path.dirname(targetPath),
+  };
+};
 
 // Auth middleware
 const authenticate = async (req, res, next) => {
@@ -569,6 +616,8 @@ app.post('/api/videos', authenticate, requireAuth, upload.single('video'), async
     if (!req.file) {
       return res.status(400).json({ error: 'Video file required' });
     }
+
+    const normalizedFile = await normalizeUploadedVideo(req.file);
     
     const { title, description } = req.body;
     
@@ -576,7 +625,7 @@ app.post('/api/videos', authenticate, requireAuth, upload.single('video'), async
       userId: req.user.id,
       title: title || '',
       description: description || '',
-      filename: req.file.filename,
+      filename: normalizedFile.filename,
       isPublished: true
     });
     
@@ -1408,6 +1457,8 @@ app.post('/api/admin/videos', requireAdmin, upload.single('video'), async (req, 
     if (!req.file) {
       return res.status(400).json({ error: 'Video file required' });
     }
+
+    const normalizedFile = await normalizeUploadedVideo(req.file);
     
     const { title, description, isSponsored, isTrending } = req.body;
     
@@ -1427,7 +1478,7 @@ app.post('/api/admin/videos', requireAdmin, upload.single('video'), async (req, 
       userId: adminUser.id,
       title: title || '',
       description: description || '',
-      filename: req.file.filename,
+      filename: normalizedFile.filename,
       isPublished: true,
       isSponsored: isSponsored === 'true',
       isTrending: isTrending === 'true'
