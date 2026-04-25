@@ -40,12 +40,12 @@ function Navigation({ onCreateClick }) {
         <button
           type="button"
           onClick={() => setIsExpanded((value) => !value)}
-          className="fixed bottom-4 right-4 z-[101] flex h-12 items-center gap-2 rounded-full border border-white/10 bg-[#0a0f1f]/90 px-4 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-transform active:scale-95"
+          className="fixed bottom-4 right-4 z-[101] flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-[radial-gradient(circle_at_30%_30%,rgba(129,140,248,0.5),rgba(10,15,31,0.92))] text-white shadow-[0_0_18px_rgba(99,102,241,0.32)] backdrop-blur-2xl transition-all duration-300 active:scale-95"
           style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
           aria-expanded={isExpanded}
           aria-controls="primary-navigation"
+          aria-label={isExpanded ? 'Hide navigation' : 'Show navigation'}
         >
-          <span>Menu</span>
           {isExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </button>
       )}
