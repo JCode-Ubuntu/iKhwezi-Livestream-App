@@ -11,9 +11,7 @@ import StoryCreator from '../components/StoryCreator';
 import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, MessageCircle, PenLine, X, ChevronUp, ChevronDown } from 'lucide-react';
 import FeedDiscovery from '../components/FeedDiscovery';
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Hero Carousel â€” top trending / sponsored videos
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Hero Carousel - top trending / sponsored videos */
 function HeroCarousel({ videos, onOpen, muted }) {
   const [heroIndex, setHeroIndex] = useState(0);
   const intervalRef = useRef(null);
@@ -69,9 +67,9 @@ function HeroCarousel({ videos, onOpen, muted }) {
               </h2>
             )}
             <div className="mt-2 flex items-center gap-3 text-xs text-white/50">
-              <span>â¤ï¸ {v.likeCount || 0}</span>
-              <span>ðŸ’¬ {v.commentCount || 0}</span>
-              <span>ðŸ‘ {v.views || 0}</span>
+              <span>Likes: {v.likeCount || 0}</span>
+              <span>Comments: {v.commentCount || 0}</span>
+              <span>Views: {v.views || 0}</span>
             </div>
           </div>
           <button
@@ -105,9 +103,7 @@ function HeroCarousel({ videos, onOpen, muted }) {
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Video Grid Thumbnail
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Video Grid Thumbnail */
 function GridThumb({ video, onClick }) {
   return (
     <button
@@ -128,22 +124,20 @@ function GridThumb({ video, onClick }) {
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-2 py-2">
         <p className="truncate text-[10px] font-semibold text-white/80">@{video.creator?.username}</p>
         <div className="flex items-center gap-2 text-[9px] text-white/50 mt-0.5">
-          <span>â¤ {video.likeCount || 0}</span>
-          <span>â–¶ {video.views || 0}</span>
+          <span>Likes: {video.likeCount || 0}</span>
+          <span>Views: {video.views || 0}</span>
         </div>
       </div>
       {video.isTrending && (
         <div className="absolute left-1.5 top-1.5 rounded-full bg-orange-500/90 px-1.5 py-0.5 text-[8px] font-bold text-white">
-          ðŸ”¥
+          Hot
         </div>
       )}
     </button>
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Full-screen video player overlay
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Full-screen video player overlay */
 function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate, showGuestPrompt }) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [showComments, setShowComments] = useState(false);
@@ -256,7 +250,7 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
         </button>
       )}
 
-      {/* Trending discovery — lets users jump to any trending video while in fullscreen */}
+      {/* Trending discovery - lets users jump to any trending video while in fullscreen */}
       <div className="absolute inset-x-0 z-[9]" style={{ top: 68 }}>
         <FeedDiscovery videos={videos} currentIndex={currentIndex} onPickIndex={setCurrentIndex} />
       </div>
@@ -269,9 +263,7 @@ function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Main Home page
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Main Home page */
 function Home() {
   const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -393,7 +385,7 @@ function Home() {
         }}
       />
 
-      {/* â”€â”€ Grid Section Header â”€â”€ */}
+      {/* Grid Section Header */}
       <div className="flex items-center justify-between px-4 pb-2 pt-4">
         <div className="flex items-center gap-2">
           <TrendingUp size={16} className="text-neon-cyan" />
@@ -402,7 +394,7 @@ function Home() {
         <span className="text-xs text-white/30">{gridVideos.length} videos</span>
       </div>
 
-      {/* ââ 3-Column Grid ââ */}
+      {/* 3-Column Grid */}
       <div className="grid grid-cols-3 gap-2 px-2" style={{ gridAutoRows: 'auto' }}>
         {gridVideos.map((video, index) => (
           <GridThumb
@@ -424,7 +416,7 @@ function Home() {
         </div>
       )}
 
-      {/* â”€â”€ Fullscreen player overlay â”€â”€ */}
+      {/* Fullscreen player overlay */}
       {fullscreenIndex !== null && (
         <FullscreenFeed
           videos={videos}

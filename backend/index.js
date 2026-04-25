@@ -333,9 +333,104 @@ const logAudit = async (action, details, ip) => {
   }
 };
 
+const normalizeCommentContent = (raw) => String(raw || '').trim().replace(/\s+/g, ' ');
+
+// ── Batch video meta helper (eliminates N+1 queries) ──────────────
+async function attachVideoMeta(videos, userId) {
+  if (!videos.length) return [];
+  const ids = videos.map(v => (typeof v.toJSON === 'function' ? v.toJSON() : v).id);
+
+  const [likeCounts, commentCounts, starSums] = await Promise.all([
+    Like.findAll({
+      where: { videoId: ids },
+      attributes: ['videoId', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['videoId'],
+      raw: true,
+    }),
+    Comment.findAll({
+      where: { videoId: ids },
+      attributes: ['videoId', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['videoId'],
+      raw: true,
+    }),
+    Star.findAll({
+      where: { videoId: ids },
+      attributes: ['videoId', [sequelize.fn('SUM', sequelize.col('amount')), 'total']],
+      group: ['videoId'],
+      raw: true,
+    }),
+  ]);
+
+  const likeMap = Object.fromEntries(likeCounts.map(r => [r.videoId, parseInt(r.count) || 0]));
+  const commentMap = Object.fromEntries(commentCounts.map(r => [r.videoId, parseInt(r.count) || 0]));
+  const starMap = Object.fromEntries(starSums.map(r => [r.videoId, parseInt(r.total) || 0]));
+
+  let likedIds = new Set();
+  let followedCreatorIds = new Set();
+  let starredIds = new Set();
+
+  if (userId) {
+    const creatorIds = [...new Set(videos.map(v => {
+      const plain = typeof v.toJSON === 'function' ? v.toJSON() : v;
+      return plain.userId;
+    }))];
+    const [userLikes, userFollows, userStars] = await Promise.all([
+      Like.findAll({ where: { userId, videoId: ids }, attributes: ['videoId'], raw: true }),
+      Follow.findAll({ where: { followerId: userId, followingId: creatorIds }, attributes: ['followingId'], raw: true }),
+      Star.findAll({ where: { userId, videoId: ids }, attributes: ['videoId'], raw: true }),
+    ]);
+    likedIds = new Set(userLikes.map(l => l.videoId));
+    followedCreatorIds = new Set(userFollows.map(f => f.followingId));
+    starredIds = new Set(userStars.map(s => s.videoId));
+  }
+
+  return videos.map(v => {
+    const plain = typeof v.toJSON === 'function' ? v.toJSON() : v;
+    return {
+      ...plain,
+      caption: plain.description || plain.title || '',
+      likeCount: likeMap[plain.id] || 0,
+      commentCount: commentMap[plain.id] || 0,
+      starCount: starMap[plain.id] || 0,
+      isLiked: likedIds.has(plain.id),
+      isFollowing: followedCreatorIds.has(plain.userId),
+      hasStarred: starredIds.has(plain.id),
+    };
+  });
+}
+
+// ── In-memory rate limiter (no extra dependencies) ────────────────
+const _rlStore = new Map();
+setInterval(() => {
+  const cut = Date.now() - 15 * 60 * 1000;
+  for (const [k, hits] of _rlStore) {
+    const fresh = hits.filter(t => t > cut);
+    if (fresh.length === 0) _rlStore.delete(k); else _rlStore.set(k, fresh);
+  }
+}, 5 * 60 * 1000).unref();
+
+function createRateLimiter(windowMs, max, message) {
+  return (req, res, next) => {
+    const key = (req.ip || req.socket?.remoteAddress || 'x') + ':' + req.path;
+    const now = Date.now();
+    const window = now - windowMs;
+    const hits = (_rlStore.get(key) || []).filter(t => t > window);
+    if (hits.length >= max) {
+      return res.status(429).json({ error: message || 'Too many requests. Please slow down.' });
+    }
+    hits.push(now);
+    _rlStore.set(key, hits);
+    next();
+  };
+}
+
+const authRateLimit = createRateLimiter(15 * 60 * 1000, 20, 'Too many auth attempts. Try again in 15 minutes.');
+const commentRateLimit = createRateLimiter(60 * 1000, 10, 'Posting too fast. Please wait a moment.');
+const interactionRateLimit = createRateLimiter(60 * 1000, 60, 'Too many actions. Please slow down.');
+
 // ==================== AUTH ROUTES ====================
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authRateLimit, async (req, res) => {
   try {
     const { email, phone, password, username, displayName } = req.body;
     if (!password || !username) {
@@ -393,7 +488,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimit, async (req, res) => {
   try {
     const { email, phone, password } = req.body;
     if (!password || (!email && !phone)) {
@@ -505,33 +600,8 @@ app.get('/api/videos/feed', authenticate, async (req, res) => {
       }
     }
     
-    // Add like/follow status for authenticated users
-    const videosWithMeta = await Promise.all(allVideos.map(async (video) => {
-      const likeCount = await Like.count({ where: { videoId: video.id } });
-      const commentCount = await Comment.count({ where: { videoId: video.id } });
-      const starCount = await Star.sum('amount', { where: { videoId: video.id } }) || 0;
-      
-      let isLiked = false;
-      let isFollowing = false;
-      let hasStarred = false;
-      
-      if (req.user) {
-        isLiked = await Like.findOne({ where: { userId: req.user.id, videoId: video.id } }) !== null;
-        isFollowing = await Follow.findOne({ where: { followerId: req.user.id, followingId: video.userId } }) !== null;
-        hasStarred = await Star.findOne({ where: { userId: req.user.id, videoId: video.id } }) !== null;
-      }
-      
-      return {
-        ...video.toJSON(),
-        likeCount,
-        commentCount,
-        starCount,
-        isLiked,
-        isFollowing,
-        hasStarred
-      };
-    }));
-    
+    // Batch-enrich all videos in 5-6 queries total (no N+1)
+    const videosWithMeta = await attachVideoMeta(allVideos, req.user?.id || null);
     res.json({ videos: videosWithMeta, page, hasMore: randomVideos.length === randomCount });
   } catch (err) {
     console.error('Feed error:', err);
@@ -551,30 +621,9 @@ app.get('/api/videos/:id', authenticate, async (req, res) => {
     
     video.views += 1;
     await video.save();
-    
-    const likeCount = await Like.count({ where: { videoId: video.id } });
-    const commentCount = await Comment.count({ where: { videoId: video.id } });
-    const starCount = await Star.sum('amount', { where: { videoId: video.id } }) || 0;
-    
-    let isLiked = false;
-    let isFollowing = false;
-    let hasStarred = false;
-    
-    if (req.user) {
-      isLiked = await Like.findOne({ where: { userId: req.user.id, videoId: video.id } }) !== null;
-      isFollowing = await Follow.findOne({ where: { followerId: req.user.id, followingId: video.userId } }) !== null;
-      hasStarred = await Star.findOne({ where: { userId: req.user.id, videoId: video.id } }) !== null;
-    }
-    
-    res.json({
-      ...video.toJSON(),
-      likeCount,
-      commentCount,
-      starCount,
-      isLiked,
-      isFollowing,
-      hasStarred
-    });
+
+    const [enriched] = await attachVideoMeta([video], req.user?.id || null);
+    res.json(enriched);
   } catch (err) {
     console.error('Video error:', err);
     res.status(500).json({ error: 'Failed to load video' });
@@ -618,7 +667,7 @@ app.post('/api/videos', authenticate, requireAuth, upload.single('video'), async
 
 // ==================== INTERACTION ROUTES ====================
 
-app.post('/api/videos/:id/like', authenticate, requireAuth, async (req, res) => {
+app.post('/api/videos/:id/like', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -635,15 +684,23 @@ app.post('/api/videos/:id/like', authenticate, requireAuth, async (req, res) => 
     const likeCount = await Like.count({ where: { videoId: video.id } });
     res.json({ liked: true, likeCount });
   } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      const likeCount = await Like.count({ where: { videoId: req.params.id } });
+      return res.json({ liked: true, likeCount });
+    }
     console.error('Like error:', err);
     res.status(500).json({ error: 'Like failed' });
   }
 });
 
-app.post('/api/videos/:id/star', authenticate, requireAuth, async (req, res) => {
+app.post('/api/videos/:id/star', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
+
+    if (video.userId === req.user.id) {
+      return res.status(400).json({ error: 'Cannot star your own video' });
+    }
     
     // Check if already starred this video
     const existing = await Star.findOne({ where: { userId: req.user.id, videoId: video.id } });
@@ -686,12 +743,16 @@ app.post('/api/videos/:id/star', authenticate, requireAuth, async (req, res) => 
       creatorTotalPoints: creatorPoints.totalPoints
     });
   } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      const starCount = await Star.sum('amount', { where: { videoId: req.params.id } }) || 0;
+      return res.status(400).json({ error: 'Already starred this video', starCount });
+    }
     console.error('Star error:', err);
     res.status(500).json({ error: 'Star failed' });
   }
 });
 
-app.post('/api/users/:id/follow', authenticate, requireAuth, async (req, res) => {
+app.post('/api/users/:id/follow', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ error: 'Cannot follow yourself' });
@@ -714,6 +775,10 @@ app.post('/api/users/:id/follow', authenticate, requireAuth, async (req, res) =>
     const followerCount = await Follow.count({ where: { followingId: req.params.id } });
     res.json({ following: true, followerCount });
   } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      const followerCount = await Follow.count({ where: { followingId: req.params.id } });
+      return res.json({ following: true, followerCount });
+    }
     console.error('Follow error:', err);
     res.status(500).json({ error: 'Follow failed' });
   }
@@ -743,11 +808,16 @@ app.get('/api/videos/:id/comments', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/videos/:id/comments', authenticate, requireAuth, async (req, res) => {
+app.post('/api/videos/:id/comments', authenticate, requireAuth, commentRateLimit, async (req, res) => {
   try {
     const { content, parentId } = req.body;
-    if (!content?.trim()) {
+    const normalizedContent = normalizeCommentContent(content);
+
+    if (!normalizedContent) {
       return res.status(400).json({ error: 'Comment content required' });
+    }
+    if (normalizedContent.length > 280) {
+      return res.status(400).json({ error: 'Comment must be 280 characters or less' });
     }
     
     const video = await Video.findByPk(req.params.id);
@@ -760,11 +830,28 @@ app.post('/api/videos/:id/comments', authenticate, requireAuth, async (req, res)
       }
     }
     
+    const duplicateWindowStart = new Date(Date.now() - 8000);
+    const duplicate = await Comment.findOne({
+      where: {
+        userId: req.user.id,
+        videoId: video.id,
+        parentId: parentId || null,
+        content: normalizedContent,
+        createdAt: { [Op.gte]: duplicateWindowStart },
+      },
+      include: [{ model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (duplicate) {
+      return res.status(409).json({ error: 'Duplicate comment detected. Please wait a moment.', comment: duplicate });
+    }
+
     const comment = await Comment.create({
       userId: req.user.id,
       videoId: video.id,
       parentId: parentId || null,
-      content: content.trim()
+      content: normalizedContent
     });
     
     const commentWithAuthor = await Comment.findByPk(comment.id, {
@@ -1031,6 +1118,10 @@ app.post('/api/stories/:id/view', authenticate, requireAuth, async (req, res) =>
     const viewCount = await StoryView.count({ where: { storyId: story.id } });
     res.json({ viewed: true, viewCount });
   } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      const viewCount = await StoryView.count({ where: { storyId: req.params.id } });
+      return res.json({ viewed: true, viewCount });
+    }
     console.error('Story view error:', err);
     res.status(500).json({ error: 'Failed to record view' });
   }
@@ -1062,11 +1153,16 @@ app.get('/api/stories/:id/comments', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/stories/:id/comments', authenticate, requireAuth, async (req, res) => {
+app.post('/api/stories/:id/comments', authenticate, requireAuth, commentRateLimit, async (req, res) => {
   try {
     const { content, parentId } = req.body;
-    if (!content?.trim()) {
+    const normalizedContent = normalizeCommentContent(content);
+
+    if (!normalizedContent) {
       return res.status(400).json({ error: 'Comment content required' });
+    }
+    if (normalizedContent.length > 280) {
+      return res.status(400).json({ error: 'Comment must be 280 characters or less' });
     }
 
     const story = await Story.findByPk(req.params.id);
@@ -1080,11 +1176,28 @@ app.post('/api/stories/:id/comments', authenticate, requireAuth, async (req, res
       }
     }
 
+    const duplicateWindowStart = new Date(Date.now() - 8000);
+    const duplicate = await StoryComment.findOne({
+      where: {
+        userId: req.user.id,
+        storyId: story.id,
+        parentId: parentId || null,
+        content: normalizedContent,
+        createdAt: { [Op.gte]: duplicateWindowStart },
+      },
+      include: [{ model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (duplicate) {
+      return res.status(409).json({ error: 'Duplicate comment detected. Please wait a moment.', comment: duplicate });
+    }
+
     const comment = await StoryComment.create({
       userId: req.user.id,
       storyId: story.id,
       parentId: parentId || null,
-      content: content.trim()
+      content: normalizedContent
     });
 
     const commentWithAuthor = await StoryComment.findByPk(comment.id, {
@@ -1840,12 +1953,55 @@ const ensureGuestColumn = async () => {
   }
 };
 
+const enforceInteractionUniqueness = async () => {
+  const dedupeTables = [
+    { table: 'Likes', keys: ['userId', 'videoId'] },
+    { table: 'Follows', keys: ['followerId', 'followingId'] },
+    { table: 'Stars', keys: ['userId', 'videoId'] },
+    { table: 'StoryViews', keys: ['storyId', 'viewerId'] },
+  ];
+
+  for (const item of dedupeTables) {
+    const partitionBy = item.keys.map((key) => `"${key}"`).join(', ');
+    const duplicateIds = await sequelize.query(
+      `
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY ${partitionBy}
+                 ORDER BY datetime(createdAt) ASC, id ASC
+               ) AS rn
+        FROM "${item.table}"
+      ) t
+      WHERE rn > 1
+      `,
+      { type: QueryTypes.SELECT }
+    );
+
+    if (duplicateIds.length > 0) {
+      await sequelize.query(
+        `DELETE FROM "${item.table}" WHERE id IN (:ids)`,
+        {
+          replacements: { ids: duplicateIds.map((row) => row.id) },
+          type: QueryTypes.DELETE,
+        }
+      );
+    }
+  }
+
+  await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_likes_user_video ON "Likes"("userId", "videoId")');
+  await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_follows_pair ON "Follows"("followerId", "followingId")');
+  await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_stars_user_video ON "Stars"("userId", "videoId")');
+  await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_storyviews_story_viewer ON "StoryViews"("storyId", "viewerId")');
+};
+
 const initialize = async () => {
   try {
     await sequelize.authenticate();
     await deduplicateUsernames();
     await ensureGuestColumn();
     await sequelize.sync();
+    await enforceInteractionUniqueness();
     console.log('Database synchronized');
     
     // Ensure storage directories exist
