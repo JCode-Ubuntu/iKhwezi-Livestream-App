@@ -108,7 +108,7 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
   );
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ position: 'relative' }}>
       <div className="px-4 py-3 border-b border-white/8">
         <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 border border-white/8">
           <Search size={15} className="text-white/40" />
@@ -118,6 +118,11 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
             placeholder="Search conversations…"
             className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
           />
+          {search && (
+            <button type="button" onClick={() => setSearch('')} className="text-white/30 hover:text-white/60">
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -128,23 +133,14 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
           </div>
         )}
         {!loading && filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center px-8">
+          <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-8">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neon-indigo/10 border border-neon-indigo/20">
               <MessageCircle size={30} className="text-neon-indigo/60" />
             </div>
             <div>
               <p className="text-sm font-semibold text-white/60 mb-1">No conversations yet</p>
-              <p className="text-xs text-white/35">Tap the button below to start chatting</p>
+              <p className="text-xs text-white/35">Tap the pencil icon to start a chat</p>
             </div>
-            <button
-              type="button"
-              onClick={onNewMsg}
-              className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-white active:scale-95 transition-transform"
-              style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)' }}
-            >
-              <Plus size={15} />
-              New Message
-            </button>
           </div>
         )}
         {filtered.map(conv => (
@@ -154,29 +150,50 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
             onClick={() => onSelect(conv.user)}
             className="flex w-full items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/8 transition-colors border-b border-white/4 text-left"
           >
-            <div className="avatar flex-shrink-0" style={{ width: 44, height: 44, fontSize: 16 }}>
+            <div className="avatar flex-shrink-0" style={{ width: 48, height: 48, fontSize: 17 }}>
               {conv.user?.avatar
-                ? <img src={conv.user.avatar} alt="" />
+                ? <img src={conv.user.avatar} alt="" className="w-full h-full object-cover rounded-full" />
                 : conv.user?.username?.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-0.5">
                 <p className="font-semibold text-sm text-white truncate">
                   {conv.user?.displayName || conv.user?.username}
                 </p>
-                {conv.unread > 0 && (
-                  <span className="flex-shrink-0 ml-2 h-5 w-5 flex items-center justify-center rounded-full bg-neon-indigo text-[10px] font-bold text-white">
-                    {conv.unread}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  {conv.lastMessage?.createdAt && (
+                    <span className="text-[11px] text-white/30">
+                      {new Date(conv.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                  {conv.unread > 0 && (
+                    <span className="h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-neon-indigo text-[10px] font-bold text-white">
+                      {conv.unread > 99 ? '99+' : conv.unread}
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-white/45 truncate mt-0.5">
-                {conv.lastMessage?.content}
+              <p className={`text-xs truncate mt-0.5 ${conv.unread > 0 ? 'text-white/70 font-medium' : 'text-white/40'}`}>
+                {conv.lastMessage?.content || 'No messages yet'}
               </p>
             </div>
           </button>
         ))}
+        {/* Bottom padding so FAB doesn't cover last item */}
+        <div style={{ height: 80 }} />
       </div>
+
+      {/* Floating compose button */}
+      <button
+        type="button"
+        onClick={onNewMsg}
+        aria-label="New message"
+        className="absolute bottom-4 right-4 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(99,102,241,0.5)] active:scale-95 transition-transform"
+        style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)', zIndex: 10 }}
+      >
+        <Edit size={16} />
+        New Message
+      </button>
     </div>
   );
 }
@@ -239,6 +256,10 @@ function ChatThread({ otherUser, onBack }) {
     };
     setMessages(prev => [...prev, optimistic]);
     setInput('');
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
     try {
       const res = await fetchWithAuth(`/messages/${otherUser.id}`, {
         method: 'POST',
@@ -314,49 +335,72 @@ function ChatThread({ otherUser, onBack }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input bar — flex-shrink-0 prevents it from being squished or clipped */}
-      <div
-        className="flex flex-shrink-0 items-center gap-2 border-t border-white/8 bg-[#050816]"
-        style={{ padding: '10px 12px', paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}
+      {/* Input bar */}
+      <form
+        onSubmit={send}
+        className="flex flex-shrink-0 items-end gap-2 border-t border-white/8 bg-[#050816]"
+        style={{ padding: '8px 12px', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
       >
-        <input
+        <textarea
           ref={inputRef}
           value={input}
-          onChange={e => setInput(e.target.value)}
+          rows={1}
+          onChange={e => {
+            setInput(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+          }}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }}
-          placeholder="Type a message…"
+          placeholder="Message…"
           autoComplete="off"
           maxLength={1000}
           style={{
             flex: 1,
             minWidth: 0,
+            resize: 'none',
+            overflow: 'hidden',
             background: 'rgba(255,255,255,0.07)',
             border: '1.5px solid rgba(255,255,255,0.12)',
-            borderRadius: 24,
-            padding: '10px 18px',
+            borderRadius: 22,
+            padding: '10px 16px',
             color: 'white',
             fontSize: 14,
+            lineHeight: '1.4',
             outline: 'none',
+            transition: 'border-color 0.15s',
           }}
           onFocus={e => (e.target.style.borderColor = '#6366f1')}
           onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.12)')}
         />
+        {/* Send button — slides in when user starts typing */}
         <button
-          type="button"
-          onClick={send}
+          type="submit"
           disabled={!input.trim() || sending}
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95"
+          aria-label="Send message"
           style={{
-            background: input.trim()
-              ? 'linear-gradient(135deg,#6366f1,#a855f7)'
-              : 'rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            width: input.trim() ? 44 : 0,
+            height: 44,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg,#6366f1,#a855f7)',
             border: 'none',
-            cursor: input.trim() ? 'pointer' : 'default',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            opacity: input.trim() ? 1 : 0,
+            transform: input.trim() ? 'scale(1)' : 'scale(0.6)',
+            transition: 'width 0.2s ease, opacity 0.2s ease, transform 0.2s ease',
+            pointerEvents: input.trim() ? 'auto' : 'none',
           }}
         >
-          <Send size={16} color={input.trim() ? 'white' : 'rgba(255,255,255,0.3)'} />
+          {sending
+            ? <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite' }} />
+            : <Send size={16} color="white" />
+          }
         </button>
-      </div>
+      </form>
     </div>
   );
 }

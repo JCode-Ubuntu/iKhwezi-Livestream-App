@@ -1375,7 +1375,7 @@ app.post('/api/admin/stream-key/rotate', requireAdmin, async (req, res) => {
 // ==================== DIRECT MESSAGES ====================
 
 // Get all conversations for the current user
-app.get('/api/messages/conversations', requireAuth, async (req, res) => {
+app.get('/api/messages/conversations', authenticate, requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
     const msgs = await DirectMessage.findAll({
@@ -1403,7 +1403,7 @@ app.get('/api/messages/conversations', requireAuth, async (req, res) => {
 });
 
 // Get messages between current user and another user
-app.get('/api/messages/:userId', requireAuth, async (req, res) => {
+app.get('/api/messages/:userId', authenticate, requireAuth, async (req, res) => {
   try {
     const me = req.user.id;
     const other = req.params.userId;
@@ -1427,7 +1427,7 @@ app.get('/api/messages/:userId', requireAuth, async (req, res) => {
 });
 
 // Send a message
-app.post('/api/messages/:userId', requireAuth, async (req, res) => {
+app.post('/api/messages/:userId', authenticate, requireAuth, async (req, res) => {
   try {
     const me = req.user.id;
     const other = req.params.userId;

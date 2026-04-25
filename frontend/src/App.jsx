@@ -6,6 +6,7 @@ import Navigation from './components/Navigation';
 import VideoRecorder from './components/VideoRecorder';
 import TextComposer from './components/TextComposer';
 import StoryCreator from './components/StoryCreator';
+import { X } from 'lucide-react';
 
 const Home = lazy(() => import('./pages/Home'));
 const Live = lazy(() => import('./pages/Live'));
@@ -61,7 +62,7 @@ function App() {
           <div
             style={{
               position: 'fixed', inset: 0, zIndex: 999,
-              background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+              background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)',
               display: 'flex', alignItems: 'flex-end',
             }}
             onClick={() => setShowCreateSheet(false)}
@@ -70,20 +71,38 @@ function App() {
               style={{
                 width: '100%', background: '#0f0f1a',
                 borderRadius: '20px 20px 0 0',
-                padding: '24px 20px 40px',
+                paddingBottom: 'max(28px, env(safe-area-inset-bottom))',
                 border: '1px solid rgba(255,255,255,0.08)',
+                overflow: 'hidden',
               }}
               onClick={e => e.stopPropagation()}
             >
+              {/* Sheet header with back/close button */}
               <div style={{
-                width: 40, height: 4, borderRadius: 2,
-                background: 'rgba(255,255,255,0.2)',
-                margin: '0 auto 24px',
-              }} />
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 16, textAlign: 'center' }}>
-                Create
-              </p>
-              <div style={{ display: 'flex', gap: 12 }}>
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '14px 16px 12px',
+                borderBottom: '1px solid rgba(255,255,255,0.07)',
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateSheet(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    cursor: 'pointer', color: 'rgba(255,255,255,0.7)',
+                    flexShrink: 0,
+                  }}
+                  aria-label="Close"
+                >
+                  <X size={17} />
+                </button>
+                <span style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>Create</span>
+                <div style={{ width: 36 }} />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, padding: '20px 16px' }}>
                 <button
                   type="button"
                   onClick={() => { setShowCreateSheet(false); setShowVideoRecorder(true); }}
