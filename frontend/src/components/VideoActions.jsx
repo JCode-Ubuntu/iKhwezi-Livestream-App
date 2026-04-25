@@ -124,10 +124,7 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
       icon: MessageCircle,
       count: video.commentCount,
       onClick: () => {
-        if (!isAuthenticated) {
-          onShowLogin?.();
-          return;
-        }
+        // Viewing comments should always be allowed.
         onShowComments?.();
       },
     },

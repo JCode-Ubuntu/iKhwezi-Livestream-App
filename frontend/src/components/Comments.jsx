@@ -50,9 +50,13 @@ function Comments({ videoId, onClose }) {
     try {
       const res = await fetchWithAuth(`/videos/${videoId}/comments`);
       const data = await res.json();
-      setComments(data);
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to load comments');
+      }
+      setComments(Array.isArray(data) ? data : []);
     } catch (err) {
       showToast('Failed to load comments', 'error');
+      setComments([]);
     } finally {
       setLoading(false);
     }
@@ -92,6 +96,9 @@ function Comments({ videoId, onClose }) {
         setNewComment('');
         setReplyingTo(null);
         showToast('Comment posted!', 'success');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data?.error || 'Failed to post comment', 'error');
       }
     } catch (err) {
       showToast('Failed to post comment', 'error');

@@ -282,8 +282,11 @@ const authenticate = async (req, res, next) => {
     const user = await User.findByPk(decoded.id);
     if (user && !user.isBanned) {
       req.user = user;
+      // Keep requests authenticated even if optional activity tracking write fails.
       user.lastActive = new Date();
-      await user.save();
+      user.save().catch((saveErr) => {
+        console.warn('Last active update failed:', saveErr.message);
+      });
     } else {
       req.user = null;
     }
