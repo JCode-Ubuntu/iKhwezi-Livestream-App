@@ -36,17 +36,17 @@ function Navigation({ onCreateClick }) {
 
   return (
     <>
-      {!isHomePage && (
+      {!isHomePage && !isExpanded && (
         <button
           type="button"
           onClick={() => setIsExpanded((value) => !value)}
-          className="fixed bottom-4 right-4 z-[101] flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-[radial-gradient(circle_at_30%_30%,rgba(129,140,248,0.5),rgba(10,15,31,0.92))] text-white shadow-[0_0_18px_rgba(99,102,241,0.32)] backdrop-blur-2xl transition-all duration-300 active:scale-95"
+          className="fixed bottom-4 right-4 z-[101] flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-[radial-gradient(circle_at_30%_30%,rgba(129,140,248,0.7),rgba(10,15,31,0.96))] text-white shadow-[0_0_14px_rgba(99,102,241,0.4)] backdrop-blur-2xl transition-all duration-300 active:scale-95"
           style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
           aria-expanded={isExpanded}
           aria-controls="primary-navigation"
           aria-label={isExpanded ? 'Hide navigation' : 'Show navigation'}
         >
-          {isExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+          <ChevronUp size={13} />
         </button>
       )}
 
@@ -59,6 +59,17 @@ function Navigation({ onCreateClick }) {
           pointerEvents: isExpanded ? 'auto' : 'none',
         }}
       >
+        {!isHomePage && isExpanded && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(false)}
+            className="absolute -top-3 right-4 z-[102] flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-[#0a0f1f]/90 text-white/80 shadow-[0_6px_20px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-300 hover:text-white active:scale-95"
+            aria-label="Hide navigation"
+          >
+            <ChevronDown size={12} />
+          </button>
+        )}
+
         {isGuest && (
           <div
             style={{
