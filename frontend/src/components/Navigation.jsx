@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Radio, User, Plus, MessageCircle } from 'lucide-react';
+import { Home, Radio, User, Plus, MessageCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GuestPrompt from './GuestPrompt';
 
@@ -8,10 +8,16 @@ function Navigation({ onCreateClick }) {
   const { isAuthenticated, user, isGuest, trackGuestInteraction } = useAuth();
   const location = useLocation();
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const isHomePage = location.pathname === '/';
+  const [isExpanded, setIsExpanded] = useState(isHomePage);
 
   if (location.pathname === '/admin') {
     return null;
   }
+
+  useEffect(() => {
+    setIsExpanded(isHomePage);
+  }, [isHomePage, location.pathname]);
 
   const navItems = [
     { path: '/', icon: Home, label: 'Home' },
@@ -30,9 +36,28 @@ function Navigation({ onCreateClick }) {
 
   return (
     <>
+      {!isHomePage && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((value) => !value)}
+          className="fixed bottom-4 right-4 z-[101] flex h-12 items-center gap-2 rounded-full border border-white/10 bg-[#0a0f1f]/90 px-4 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-transform active:scale-95"
+          style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
+          aria-expanded={isExpanded}
+          aria-controls="primary-navigation"
+        >
+          <span>Menu</span>
+          {isExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+        </button>
+      )}
+
       <nav
-        className="fixed bottom-0 left-0 right-0 z-[100] flex h-[70px] items-center justify-around border-t border-white/5 bg-gradient-to-t from-[#050816]/98 to-[#0a0f1f]/90 px-5 shadow-[0_-8px_40px_rgba(99,102,241,0.12)] backdrop-blur-2xl"
-        style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
+        id="primary-navigation"
+        className="fixed bottom-0 left-0 right-0 z-[100] flex h-[70px] items-center justify-around border-t border-white/5 bg-gradient-to-t from-[#050816]/98 to-[#0a0f1f]/90 px-5 shadow-[0_-8px_40px_rgba(99,102,241,0.12)] backdrop-blur-2xl transition-transform duration-300"
+        style={{
+          paddingBottom: 'max(0px, env(safe-area-inset-bottom))',
+          transform: isExpanded ? 'translateY(0)' : 'translateY(calc(100% + env(safe-area-inset-bottom) + 12px))',
+          pointerEvents: isExpanded ? 'auto' : 'none',
+        }}
       >
         {isGuest && (
           <div
