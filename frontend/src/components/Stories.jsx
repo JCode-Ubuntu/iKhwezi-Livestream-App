@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Pause, Eye, Trash2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Pause, Eye, Trash2, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Comments from './Comments';
 
 /* ─────────────────────────────────────────────────────────────────
    StoryTray  — horizontal row of user-story bubbles
@@ -148,6 +149,7 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
   const [storyIdx, setStoryIdx] = useState(0);
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const intervalRef = useRef(null);
   const touchStartX = useRef(0);
@@ -190,7 +192,7 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
 
   // Progress auto-advance (images only)
   useEffect(() => {
-    if (paused || !currentStory || currentStory.type === 'video') {
+    if (paused || showComments || !currentStory || currentStory.type === 'video') {
       clearInterval(intervalRef.current);
       return;
     }
@@ -202,10 +204,13 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
       });
     }, 100);
     return () => clearInterval(intervalRef.current);
-  }, [paused, storyIdx, groupIdx, currentStory?.type, advance]);
+  }, [paused, showComments, storyIdx, groupIdx, currentStory?.type, advance]);
 
   // Reset progress on story change
-  useEffect(() => { setProgress(0); }, [storyIdx, groupIdx]);
+  useEffect(() => {
+    setProgress(0);
+    setShowComments(false);
+  }, [storyIdx, groupIdx]);
 
   // Touch: long-press = pause, tap = navigate
   const onTouchStart = (e) => {
@@ -328,8 +333,27 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
       {currentStory.caption ? (
         <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/75 to-transparent px-5 pt-10 pb-safe">
           <p className="mb-4 text-sm font-medium text-white drop-shadow">{currentStory.caption}</p>
+          <button
+            type="button"
+            onClick={() => setShowComments(true)}
+            className="flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm"
+          >
+            <MessageCircle size={15} />
+            {currentStory.commentCount || 0} Comments
+          </button>
         </div>
-      ) : null}
+      ) : (
+        <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/75 to-transparent px-5 pt-10 pb-safe">
+          <button
+            type="button"
+            onClick={() => setShowComments(true)}
+            className="flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm"
+          >
+            <MessageCircle size={15} />
+            {currentStory.commentCount || 0} Comments
+          </button>
+        </div>
+      )}
 
       {/* ── Hold-to-pause indicator ── */}
       {paused && (
@@ -358,6 +382,13 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
         >
           <ChevronRight size={20} />
         </button>
+      )}
+
+      {showComments && currentStory && (
+        <Comments
+          resourcePath={`/stories/${currentStory.id}/comments`}
+          onClose={() => setShowComments(false)}
+        />
       )}
     </div>
   );

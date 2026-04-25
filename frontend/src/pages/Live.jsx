@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Hls from 'hls.js';
-import { Radio, Users, ArrowLeft, RefreshCw, WifiOff, Camera, FlipHorizontal, X, Video as VideoIcon } from 'lucide-react';
+import { Radio, Users, ArrowLeft, RefreshCw, WifiOff, Camera, FlipHorizontal, X, Video as VideoIcon, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import CosmicBackground from '../components/CosmicBackground';
@@ -408,6 +408,14 @@ function Live() {
 
         {/* Action Buttons */}
         <div className="flex justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowChat((value) => !value)}
+            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition-transform active:scale-95"
+          >
+            <MessageCircle size={14} />
+            {showChat ? 'Hide Comments' : 'Comments'}
+          </button>
           <button
             onClick={handleDuetRequest}
             className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition-transform active:scale-95"

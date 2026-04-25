@@ -26,7 +26,7 @@ function CommentSkeleton() {
   );
 }
 
-function Comments({ videoId, onClose }) {
+function Comments({ videoId, resourcePath, onClose }) {
   const { fetchWithAuth, showToast, user } = useAuth();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,15 +40,17 @@ function Comments({ videoId, onClose }) {
 
   useEffect(() => {
     loadComments();
-  }, [videoId]);
+  }, [resourcePath, videoId]);
 
   useEffect(() => () => {
     if (typingTimer.current) clearTimeout(typingTimer.current);
   }, []);
 
+  const commentsPath = resourcePath || `/videos/${videoId}/comments`;
+
   const loadComments = async () => {
     try {
-      const res = await fetchWithAuth(`/videos/${videoId}/comments`);
+      const res = await fetchWithAuth(commentsPath);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error || 'Failed to load comments');
@@ -72,7 +74,7 @@ function Comments({ videoId, onClose }) {
 
     setSubmitting(true);
     try {
-      const res = await fetchWithAuth(`/videos/${videoId}/comments`, {
+      const res = await fetchWithAuth(commentsPath, {
         method: 'POST',
         body: JSON.stringify({
           content: newComment.trim(),

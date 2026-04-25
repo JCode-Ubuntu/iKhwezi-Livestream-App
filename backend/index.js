@@ -105,6 +105,14 @@ const StoryView = sequelize.define('StoryView', {
   viewerId: { type: DataTypes.UUID, allowNull: false },
 });
 
+const StoryComment = sequelize.define('StoryComment', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false },
+  storyId: { type: DataTypes.UUID, allowNull: false },
+  parentId: { type: DataTypes.UUID, allowNull: true },
+  content: { type: DataTypes.TEXT, allowNull: false }
+});
+
 const Challenge = sequelize.define('Challenge', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   title: { type: DataTypes.STRING, allowNull: false },
@@ -208,6 +216,12 @@ Story.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
 Story.hasMany(StoryView, { foreignKey: 'storyId', as: 'views' });
 StoryView.belongsTo(Story, { foreignKey: 'storyId' });
 StoryView.belongsTo(User, { foreignKey: 'viewerId', as: 'viewer' });
+User.hasMany(StoryComment, { foreignKey: 'userId' });
+StoryComment.belongsTo(User, { foreignKey: 'userId', as: 'author' });
+Story.hasMany(StoryComment, { foreignKey: 'storyId', as: 'comments' });
+StoryComment.belongsTo(Story, { foreignKey: 'storyId' });
+StoryComment.hasMany(StoryComment, { foreignKey: 'parentId', as: 'replies' });
+StoryComment.belongsTo(StoryComment, { foreignKey: 'parentId', as: 'parent' });
 
 User.hasMany(Challenge, { foreignKey: 'createdBy', as: 'challenges' });
 Challenge.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
@@ -912,6 +926,22 @@ app.get('/api/stories', authenticate, async (req, res) => {
       limit: 200,
     });
 
+    const storyIds = stories.map((story) => story.id);
+    const commentCounts = storyIds.length
+      ? await StoryComment.findAll({
+          attributes: [
+            'storyId',
+            [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+          ],
+          where: { storyId: storyIds },
+          group: ['storyId'],
+          raw: true,
+        })
+      : [];
+    const commentCountByStoryId = new Map(
+      commentCounts.map((entry) => [entry.storyId, Number(entry.count) || 0])
+    );
+
     // Group by userId
     const grouped = {};
     for (const story of stories) {
@@ -933,6 +963,7 @@ app.get('/api/stories', authenticate, async (req, res) => {
         createdAt: story.createdAt,
         expiresAt: story.expiresAt,
         viewCount: story.views.length,
+        commentCount: commentCountByStoryId.get(story.id) || 0,
         viewed,
       });
       if (!viewed) grouped[uid].hasUnviewed = true;
@@ -1005,6 +1036,68 @@ app.post('/api/stories/:id/view', authenticate, requireAuth, async (req, res) =>
   }
 });
 
+app.get('/api/stories/:id/comments', authenticate, async (req, res) => {
+  try {
+    const story = await Story.findByPk(req.params.id);
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    if (new Date() > story.expiresAt) return res.status(410).json({ error: 'Story expired' });
+
+    const comments = await StoryComment.findAll({
+      where: { storyId: story.id, parentId: null },
+      include: [
+        { model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] },
+        {
+          model: StoryComment,
+          as: 'replies',
+          include: [{ model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] }]
+        }
+      ],
+      order: [['createdAt', 'DESC'], [{ model: StoryComment, as: 'replies' }, 'createdAt', 'ASC']]
+    });
+
+    res.json(comments);
+  } catch (err) {
+    console.error('Story comments error:', err);
+    res.status(500).json({ error: 'Failed to load comments' });
+  }
+});
+
+app.post('/api/stories/:id/comments', authenticate, requireAuth, async (req, res) => {
+  try {
+    const { content, parentId } = req.body;
+    if (!content?.trim()) {
+      return res.status(400).json({ error: 'Comment content required' });
+    }
+
+    const story = await Story.findByPk(req.params.id);
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    if (new Date() > story.expiresAt) return res.status(410).json({ error: 'Story expired' });
+
+    if (parentId) {
+      const parent = await StoryComment.findByPk(parentId);
+      if (!parent || parent.storyId !== story.id) {
+        return res.status(400).json({ error: 'Invalid parent comment' });
+      }
+    }
+
+    const comment = await StoryComment.create({
+      userId: req.user.id,
+      storyId: story.id,
+      parentId: parentId || null,
+      content: content.trim()
+    });
+
+    const commentWithAuthor = await StoryComment.findByPk(comment.id, {
+      include: [{ model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] }]
+    });
+
+    res.json(commentWithAuthor);
+  } catch (err) {
+    console.error('Story comment error:', err);
+    res.status(500).json({ error: 'Failed to post comment' });
+  }
+});
+
 app.delete('/api/stories/:id', authenticate, requireAuth, async (req, res) => {
   try {
     const story = await Story.findByPk(req.params.id);
@@ -1015,6 +1108,7 @@ app.delete('/api/stories/:id', authenticate, requireAuth, async (req, res) => {
     const filePath = path.join(__dirname, 'storage/uploads', path.basename(story.url));
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
+  await StoryComment.destroy({ where: { storyId: story.id } });
     await StoryView.destroy({ where: { storyId: story.id } });
     await story.destroy();
     res.json({ deleted: true });
