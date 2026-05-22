@@ -8,8 +8,24 @@ import CosmicBackground from '../components/CosmicBackground';
 import SkeletonStream from '../components/SkeletonStream';
 import { StoryTray } from '../components/Stories';
 import StoryCreator from '../components/StoryCreator';
-import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, MessageCircle, PenLine, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, BellOff, Eye, X, ChevronUp, ChevronDown } from 'lucide-react';
 import FeedDiscovery from '../components/FeedDiscovery';
+
+function formatDuration(seconds) {
+  if (!seconds || Number.isNaN(Number(seconds))) return '0:00';
+  const s = Math.max(0, Math.floor(Number(seconds)));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return mm + ':' + String(ss).padStart(2, '0');
+}
+
+function getCategoryTag(video) {
+  const text = (video?.caption || '').toLowerCase();
+  if (text.includes('trophy') || text.includes('win')) return 'Trophy Moment';
+  if (text.includes('behind') || text.includes('bts')) return 'Behind the Scenes';
+  if (text.includes('profile') || text.includes('player')) return 'Player Profile';
+  return 'Highlights';
+}
 
 /* Hero Carousel - top trending / sponsored videos */
 function HeroCarousel({ videos, onOpen, muted }) {
@@ -26,7 +42,7 @@ function HeroCarousel({ videos, onOpen, muted }) {
   const v = videos[heroIndex];
 
   return (
-    <div className="relative w-full overflow-hidden bg-black" style={{ height: '50vh', minHeight: 220 }}>
+    <div className="relative mx-3 overflow-hidden rounded-3xl border border-amber-200/15 bg-black shadow-2xl shadow-black/60" style={{ height: '52vh', minHeight: 260 }}>
       {/* Background video preview */}
       <video
         key={v.id}
@@ -40,12 +56,20 @@ function HeroCarousel({ videos, onOpen, muted }) {
       />
 
       {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-black/10" />
+
+      {/* Silent bar */}
+      <div className="absolute left-3 right-3 top-3 z-10 flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-400/30 bg-red-500/20 px-3 py-1 text-[11px] font-semibold text-red-100">
+          <BellOff size={12} />
+          Silent
+        </span>
+      </div>
 
       {/* Badges */}
-      <div className="absolute left-4 top-4 flex gap-2">
+      <div className="absolute left-4 top-14 flex gap-2">
         {v.isTrending && (
-          <span className="flex items-center gap-1 rounded-full bg-orange-500/90 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-sm">
+          <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-sm shadow-lg shadow-orange-900/40">
             <Flame size={10} /> Trending
           </span>
         )}
@@ -57,7 +81,7 @@ function HeroCarousel({ videos, onOpen, muted }) {
       </div>
 
       {/* Content */}
-      <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
+      <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="mb-1 text-xs font-semibold text-white/60">@{v.creator?.username || 'unknown'}</p>
@@ -75,9 +99,9 @@ function HeroCarousel({ videos, onOpen, muted }) {
           <button
             type="button"
             onClick={() => onOpen(heroIndex)}
-            className="flex-shrink-0 flex h-12 w-12 items-center justify-center rounded-full bg-white/15 border border-white/20 backdrop-blur-xl transition-transform active:scale-95"
+            className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border border-amber-100/20 bg-gradient-to-br from-yellow-300 to-amber-500 text-black shadow-xl shadow-amber-900/60 transition-transform active:scale-95"
           >
-            <Play size={20} fill="white" className="text-white ml-0.5" />
+            <Play size={22} fill="currentColor" className="ml-0.5" />
           </button>
         </div>
 
@@ -104,13 +128,13 @@ function HeroCarousel({ videos, onOpen, muted }) {
 }
 
 /* Video Grid Thumbnail */
-function GridThumb({ video, onClick }) {
+function GridThumb({ video, onClick, tall }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative overflow-hidden rounded-xl bg-slate-900 active:scale-95 transition-transform"
-      style={{ aspectRatio: '9/16' }}
+      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900 active:scale-[0.98] transition-transform"
+      style={{ height: tall ? 290 : 220 }}
     >
       <video
         src={`/storage/uploads/${video.filename}`}
@@ -120,19 +144,31 @@ function GridThumb({ video, onClick }) {
         preload="metadata"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      {video.isLive && (
+        <span className="absolute left-2 top-2 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
+          LIVE
+        </span>
+      )}
+
+      <button
+        type="button"
+        aria-label="Play video"
+        className="pointer-events-none absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 text-black shadow-md shadow-amber-900/60"
+      >
+        <Play size={14} fill="currentColor" className="ml-0.5" />
+      </button>
+
       {/* Always-visible bottom info */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-2 py-2">
-        <p className="truncate text-[10px] font-semibold text-white/80">@{video.creator?.username}</p>
-        <div className="flex items-center gap-2 text-[9px] text-white/50 mt-0.5">
-          <span>Likes: {video.likeCount || 0}</span>
-          <span>Views: {video.views || 0}</span>
+        <div className="mb-1 inline-flex rounded-full border border-amber-300/20 bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-200">
+          {getCategoryTag(video)}
+        </div>
+        <p className="truncate text-[10px] font-semibold text-white/90">@{video.creator?.username || 'unknown'}</p>
+        <div className="mt-0.5 flex items-center gap-2 text-[9px] text-white/60">
+          <span>{formatDuration(video.duration || video.length || 0)}</span>
+          <span className="inline-flex items-center gap-1"><Eye size={10} />{video.views || 0}</span>
         </div>
       </div>
-      {video.isTrending && (
-        <div className="absolute left-1.5 top-1.5 rounded-full bg-orange-500/90 px-1.5 py-0.5 text-[8px] font-bold text-white">
-          Hot
-        </div>
-      )}
     </button>
   );
 }
@@ -326,6 +362,16 @@ function Home() {
     return videos.filter(v => !heroIds.has(v.id));
   }, [videos, heroVideos]);
 
+  const leftColumnVideos = useMemo(
+    () => gridVideos.filter((_, idx) => idx % 2 === 0),
+    [gridVideos]
+  );
+
+  const rightColumnVideos = useMemo(
+    () => gridVideos.filter((_, idx) => idx % 2 !== 0),
+    [gridVideos]
+  );
+
   // Infinite scroll
   const sentinelRef = useRef(null);
   useEffect(() => {
@@ -366,11 +412,18 @@ function Home() {
   }
 
   return (
-    <div className="relative h-full overflow-y-auto bg-[#050816] pb-[70px]">
+    <div className="relative h-full overflow-y-auto bg-[#060A14] pb-[70px]">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(1200px 500px at 20% -10%, rgba(251,191,36,0.12), transparent 60%), radial-gradient(1000px 500px at 100% 0%, rgba(255,140,0,0.08), transparent 58%)',
+        }}
+      />
       <CosmicBackground intensity={0.2} />
 
       {/* ── Stories Tray ── */}
-      <div className="relative z-10 border-b border-white/5 bg-[#050816]/80">
+      <div className="relative z-10 border-b border-white/5 bg-[#060A14]/80">
         <StoryTray onAddStory={() => setShowStoryCreator(true)} />
       </div>
 
@@ -386,26 +439,42 @@ function Home() {
       />
 
       {/* Grid Section Header */}
-      <div className="flex items-center justify-between px-4 pb-2 pt-4">
+      <div className="flex items-center justify-between px-4 pb-2 pt-5">
         <div className="flex items-center gap-2">
-          <TrendingUp size={16} className="text-neon-cyan" />
-          <span className="text-sm font-bold uppercase tracking-wider text-white/80">Latest</span>
+          <TrendingUp size={16} className="text-sky-300" />
+          <span className="text-lg font-black uppercase tracking-wider text-white/90">Latest</span>
         </div>
         <span className="text-xs text-white/30">{gridVideos.length} videos</span>
       </div>
 
-      {/* 3-Column Grid */}
-      <div className="grid grid-cols-3 gap-2 px-2" style={{ gridAutoRows: 'auto' }}>
-        {gridVideos.map((video, index) => (
-          <GridThumb
-            key={video.id}
-            video={video}
-            onClick={() => {
-              const realIdx = videos.findIndex(v => v.id === video.id);
-              setFullscreenIndex(realIdx >= 0 ? realIdx : heroVideos.length + index);
-            }}
-          />
-        ))}
+      {/* 2-Column Masonry Grid */}
+      <div className="grid grid-cols-2 gap-3 px-3" style={{ gridAutoRows: 'auto' }}>
+        <div className="flex flex-col gap-3">
+          {leftColumnVideos.map((video, index) => (
+            <GridThumb
+              key={video.id}
+              video={video}
+              tall={index % 2 === 0}
+              onClick={() => {
+                const realIdx = videos.findIndex(v => v.id === video.id);
+                setFullscreenIndex(realIdx >= 0 ? realIdx : heroVideos.length + index * 2);
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-3 pt-6">
+          {rightColumnVideos.map((video, index) => (
+            <GridThumb
+              key={video.id}
+              video={video}
+              tall={index % 2 !== 0}
+              onClick={() => {
+                const realIdx = videos.findIndex(v => v.id === video.id);
+                setFullscreenIndex(realIdx >= 0 ? realIdx : heroVideos.length + index * 2 + 1);
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Infinite scroll sentinel */}
