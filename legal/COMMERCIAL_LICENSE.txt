@@ -1,0 +1,26 @@
+COMMERCIAL LICENSE AGREEMENT
+
+This Commercial License Agreement ("Agreement") is entered into between iKhwezi Hub ("Licensor") and the purchaser/licensee ("Licensee").
+
+1. Grant of License
+Licensor grants Licensee a non-exclusive, non-transferable, worldwide license to use, reproduce, modify, and distribute the Software as part of Licensee's products or services, subject to the terms below.
+
+2. Restrictions
+Licensee shall not sublicense, sell, or redistribute the Software beyond the scope agreed without written permission. Redistribution under a different license is prohibited.
+
+3. Fees and Payment
+Commercial terms (fees, payment schedule) shall be provided in a separate invoice or sales agreement. Delivery of source code or additional materials may be conditional upon payment in full.
+
+4. Support and Maintenance
+Support terms (SLA, response times) shall be agreed separately. Licensor may offer optional paid support and maintenance services.
+
+5. Intellectual Property
+All rights, title and interest in the Software and associated trademarks remain with Licensor. Licensee receives only the limited license rights described herein.
+
+6. Warranty and Liability
+The Software is provided "AS IS". Licensor disclaims warranties except as may be set forth in a separate written agreement. Licensor's aggregate liability shall not exceed amounts paid for the license.
+
+7. Governing Law
+This Agreement is governed by the laws of the Republic of South Africa.
+
+Contact: legal@ikhwezihub.co.za
