@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from 'react';
-import Hls from 'hls.js';
 
 function HlsPlayer({ src, autoPlay = true, muted = true, controls = true, onError, onReady }) {
   const videoRef = useRef(null);
@@ -11,7 +10,9 @@ function HlsPlayer({ src, autoPlay = true, muted = true, controls = true, onErro
     const video = videoRef.current;
     if (!video || !src) return;
 
-    const initPlayer = () => {
+    let cancelled = false;
+
+    const initPlayer = async () => {
       setLoading(true);
       setError(null);
 
@@ -19,6 +20,9 @@ function HlsPlayer({ src, autoPlay = true, muted = true, controls = true, onErro
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+
+      const { default: Hls } = await import('hls.js');
+      if (cancelled) return;
 
       if (Hls.isSupported()) {
         const hls = new Hls({
@@ -84,6 +88,7 @@ function HlsPlayer({ src, autoPlay = true, muted = true, controls = true, onErro
     initPlayer();
 
     return () => {
+      cancelled = true;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;

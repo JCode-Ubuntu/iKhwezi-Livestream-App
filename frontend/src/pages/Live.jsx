@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Hls from 'hls.js';
 import { Radio, Users, ArrowLeft, RefreshCw, WifiOff, Camera, FlipHorizontal, X, Video as VideoIcon, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -129,12 +128,14 @@ function Live() {
     }
   };
 
-  const initHls = (url) => {
+  const initHls = async (url) => {
     if (!videoRef.current) return;
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
     }
+
+    const { default: Hls } = await import('hls.js');
 
     if (Hls.isSupported()) {
       const hls = new Hls({
