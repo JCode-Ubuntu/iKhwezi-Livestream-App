@@ -96,3 +96,15 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 ---
 
 Built with 💜 for creators
+
+## Legal
+
+- License: LICENSE (root)
+- End User License Agreement (EULA): legal/EULA.txt
+- Privacy Policy: legal/PRIVACY_POLICY.txt
+
+By distributing this software or publishing to app stores, ensure you comply with the EULA and Privacy Policy located in the /legal folder.
+
+---
+
+Built with 💜 for creators
