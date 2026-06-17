@@ -4,11 +4,13 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
 
 jobs:
   deploy:
     name: SSH Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Deploy to Lightsail via SSH
@@ -18,9 +20,27 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: 22
+          script_stop: true
+          command_timeout: 25m
           script: |
-            cd iKhwezi-Livestream-App
-            git pull origin master
-            docker compose up --build -d
+            set -e
+            APP_DIR="$HOME/iKhwezi-Livestream-App"
+            REPO="https://github.com/JCode-Ubuntu/iKhwezi-Livestream-App.git"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone "$REPO" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+            git fetch origin master
+            git reset --hard origin/master
+
+            if docker compose version >/dev/null 2>&1; then
+              COMPOSE="docker compose"
+            else
+              COMPOSE="docker-compose"
+            fi
+
+            $COMPOSE up --build -d
             docker image prune -f
-            echo "✅ Deployed at $(date)"
+            echo "✅ Deployed $(git rev-parse --short HEAD) at $(date)"
