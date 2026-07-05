@@ -1,0 +1,380 @@
+/* iKHWEZI Ultima Supreme — layout + celestial noir */
+
+:root {
+  --ultima-nav-offset: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.ultima-page {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--ultima-nav-offset);
+}
+
+.ultima-page--auth {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+.ultima-page--flush {
+  padding-bottom: 0;
+}
+
+.ultima-content {
+  position: relative;
+  z-index: 1;
+}
+
+.ultima-field {
+  background:
+    radial-gradient(ellipse 140% 90% at 50% -30%, #1e0b3a 0%, #030014 42%, #000006 100%);
+}
+
+.ultima-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+.ultima-aurora {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  animation: ultima-drift 26s ease-in-out infinite;
+  will-change: transform;
+}
+
+.ultima-aurora-a {
+  width: 60vw;
+  height: 60vw;
+  top: -22%;
+  left: -18%;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.6) 0%, transparent 68%);
+}
+
+.ultima-aurora-b {
+  width: 50vw;
+  height: 50vw;
+  top: 28%;
+  right: -22%;
+  background: radial-gradient(circle, rgba(245, 197, 66, 0.42) 0%, transparent 68%);
+  animation-delay: -8s;
+}
+
+.ultima-aurora-c {
+  width: 44vw;
+  height: 44vw;
+  bottom: -12%;
+  left: 18%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.28) 0%, transparent 68%);
+  animation-delay: -16s;
+}
+
+.ultima-vignette {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, transparent 30%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(180deg, rgba(3, 0, 20, 0.3) 0%, transparent 25%, transparent 75%, rgba(3, 0, 20, 0.6) 100%);
+}
+
+@keyframes ultima-drift {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33% { transform: translate(4%, -3%) scale(1.06) rotate(1deg); }
+  66% { transform: translate(-3%, 4%) scale(0.94) rotate(-1deg); }
+}
+
+/* ── Supreme glass ── */
+.ultima-glass {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.02) 50%, rgba(0, 0, 0, 0.15) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(28px) saturate(1.4);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.ultima-glass-supreme {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(155deg, rgba(245, 197, 66, 0.08) 0%, rgba(139, 92, 246, 0.06) 40%, rgba(0, 0, 0, 0.4) 100%);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  backdrop-filter: blur(32px) saturate(1.5);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(245, 197, 66, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.ultima-glass-supreme::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(245, 197, 66, 0.45), rgba(139, 92, 246, 0.25), rgba(34, 211, 238, 0.15));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.ultima-glass-gold {
+  background: linear-gradient(145deg, rgba(245, 197, 66, 0.14) 0%, rgba(0, 0, 0, 0.45) 100%);
+  border: 1px solid rgba(245, 197, 66, 0.28);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 16px 48px rgba(245, 197, 66, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ── Typography ── */
+.ultima-text-glow {
+  text-shadow:
+    0 0 40px rgba(245, 197, 66, 0.5),
+    0 0 80px rgba(139, 92, 246, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.ultima-text-supreme {
+  background: linear-gradient(135deg, #fff 0%, #fde68a 35%, #f5c542 55%, #c4b5fd 85%, #fff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 20px rgba(245, 197, 66, 0.35));
+}
+
+.ultima-eyebrow {
+  font-family: 'Syne', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(245, 197, 66, 0.75);
+}
+
+.ultima-serif {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* ── Navigation dock ── */
+.ultima-dock {
+  background: linear-gradient(180deg, rgba(18, 10, 36, 0.92) 0%, rgba(3, 0, 20, 0.97) 100%);
+  border: 1px solid rgba(245, 197, 66, 0.18);
+  box-shadow:
+    0 -8px 48px rgba(139, 92, 246, 0.22),
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 40px rgba(245, 197, 66, 0.03);
+}
+
+.ultima-dock-create {
+  background: linear-gradient(145deg, #fde68a 0%, #f5c542 40%, #d4a012 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.25),
+    0 8px 28px rgba(245, 197, 66, 0.45),
+    0 0 48px rgba(245, 197, 66, 0.2);
+  animation: ultima-create-pulse 4s ease-in-out infinite;
+}
+
+@keyframes ultima-create-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.25), 0 8px 28px rgba(245,197,66,0.45); }
+  50% { box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 12px 36px rgba(245,197,66,0.6), 0 0 64px rgba(245,197,66,0.25); }
+}
+
+/* ── Spotlight & bento ── */
+.ultima-spotlight-ring {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow:
+    0 0 0 1px rgba(245, 197, 66, 0.35),
+    0 0 80px rgba(245, 197, 66, 0.12),
+    0 32px 96px rgba(0, 0, 0, 0.65);
+}
+
+.ultima-spotlight-ring::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(160deg, rgba(245,197,66,0.6), transparent 40%, rgba(139,92,246,0.4));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.ultima-bento-card {
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.45s ease,
+    border-color 0.35s ease;
+}
+
+.ultima-bento-card:active { transform: scale(0.96); }
+
+.ultima-bento-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 0 1px rgba(245, 197, 66, 0.4),
+    0 20px 56px rgba(139, 92, 246, 0.25),
+    0 0 40px rgba(245, 197, 66, 0.08);
+}
+
+.ultima-stagger > * {
+  animation: ultima-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ultima-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.ultima-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.ultima-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.ultima-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.ultima-stagger > *:nth-child(5) { animation-delay: 240ms; }
+.ultima-stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+@keyframes ultima-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Crown divider ── */
+.ultima-crown {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ultima-crown::before,
+.ultima-crown::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 197, 66, 0.5), transparent);
+}
+
+.ultima-crown-gem {
+  width: 6px;
+  height: 6px;
+  rotate: 45deg;
+  background: linear-gradient(135deg, #fde68a, #8b5cf6);
+  box-shadow: 0 0 12px rgba(245, 197, 66, 0.6);
+}
+
+/* ── Buttons & inputs ── */
+.ultima-btn-supreme {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fde68a 0%, #f5c542 45%, #b8860b 100%);
+  color: #030014;
+  font-family: 'Syne', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 12px 32px rgba(245, 197, 66, 0.35);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ultima-btn-supreme::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.35) 50%, transparent 60%);
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+.ultima-btn-supreme:hover::after { transform: translateX(100%); }
+
+.ultima-btn-supreme:active {
+  transform: scale(0.98);
+  box-shadow: 0 6px 20px rgba(245, 197, 66, 0.3);
+}
+
+.ultima-btn-supreme:disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.ultima-input {
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(0,0,0,0.2));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.ultima-input:focus-within {
+  border-color: rgba(245, 197, 66, 0.45);
+  box-shadow: 0 0 0 3px rgba(245, 197, 66, 0.1), 0 0 24px rgba(245, 197, 66, 0.08);
+}
+
+.ultima-icon-btn {
+  background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(0,0,0,0.25));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.ultima-icon-btn:active { transform: scale(0.92); }
+
+.ultima-icon-btn:hover { border-color: rgba(245, 197, 66, 0.3); }
+
+/* ── Loading ── */
+.ultima-logo-ring {
+  background: linear-gradient(145deg, rgba(245, 197, 66, 0.18), rgba(139, 92, 246, 0.14));
+  border: 1px solid rgba(245, 197, 66, 0.4);
+  box-shadow:
+    0 0 48px rgba(245, 197, 66, 0.25),
+    0 0 96px rgba(139, 92, 246, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  animation: ultima-pulse-glow 3s ease-in-out infinite;
+}
+
+@keyframes ultima-pulse-glow {
+  0%, 100% { box-shadow: 0 0 48px rgba(245,197,66,0.25), 0 0 96px rgba(139,92,246,0.18); }
+  50% { box-shadow: 0 0 64px rgba(245,197,66,0.45), 0 0 120px rgba(139,92,246,0.3); }
+}
+
+.ultima-loader-fill { animation: ultima-slide 1.4s ease-in-out infinite; }
+
+@keyframes ultima-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+.ultima-supreme-banner {
+  background:
+    linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, transparent 50%),
+    linear-gradient(225deg, rgba(245, 197, 66, 0.15) 0%, transparent 50%),
+    linear-gradient(180deg, #0a0618 0%, #030014 100%);
+  border-bottom: 1px solid rgba(245, 197, 66, 0.12);
+}
+
+.page-container {
+  @apply relative flex h-full w-full flex-col overflow-hidden bg-void-950;
+}
+
+.ultima-main {
+  @apply relative flex min-h-0 flex-1 flex-col overflow-hidden;
+}
+
+/* Premium scrollbar */
+.ultima-scroll::-webkit-scrollbar { width: 4px; }
+.ultima-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(245,197,66,0.5), rgba(139,92,246,0.4));
+  border-radius: 4px;
+}

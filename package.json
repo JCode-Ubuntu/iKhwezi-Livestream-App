@@ -1,0 +1,21 @@
+{
+  "name": "ikhwezi-livestream-app",
+  "version": "1.0.0",
+  "description": "**Stream the night. Shine the signal.**",
+  "main": "index.js",
+  "scripts": {
+    "start": "node backend/index.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JCode-Ubuntu/iKhwezi-Livestream-App.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JCode-Ubuntu/iKhwezi-Livestream-App/issues"
+  },
+  "homepage": "https://github.com/JCode-Ubuntu/iKhwezi-Livestream-App#readme"
+}

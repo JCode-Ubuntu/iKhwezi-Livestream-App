@@ -1,0 +1,7 @@
+.splash-root { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg-900); z-index: 9999; }
+.splash-aurora { position: absolute; width: 80vw; height: 80vw; border-radius: 50%; filter: blur(120px); background: radial-gradient(circle, rgba(245,197,66,0.18) 0%, rgba(139,92,246,0.12) 40%, transparent 70%); opacity: 0.9; transform: scale(1.02); }
+.splash-content { position: relative; z-index: 10; display:flex; flex-direction:column; align-items:center; gap:16px; }
+.splash-logo { width:88px; height:88px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-family: var(--font-display); font-weight:900; font-size:28px; color:#030014; background: linear-gradient(135deg, var(--gold-500), var(--gold-300)); box-shadow: var(--shadow-glow); }
+.splash-eyebrow { font-family: var(--font-display); color: var(--gold-400); letter-spacing:0.2em; font-size:12px; }
+.splash-title { font-family: var(--font-display); font-size:48px; color: #fff; letter-spacing:0.06em; margin:0; }
+.splash-sub { color: #d1d1d1; font-size:14px; margin-top:4px; }

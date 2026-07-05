@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Radio, Users, ArrowLeft, RefreshCw, WifiOff, Camera, FlipHorizontal, X, Video as VideoIcon, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import UltimaField from '../ultima/UltimaField';
+import CosmicBackground from '../components/CosmicBackground';
 import ReactionsBar from '../components/ReactionsBar';
 import GlassCard from '../components/GlassCard';
 import Stories from '../components/Stories';
@@ -265,9 +265,9 @@ function Live() {
 
   if (loading) {
     return (
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-5">
-        <UltimaField intensity={0.8} fixed />
-        <div className="ultima-content relative z-10 flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-black/40">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-5 pb-[70px]">
+        <CosmicBackground intensity={0.8} />
+        <div className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-black/40 shadow-glass backdrop-blur-xl">
           <div className="h-14 w-14 animate-shimmer-slide rounded-full bg-gradient-to-r from-red-500/40 via-orange-400/30 to-red-500/40 bg-[length:200%_100%]" />
         </div>
         <p className="relative z-10 text-lg text-white/60">Checking live status…</p>
@@ -277,9 +277,9 @@ function Live() {
 
   if (!liveStatus?.isLive) {
     return (
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-10 text-center">
-        <UltimaField fixed />
-        <div className="ultima-glass-supreme relative z-10 max-w-md rounded-[28px] px-8 py-10 text-center">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-10 pb-[110px] text-center">
+        <CosmicBackground />
+        <GlassCard className="relative z-10 max-w-md px-8 py-10 text-center" neon="medium">
           <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 shadow-neon-ring">
             <WifiOff className="h-12 w-12 text-white/40" />
           </div>
@@ -304,7 +304,7 @@ function Live() {
             <ArrowLeft size={18} />
             Back to Feed
           </button>
-        </div>
+        </GlassCard>
       </div>
     );
   }
@@ -312,10 +312,9 @@ function Live() {
   const pulseGlow = Math.min(1, (viewerCount || 0) / 80 + displayViewers / 200);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
-      <UltimaField intensity={0.25} fixed />
+    <div className="relative mb-[70px] flex min-h-0 flex-1 flex-col bg-black">
+      <CosmicBackground intensity={0.25} />
 
-      <div className="ultima-content flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Header — in normal flow so it never overlaps video */}
       <div
         className="relative z-20 flex items-center justify-between px-4"
@@ -396,14 +395,8 @@ function Live() {
         </div>
       )}
 
-      {/* Controls panel — scrollable, clears floating nav */}
-      <div
-        className="ultima-page ultima-page--flush flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-black/95 px-4 pt-3"
-        style={{
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          paddingBottom: 'var(--ultima-nav-offset)',
-        }}
-      >
+      {/* Controls panel — below the video, not overlapping */}
+      <div className="flex flex-col gap-3 overflow-y-auto bg-black/95 px-4 pb-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex justify-center">
           <ReactionsBar
             engagement={(viewerCount || 0) * 3}
@@ -415,7 +408,7 @@ function Live() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex justify-center gap-2">
           <button
             type="button"
             onClick={() => setShowChat((value) => !value)}
@@ -579,7 +572,6 @@ function Live() {
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }

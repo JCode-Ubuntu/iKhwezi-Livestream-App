@@ -107,7 +107,13 @@ function Profile() {
   }
 
   return (
-    <div className="ultima-page ultima-scroll relative flex min-h-0 flex-1 flex-col">
+    <div style={{
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      paddingBottom: 70,
+      overflow: 'auto',
+    }}>
       <div
         className="relative h-40 bg-gradient-to-br from-slate-950 via-indigo-950/80 to-slate-950"
         style={{

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Phone, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import UltimaField from '../ultima/UltimaField';
 
 function Register() {
   const navigate = useNavigate();
@@ -75,13 +74,12 @@ function Register() {
   ];
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto ultima-page--auth">
-      <UltimaField intensity={0.9} fixed />
-      <div className="ultima-content flex flex-col" style={{
+    <div style={{
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
       padding: 24,
+      paddingBottom: 100,
       overflow: 'auto',
     }}>
       <button
@@ -364,7 +362,16 @@ function Register() {
         </p>
       </div>
 
-      </div>
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 200,
+        background: 'radial-gradient(ellipse at bottom, rgba(111, 79, 255, 0.15), transparent)',
+        pointerEvents: 'none',
+        zIndex: -1,
+      }} />
     </div>
   );
 }

@@ -249,6 +249,17 @@ app.use(cors({
 app.use(express.json());
 app.use('/storage', express.static(path.join(__dirname, 'storage')));
 
+// Serve frontend production build if present
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => {
+    const indexPath = path.join(frontendDist, 'index.html');
+    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+    return res.status(404).json({ error: 'Not found' });
+  });
+}
+
 // File upload config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

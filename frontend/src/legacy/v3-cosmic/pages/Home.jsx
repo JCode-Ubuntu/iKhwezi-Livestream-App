@@ -1,0 +1,515 @@
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
+import VideoPlayer from '../components/VideoPlayer';
+import VideoActions from '../components/VideoActions';
+import Comments from '../components/Comments';
+import GuestPrompt from '../components/GuestPrompt';
+import CosmicBackground from '../components/CosmicBackground';
+import SkeletonStream from '../components/SkeletonStream';
+import { StoryTray } from '../components/Stories';
+import StoryCreator from '../components/StoryCreator';
+import { Volume2, VolumeX, Sparkles, Play, Flame, TrendingUp, BellOff, Eye, X, ChevronUp, ChevronDown } from 'lucide-react';
+import FeedDiscovery from '../components/FeedDiscovery';
+
+function formatDuration(seconds) {
+  if (!seconds || Number.isNaN(Number(seconds))) return '0:00';
+  const s = Math.max(0, Math.floor(Number(seconds)));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return mm + ':' + String(ss).padStart(2, '0');
+}
+
+function getCategoryTag(video) {
+  const text = (video?.caption || '').toLowerCase();
+  if (text.includes('trophy') || text.includes('win')) return 'Trophy Moment';
+  if (text.includes('behind') || text.includes('bts')) return 'Behind the Scenes';
+  if (text.includes('profile') || text.includes('player')) return 'Player Profile';
+  return 'Highlights';
+}
+
+/* Hero Carousel - top trending / sponsored videos */
+function HeroCarousel({ videos, onOpen, muted }) {
+  const [heroIndex, setHeroIndex] = useState(0);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (videos.length < 2) return;
+    intervalRef.current = setInterval(() => setHeroIndex(i => (i + 1) % videos.length), 4500);
+    return () => clearInterval(intervalRef.current);
+  }, [videos.length]);
+
+  if (!videos.length) return null;
+  const v = videos[heroIndex];
+
+  return (
+    <div className="relative mx-3 overflow-hidden rounded-3xl border border-amber-200/15 bg-black shadow-2xl shadow-black/60" style={{ height: '52vh', minHeight: 260 }}>
+      {/* Background video preview */}
+      <video
+        key={v.id}
+        src={`/storage/uploads/${v.filename}`}
+        className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
+        autoPlay
+        muted={muted}
+        loop
+        playsInline
+        style={{ filter: 'brightness(0.55)' }}
+      />
+
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-black/10" />
+
+      {/* Silent bar */}
+      <div className="absolute left-3 right-3 top-3 z-10 flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-400/30 bg-red-500/20 px-3 py-1 text-[11px] font-semibold text-red-100">
+          <BellOff size={12} />
+          Silent
+        </span>
+      </div>
+
+      {/* Badges */}
+      <div className="absolute left-4 top-14 flex gap-2">
+        {v.isTrending && (
+          <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-sm shadow-lg shadow-orange-900/40">
+            <Flame size={10} /> Trending
+          </span>
+        )}
+        {v.isSponsored && (
+          <span className="flex items-center gap-1 rounded-full bg-yellow-400/90 px-3 py-1 text-[11px] font-bold text-black backdrop-blur-sm">
+            Sponsored
+          </span>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-xs font-semibold text-white/60">@{v.creator?.username || 'unknown'}</p>
+            {v.caption && (
+              <h2 className="line-clamp-2 text-lg font-black leading-tight text-white drop-shadow-lg">
+                {v.caption}
+              </h2>
+            )}
+            <div className="mt-2 flex items-center gap-3 text-xs text-white/50">
+              <span>Likes: {v.likeCount || 0}</span>
+              <span>Comments: {v.commentCount || 0}</span>
+              <span>Views: {v.views || 0}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpen(heroIndex)}
+            className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border border-amber-100/20 bg-gradient-to-br from-yellow-300 to-amber-500 text-black shadow-xl shadow-amber-900/60 transition-transform active:scale-95"
+          >
+            <Play size={22} fill="currentColor" className="ml-0.5" />
+          </button>
+        </div>
+
+        {/* Dot indicators */}
+        <div className="mt-3 flex justify-center gap-1.5">
+          {videos.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setHeroIndex(i)}
+              className="transition-all duration-300"
+              style={{
+                width: i === heroIndex ? 20 : 6,
+                height: 6,
+                borderRadius: 3,
+                background: i === heroIndex ? 'linear-gradient(90deg,#6F4FFF,#FFB800)' : 'rgba(255,255,255,0.3)',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Video Grid Thumbnail */
+function GridThumb({ video, onClick, tall }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900 active:scale-[0.98] transition-transform"
+      style={{ height: tall ? 290 : 220 }}
+    >
+      <video
+        src={`/storage/uploads/${video.filename}`}
+        className="h-full w-full object-cover"
+        muted
+        playsInline
+        preload="metadata"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      {video.isLive && (
+        <span className="absolute left-2 top-2 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
+          LIVE
+        </span>
+      )}
+
+      <button
+        type="button"
+        aria-label="Play video"
+        className="pointer-events-none absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 text-black shadow-md shadow-amber-900/60"
+      >
+        <Play size={14} fill="currentColor" className="ml-0.5" />
+      </button>
+
+      {/* Always-visible bottom info */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-2 py-2">
+        <div className="mb-1 inline-flex rounded-full border border-amber-300/20 bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-200">
+          {getCategoryTag(video)}
+        </div>
+        <p className="truncate text-[10px] font-semibold text-white/90">@{video.creator?.username || 'unknown'}</p>
+        <div className="mt-0.5 flex items-center gap-2 text-[9px] text-white/60">
+          <span>{formatDuration(video.duration || video.length || 0)}</span>
+          <span className="inline-flex items-center gap-1"><Eye size={10} />{video.views || 0}</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/* Full-screen video player overlay */
+function FullscreenFeed({ videos, startIndex, onClose, muted, setMuted, onUpdate, showGuestPrompt }) {
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const [showComments, setShowComments] = useState(false);
+  const containerRef = useRef(null);
+  const touchStartY = useRef(0);
+
+  const currentVideo = videos[currentIndex];
+
+  const go = useCallback((dir) => {
+    setCurrentIndex(i => {
+      const next = i + dir;
+      if (next < 0 || next >= videos.length) return i;
+      return next;
+    });
+  }, [videos.length]);
+
+  const handleTouchStart = (e) => { touchStartY.current = e.touches[0].clientY; };
+  const handleTouchEnd = (e) => {
+    const dy = touchStartY.current - e.changedTouches[0].clientY;
+    if (Math.abs(dy) > 50) go(dy > 0 ? 1 : -1);
+  };
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'ArrowUp') go(-1);
+      if (e.key === 'ArrowDown') go(1);
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [go, onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] overflow-hidden bg-black"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Close */}
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute left-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform active:scale-95"
+        style={{ top: 'max(16px, env(safe-area-inset-top))', background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
+      >
+        <X size={20} />
+      </button>
+      {/* Mute */}
+      <button
+        type="button"
+        onClick={() => setMuted(m => !m)}
+        className="absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform active:scale-95"
+        style={{ top: 'max(16px, env(safe-area-inset-top))', background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
+      >
+        {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+      </button>
+
+      <div
+        ref={containerRef}
+        className="h-full"
+        style={{ transform: `translateY(-${currentIndex * 100}%)`, transition: 'transform 0.35s cubic-bezier(0.25,0.1,0.25,1)' }}
+      >
+        {videos.map((video, index) => (
+          <div key={video.id} className="relative h-screen w-full">
+            <VideoPlayer
+              src={`/storage/uploads/${video.filename}`}
+              isActive={index === currentIndex}
+              muted={muted}
+            />
+            <VideoActions
+              video={video}
+              onUpdate={onUpdate}
+              onShowComments={() => setShowComments(true)}
+              onShowLogin={showGuestPrompt}
+            />
+            <div className="pointer-events-none absolute bottom-24 left-4 z-10" style={{ right: '5.5rem' }}>
+              <div className="flex items-center gap-2.5">
+                <div className="avatar border border-white/20" style={{ width: 36, height: 36 }}>
+                  {video.creator?.username?.charAt(0).toUpperCase() || '?'}
+                </div>
+                <p className="font-bold text-sm text-white drop-shadow">@{video.creator?.username || 'unknown'}</p>
+              </div>
+              {video.caption && (
+                <p className="mt-2 text-sm text-white/90 drop-shadow line-clamp-3">{video.caption}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Nav arrows */}
+      {currentIndex > 0 && (
+        <button
+          type="button"
+          onClick={() => go(-1)}
+          className="absolute left-1/2 z-10 -translate-x-1/2 flex items-center justify-center rounded-full text-white/85 transition-all active:scale-95"
+          style={{ top: 72, width: 40, height: 40, background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
+        >
+          <ChevronUp size={20} />
+        </button>
+      )}
+      {currentIndex < videos.length - 1 && (
+        <button
+          type="button"
+          onClick={() => go(1)}
+          className="absolute left-1/2 z-10 -translate-x-1/2 flex items-center justify-center rounded-full text-white/85 transition-all active:scale-95"
+          style={{ bottom: 96, width: 40, height: 40, background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
+        >
+          <ChevronDown size={20} />
+        </button>
+      )}
+
+      {/* Trending discovery - lets users jump to any trending video while in fullscreen */}
+      <div className="absolute inset-x-0 z-[9]" style={{ top: 68 }}>
+        <FeedDiscovery videos={videos} currentIndex={currentIndex} onPickIndex={setCurrentIndex} />
+      </div>
+
+      {/* Comments sheet - inside FullscreenFeed so currentVideo is always valid */}
+      {showComments && currentVideo && (
+        <Comments videoId={currentVideo.id} onClose={() => setShowComments(false)} />
+      )}
+    </div>
+  );
+}
+
+/* Main Home page */
+function Home() {
+  const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction } = useAuth();
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+  const [guestPromptContext, setGuestPromptContext] = useState('default');
+  const [muted, setMuted] = useState(true);
+  const [fullscreenIndex, setFullscreenIndex] = useState(null);
+  const [showStoryCreator, setShowStoryCreator] = useState(false);
+  const loadingMore = useRef(false);
+
+  useEffect(() => {
+    if (isGuest && guestInteractions >= 3 && !showGuestPrompt) {
+      setGuestPromptContext('interaction');
+      setShowGuestPrompt(true);
+    }
+  }, [guestInteractions, isGuest, showGuestPrompt]);
+
+  const loadVideos = useCallback(async (pageNum = 1, append = false) => {
+    if (loadingMore.current) return;
+    loadingMore.current = true;
+    try {
+      const res = await fetchWithAuth(`/videos/feed?page=${pageNum}&limit=20`);
+      const data = await res.json();
+      if (append) {
+        setVideos(prev => [...prev, ...data.videos]);
+      } else {
+        setVideos(data.videos);
+      }
+      setHasMore(data.hasMore);
+    } catch (err) {
+      console.error('Failed to load videos:', err);
+    } finally {
+      setLoading(false);
+      loadingMore.current = false;
+    }
+  }, [fetchWithAuth]);
+
+  useEffect(() => { loadVideos(); }, [loadVideos]);
+
+  const updateVideo = useCallback((updatedVideo) => {
+    setVideos(prev => prev.map(v => v.id === updatedVideo.id ? updatedVideo : v));
+  }, []);
+
+  const handleShowGuestPrompt = () => {
+    trackGuestInteraction();
+    setGuestPromptContext('interaction');
+    setShowGuestPrompt(true);
+  };
+
+  const heroVideos = useMemo(() => {
+    const trending = videos.filter(v => v.isTrending || v.isSponsored);
+    return (trending.length >= 3 ? trending : videos).slice(0, 8);
+  }, [videos]);
+
+  const gridVideos = useMemo(() => {
+    const heroIds = new Set(heroVideos.map(v => v.id));
+    return videos.filter(v => !heroIds.has(v.id));
+  }, [videos, heroVideos]);
+
+  const leftColumnVideos = useMemo(
+    () => gridVideos.filter((_, idx) => idx % 2 === 0),
+    [gridVideos]
+  );
+
+  const rightColumnVideos = useMemo(
+    () => gridVideos.filter((_, idx) => idx % 2 !== 0),
+    [gridVideos]
+  );
+
+  // Infinite scroll
+  const sentinelRef = useRef(null);
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore && !loading) {
+        const next = page + 1;
+        setPage(next);
+        loadVideos(next, true);
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loading, page, loadVideos]);
+
+  if (loading && videos.length === 0) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden pb-[70px]">
+        <CosmicBackground intensity={1.2} />
+        <SkeletonStream rows={4} />
+      </div>
+    );
+  }
+
+  if (videos.length === 0) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-10 pb-[110px] text-center">
+        <CosmicBackground />
+        <div className="glass-panel relative z-10 flex max-w-sm flex-col items-center gap-4 px-8 py-10">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-neon-indigo/30 to-neon-purple/20 shadow-neon-ring">
+            <Sparkles className="h-11 w-11 text-neon-cyan" />
+          </div>
+          <h2 className="text-2xl font-black tracking-tight text-glow-neon">No Videos Yet</h2>
+          <p className="text-lg leading-relaxed text-white/70">Be the first to share amazing content on iKHWEZI!</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-full overflow-y-auto bg-[#060A14] pb-[70px]">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(1200px 500px at 20% -10%, rgba(251,191,36,0.12), transparent 60%), radial-gradient(1000px 500px at 100% 0%, rgba(255,140,0,0.08), transparent 58%)',
+        }}
+      />
+      <CosmicBackground intensity={0.2} />
+
+      {/* ── Stories Tray ── */}
+      <div className="relative z-10 border-b border-white/5 bg-[#060A14]/80">
+        <StoryTray onAddStory={() => setShowStoryCreator(true)} />
+      </div>
+
+      {/* ── Hero Carousel ── */}
+      <HeroCarousel
+        videos={heroVideos}
+        muted={muted}
+        onOpen={(heroIdx) => {
+          const vid = heroVideos[heroIdx];
+          const realIdx = videos.findIndex(v => v.id === vid?.id);
+          setFullscreenIndex(realIdx >= 0 ? realIdx : heroIdx);
+        }}
+      />
+
+      {/* Grid Section Header */}
+      <div className="flex items-center justify-between px-4 pb-2 pt-5">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={16} className="text-sky-300" />
+          <span className="text-lg font-black uppercase tracking-wider text-white/90">Latest</span>
+        </div>
+        <span className="text-xs text-white/30">{gridVideos.length} videos</span>
+      </div>
+
+      {/* 2-Column Masonry Grid */}
+      <div className="grid grid-cols-2 gap-3 px-3" style={{ gridAutoRows: 'auto' }}>
+        <div className="flex flex-col gap-3">
+          {leftColumnVideos.map((video, index) => (
+            <GridThumb
+              key={video.id}
+              video={video}
+              tall={index % 2 === 0}
+              onClick={() => {
+                const realIdx = videos.findIndex(v => v.id === video.id);
+                setFullscreenIndex(realIdx >= 0 ? realIdx : heroVideos.length + index * 2);
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-3 pt-6">
+          {rightColumnVideos.map((video, index) => (
+            <GridThumb
+              key={video.id}
+              video={video}
+              tall={index % 2 !== 0}
+              onClick={() => {
+                const realIdx = videos.findIndex(v => v.id === video.id);
+                setFullscreenIndex(realIdx >= 0 ? realIdx : heroVideos.length + index * 2 + 1);
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Infinite scroll sentinel */}
+      <div ref={sentinelRef} className="h-10 w-full" />
+      {loading && (
+        <div className="flex justify-center py-4">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-neon-indigo border-t-transparent" />
+        </div>
+      )}
+
+      {/* Fullscreen player overlay */}
+      {fullscreenIndex !== null && (
+        <FullscreenFeed
+          videos={videos}
+          startIndex={fullscreenIndex}
+          onClose={() => setFullscreenIndex(null)}
+          muted={muted}
+          setMuted={setMuted}
+          onUpdate={updateVideo}
+          showGuestPrompt={handleShowGuestPrompt}
+        />
+      )}
+
+      {showGuestPrompt && (
+        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
+      )}
+
+      {showStoryCreator && (
+        <StoryCreator
+          onClose={() => setShowStoryCreator(false)}
+          onPosted={() => setShowStoryCreator(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default Home;

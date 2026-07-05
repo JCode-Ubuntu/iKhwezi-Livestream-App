@@ -1,0 +1,41 @@
+/* iKHWEZI design tokens — colors, spacing, typography, radii, shadows */
+:root {
+  /* Colors */
+  --bg-900: #090909;
+  --surface-800: #141414;
+  --surface-700: #1B1B1B;
+  --border-600: #2A2A2A;
+  --gold-500: #FFC66D;
+  --gold-400: #FFF1B2;
+  --gold-300: #FFB347;
+  --emerald-500: #10B981;
+  --amber-400: #F59E0B;
+  --crimson-500: #EF4444;
+
+  /* Typography */
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-display: "Syne", system-ui, sans-serif;
+
+  /* Spacing (8pt grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+  --space-6: 48px;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  /* Shadows */
+  --shadow-soft: 0 12px 40px rgba(0,0,0,0.55);
+  --shadow-glow: 0 0 48px rgba(255,198,109,0.14);
+
+  /* Motion */
+  --motion-fast: 150ms;
+  --motion-medium: 280ms;
+  --motion-slow: 420ms;
+}

@@ -139,7 +139,7 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
     <div style={{
       position: 'absolute',
       right: 12,
-      bottom: 'calc(8.5rem + env(safe-area-inset-bottom, 0px))',
+      bottom: 140,
       display: 'flex',
       flexDirection: 'column',
       gap: 20,

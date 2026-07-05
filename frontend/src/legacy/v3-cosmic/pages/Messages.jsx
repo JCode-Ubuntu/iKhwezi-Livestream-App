@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, MessageCircle, Search, Edit, X, UserCircle2, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import UltimaField from '../ultima/UltimaField';
+import CosmicBackground from '../components/CosmicBackground';
 
 /* ── New Conversation Search Modal ── */
 function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
@@ -446,8 +446,8 @@ function Messages() {
   }, [fetchWithAuth]);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
-      <UltimaField intensity={0.15} fixed />
+    <div className="relative flex flex-col bg-[#050816]" style={{ height: 'calc(100vh - 70px)' }}>
+      <CosmicBackground intensity={0.15} />
 
       {/* Header — only shown on conversation list */}
       {!activeUser && (
@@ -471,7 +471,7 @@ function Messages() {
         </div>
       )}
 
-      <div className="ultima-content relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="relative z-10 overflow-hidden" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {activeUser ? (
           <ChatThread otherUser={activeUser} onBack={() => setActiveUser(null)} />
         ) : (
