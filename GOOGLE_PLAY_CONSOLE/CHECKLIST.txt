@@ -1,0 +1,57 @@
+GOOGLE PLAY CONSOLE - PRE-SUBMISSION CHECKLIST
+===============================================
+
+Before uploading to Google Play Console, complete this checklist:
+
+ANDROID APP BUNDLE (.aab)
+[ ] Generated signed .aab file
+[ ] File is in: app_bundle/ikhwezi.aab
+[ ] Tested on Android devices or emulator
+[ ] Version code & version name are set correctly
+
+APP LISTING - REQUIRED
+[ ] App name (e.g., "iKHWEZI")
+[ ] Short description (80 characters max)
+[ ] Full description (4000 characters max)
+[ ] Category selected (e.g., "Social", "Entertainment")
+[ ] Content rating filled out
+
+APP ICON
+[ ] Icon placed in: assets/icon/icon.png
+[ ] Size: 512×512 pixels
+[ ] PNG format
+[ ] No text, centered design
+[ ] Transparent background (optional)
+
+SCREENSHOTS (Minimum 2, Recommended 4-8)
+[ ] Screenshots placed in: assets/screenshots/
+[ ] Size: 1080×1920 pixels (9:16 aspect ratio)
+[ ] Phone screenshots (not tablet)
+[ ] High-quality, representative of app features
+[ ] Landscape orientation screenshots (optional)
+
+FEATURE GRAPHIC
+[ ] Placed in: assets/feature_graphic/feature.png
+[ ] Size: 1024×500 pixels
+[ ] PNG format
+[ ] Shows app branding/key features
+
+CONTENT RATING
+[ ] Completed content rating questionnaire
+[ ] All content categories disclosed
+
+PRIVACY & PERMISSIONS
+[ ] Privacy policy link provided (if applicable)
+[ ] Permissions requested are justified
+[ ] Data collection practices documented
+
+LEGAL
+[ ] Terms of service (if applicable)
+[ ] Copyright information verified
+[ ] No trademark infringement
+
+---
+
+✅ Once all items are checked, proceed to upload on Google Play Console!
+
+Upload URL: https://play.google.com/console
