@@ -9,7 +9,7 @@ const sequelize = new Sequelize({
   logging: false
 })
 
-// Define minimal models
+// Define minimal models with EXPLICIT table names
 const User = sequelize.define('User', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   username: { type: DataTypes.STRING, unique: true, allowNull: false },
@@ -17,7 +17,10 @@ const User = sequelize.define('User', {
   displayName: DataTypes.STRING,
   avatar: DataTypes.STRING,
   password: { type: DataTypes.STRING, allowNull: false }
-}, { timestamps: true, tableName: 'Users' })
+}, { 
+  tableName: 'Users',
+  timestamps: false // Don't need timestamps for seeding
+})
 
 const Video = sequelize.define('Video', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
@@ -26,7 +29,10 @@ const Video = sequelize.define('Video', {
   description: DataTypes.TEXT,
   filename: DataTypes.STRING,
   isPublished: { type: DataTypes.BOOLEAN, defaultValue: true }
-}, { timestamps: true, tableName: 'Videos' })
+}, { 
+  tableName: 'Videos',
+  timestamps: false
+})
 
 Video.belongsTo(User, { as: 'creator', foreignKey: 'userId' })
 
