@@ -32,7 +32,6 @@ export { default as PremiumBottomNav } from './PremiumBottomNav'
 
 // Existing Components (Legacy)
 export { default as Feed } from './Feed'
-export { default as AdminLivestream } from './AdminLivestream'
 export { default as Navigation } from './Navigation'
 export { default as VideoPlayer } from './VideoPlayer'
 export { default as HlsPlayer } from './HlsPlayer'
