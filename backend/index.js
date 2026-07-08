@@ -1809,17 +1809,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ==================== SOCKET.IO REAL-TIME ====================
-
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-
-  // Join personal user room for DM notifications
-  socket.on('join-user-room', (userId) => {
-    if (userId) socket.join(`user_${userId}`);
-  });
-
-  // ==================== V3 INSTAGRAM ROUTES ====================
+// ==================== V3 INSTAGRAM ROUTES ====================
 
 // V3 POST/FEED ROUTES
 app.post('/api/v3/posts', authenticate, requireAuth, upload.single('image'), async (req, res) => {
@@ -2004,7 +1994,15 @@ app.post('/api/v3/livestream/viewers/leave', authenticate, async (req, res) => {
   }
 });
 
-// ==================== SOCKET.IO HANDLERS ====================
+// ==================== SOCKET.IO REAL-TIME ====================
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Join personal user room for DM notifications
+  socket.on('join-user-room', (userId) => {
+    if (userId) socket.join(`user_${userId}`);
+  });
 
   // Join a room for a specific video/stream
   socket.on('join-room', (roomId) => {
