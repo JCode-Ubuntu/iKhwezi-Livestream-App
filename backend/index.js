@@ -1841,11 +1841,11 @@ app.post('/api/v3/posts', authenticate, requireAuth, upload.single('image'), asy
 });
 
 // V3 DEBUG SEED ENDPOINT (Creates test data if none exists)
-app.post('/api/v3/debug/seed', async (req, res) => {
+app.get('/api/v3/debug/seed', async (req, res) => {
   try {
-    const { key } = req.body;
+    const { key } = req.query;
     if (key !== 'ikhwezi-seed-2024') {
-      return res.status(403).json({ error: 'Invalid key' });
+      return res.status(403).json({ error: 'Invalid key', received: key });
     }
 
     let user = await User.findOne({ where: { username: 'creator' } });
