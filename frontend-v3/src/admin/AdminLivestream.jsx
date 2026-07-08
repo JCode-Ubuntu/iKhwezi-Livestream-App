@@ -1,20 +1,112 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Play, Square, Settings, Users, Eye } from 'lucide-react'
+import axios from 'axios'
+import io from 'socket.io-client'
+
+const API_BASE = 'http://localhost:3001/api/v3'
+const ADMIN_KEY = 'your-secret-admin-key-here' // In production, use from environment
+
+let socket = null
 
 export default function AdminLivestream() {
   const [isLive, setIsLive] = useState(false)
   const [viewers, setViewers] = useState(0)
   const [title, setTitle] = useState("iKHWEZI Live Stream")
-  const [streamKey, setStreamKey] = useState("rtmp://your-server.com/live/stream-key-123")
+  const [streamKey, setStreamKey] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [rtmpUrl, setRtmpUrl] = useState("")
 
-  const handleStartLive = () => {
-    setIsLive(true)
-    setViewers(Math.floor(Math.random() * 1000))
+  useEffect(() => {
+    // Connect to Socket.io for real-time updates
+    socket = io('http://localhost:3001', {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5
+    })
+
+    socket.on('viewer-count', (data) => {
+      setViewers(data.viewerCount)
+    })
+
+    socket.on('livestream-started', (data) => {
+      setIsLive(true)
+      setTitle(data.title)
+      setStreamKey(data.streamKey)
+      setRtmpUrl(data.rtmpUrl)
+    })
+
+    socket.on('livestream-stopped', () => {
+      setIsLive(false)
+      setViewers(0)
+    })
+
+    // Load initial status
+    fetchLiveStatus()
+
+    return () => {
+      if (socket) socket.disconnect()
+    }
+  }, [])
+
+  const fetchLiveStatus = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/livestream/status`)
+      setIsLive(response.data.isLive)
+      setTitle(response.data.title)
+      setStreamKey(response.data.streamKey)
+      setRtmpUrl(`rtmp://13.62.54.198/live/${response.data.streamKey}`)
+      setViewers(response.data.viewerCount)
+    } catch (err) {
+      console.error('Status fetch error:', err)
+      setError('Failed to load livestream status')
+    }
   }
 
-  const handleStopLive = () => {
-    setIsLive(false)
-    setViewers(0)
+  const handleStartLive = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await axios.post(
+        `${API_BASE}/livestream/start`,
+        { title },
+        { headers: { 'x-admin-key': ADMIN_KEY } }
+      )
+      setIsLive(true)
+      setStreamKey(response.data.streamKey)
+      setRtmpUrl(response.data.rtmpUrl)
+      setViewers(0)
+    } catch (err) {
+      console.error('Start error:', err)
+      setError('Failed to start livestream')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStopLive = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      await axios.post(
+        `${API_BASE}/livestream/stop`,
+        {},
+        { headers: { 'x-admin-key': ADMIN_KEY } }
+      )
+      setIsLive(false)
+      setViewers(0)
+    } catch (err) {
+      console.error('Stop error:', err)
+      setError('Failed to stop livestream')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const copyStreamKey = () => {
+    navigator.clipboard.writeText(rtmpUrl || streamKey)
+    alert('Stream URL copied to clipboard!')
   }
 
   return (
@@ -25,6 +117,13 @@ export default function AdminLivestream() {
           <h1 className="text-4xl font-black text-white mb-2">Admin Livestream Control</h1>
           <p className="text-gray-400">Manage your live broadcasts</p>
         </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
 
         {/* Live Status Card */}
         <div className={`rounded-lg p-6 mb-6 ${isLive ? 'bg-red-600/20 border-2 border-red-500' : 'bg-slate-800 border-2 border-slate-700'}`}>
@@ -46,18 +145,20 @@ export default function AdminLivestream() {
               {!isLive ? (
                 <button
                   onClick={handleStartLive}
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold transition"
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-3 rounded-lg font-bold transition"
                 >
                   <Play size={20} />
-                  Start Live
+                  {loading ? 'Starting...' : 'Start Live'}
                 </button>
               ) : (
                 <button
                   onClick={handleStopLive}
-                  className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-bold transition"
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 text-white px-6 py-3 rounded-lg font-bold transition"
                 >
                   <Square size={20} />
-                  Stop Live
+                  {loading ? 'Stopping...' : 'Stop Live'}
                 </button>
               )}
             </div>
@@ -103,15 +204,18 @@ export default function AdminLivestream() {
                   />
                 </div>
                 <div>
-                  <label className="text-gray-400 text-sm">RTMP Stream Key</label>
+                  <label className="text-gray-400 text-sm">RTMP Stream URL</label>
                   <div className="flex gap-2 mt-2">
                     <input
-                      type="password"
-                      value={streamKey}
+                      type="text"
+                      value={rtmpUrl || streamKey}
                       readOnly
-                      className="flex-1 bg-slate-700 text-white px-4 py-2 rounded focus:outline-none"
+                      className="flex-1 bg-slate-700 text-white px-4 py-2 rounded focus:outline-none text-xs"
                     />
-                    <button className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded transition">
+                    <button 
+                      onClick={copyStreamKey}
+                      className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded transition"
+                    >
                       Copy
                     </button>
                   </div>

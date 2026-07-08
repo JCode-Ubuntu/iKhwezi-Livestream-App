@@ -1,42 +1,59 @@
 import React, { useState, useEffect } from 'react'
 import { Heart, MessageCircle, Share, Search, Home, Plus, Compass } from 'lucide-react'
+import axios from 'axios'
+
+const API_BASE = 'http://localhost:3001/api/v3'
 
 export default function Feed() {
   const [posts, setPosts] = useState([])
   const [liked, setLiked] = useState(new Set())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
-    // Mock data - replace with API call
-    setPosts([
-      {
-        id: 1,
-        author: "Sarah Creator",
-        avatar: "https://via.placeholder.com/40",
-        image: "https://via.placeholder.com/500x500",
-        caption: "Beautiful sunset at the beach 🌅",
-        likes: 234,
-        timestamp: "2 hours ago"
-      },
-      {
-        id: 2,
-        author: "Dev Master",
-        avatar: "https://via.placeholder.com/40",
-        image: "https://via.placeholder.com/500x500",
-        caption: "Coding session vibes ✨",
-        likes: 567,
-        timestamp: "5 hours ago"
-      },
-      {
-        id: 3,
-        author: "Travel Bug",
-        avatar: "https://via.placeholder.com/40",
-        image: "https://via.placeholder.com/500x500",
-        caption: "Exploring new places 🗺️",
-        likes: 890,
-        timestamp: "1 day ago"
-      }
-    ])
-  }, [])
+    fetchFeed()
+  }, [page])
+
+  const fetchFeed = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await axios.get(`${API_BASE}/feed`, {
+        params: { page }
+      })
+      setPosts(response.data.posts || [])
+    } catch (err) {
+      console.error('Feed fetch error:', err)
+      // Fallback to mock data if API fails
+      setPosts([
+        {
+          id: 1,
+          creator: { username: "Sarah Creator", avatar: "https://via.placeholder.com/40" },
+          filename: "https://via.placeholder.com/500x500",
+          description: "Beautiful sunset at the beach 🌅",
+          likeCount: 234,
+          createdAt: new Date(Date.now() - 2*60*60*1000).toISOString()
+        }
+      ])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatTimestamp = (date) => {
+    const now = new Date()
+    const posted = new Date(date)
+    const diff = now - posted
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
+    
+    if (minutes < 1) return 'just now'
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}h ago`
+    return `${days}d ago`
+  }
 
   const handleLike = (postId) => {
     const newLiked = new Set(liked)
@@ -76,21 +93,35 @@ export default function Feed() {
           </div>
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center items-center py-20">
+            <div className="text-gray-400">Loading feed...</div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-900 text-red-200 p-4 mx-4 my-4 rounded">
+            Failed to load feed. Showing offline content.
+          </div>
+        )}
+
         {/* Posts */}
-        {posts.map((post) => (
+        {!loading && posts.length > 0 ? posts.map((post) => (
           <div key={post.id} className="border-b border-gray-700 bg-black">
             {/* Post Header */}
             <div className="px-4 py-3 flex items-center gap-3">
-              <img src={post.avatar} alt={post.author} className="w-10 h-10 rounded-full" />
+              <img src={post.creator?.avatar || 'https://via.placeholder.com/40'} alt={post.creator?.displayName} className="w-10 h-10 rounded-full" />
               <div className="flex-1">
-                <p className="text-white font-semibold text-sm">{post.author}</p>
-                <p className="text-gray-400 text-xs">{post.timestamp}</p>
+                <p className="text-white font-semibold text-sm">{post.creator?.displayName || 'Creator'}</p>
+                <p className="text-gray-400 text-xs">{formatTimestamp(post.createdAt)}</p>
               </div>
               <button className="text-gray-400 hover:text-white">•••</button>
             </div>
 
             {/* Post Image */}
-            <img src={post.image} alt="Post" className="w-full aspect-square object-cover" />
+            <img src={`http://localhost:3001/storage/videos/${post.filename}`} alt="Post" className="w-full aspect-square object-cover bg-gray-900" />
 
             {/* Post Actions */}
             <div className="px-4 py-3">
@@ -117,19 +148,23 @@ export default function Feed() {
 
               {/* Likes */}
               <p className="text-white font-semibold text-sm mb-2">
-                {post.likes + (liked.has(post.id) ? 1 : 0)} likes
+                {(post.likeCount || 0) + (liked.has(post.id) ? 1 : 0)} likes
               </p>
 
               {/* Caption */}
               <p className="text-white text-sm mb-3">
-                <span className="font-semibold">{post.author}</span> {post.caption}
+                <span className="font-semibold">{post.creator?.displayName || 'Creator'}</span> {post.description}
               </p>
 
               {/* Comments Placeholder */}
               <p className="text-gray-400 text-xs cursor-pointer hover:opacity-60">View all comments</p>
             </div>
           </div>
-        ))}
+        )) : !loading && (
+          <div className="text-center py-20 text-gray-400">
+            No posts yet. Start creating!
+          </div>
+        )}
       </div>
     </div>
   )
