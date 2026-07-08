@@ -1,8 +1,31 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import axios from 'axios'
 import { PremiumPostCard, PremiumStoriesCarousel, PremiumBottomNav } from './index'
+
+const API_BASE = '/api/v3'
 
 export default function Feed() {
   const [activeRoute, setActiveRoute] = useState('home')
+  const [posts, setPosts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        setLoading(true)
+        const response = await axios.get(`${API_BASE}/feed`)
+        setPosts(response.data.posts || [])
+      } catch (err) {
+        console.error('Error fetching posts:', err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPosts()
+  }, [])
 
   const mockStories = [
     { id: 1, creator: 'User One', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user1', viewed: false },
@@ -50,26 +73,35 @@ export default function Feed() {
 
       {/* Feed Content */}
       <div className="pt-40 max-w-2xl mx-auto px-4 pb-8">
-        <PremiumPostCard
-          creator={{name: "Test Creator", avatar: "https://api.dicebear.com/7.x/avataaars/svg", verified: false}}
-          image="https://via.placeholder.com/500"
-          description="Test post from our premium feed component"
-          likeCount={42}
-          commentCount={5}
-          timestamp={new Date()}
-          onLike={() => console.log('liked')}
-          isLiked={false}
-        />
-        <PremiumPostCard
-          creator={{name: "Another Creator", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=other", verified: true}}
-          image="https://via.placeholder.com/500"
-          description="This is another sample post with verified creator"
-          likeCount={127}
-          commentCount={18}
-          timestamp={new Date(Date.now() - 3600000)}
-          onLike={() => console.log('liked')}
-          isLiked={false}
-        />
+        {loading ? (
+          <div className="text-center py-8 text-gray-400">
+            <p>Loading posts...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-8 text-red-400">
+            <p>Error loading posts: {error}</p>
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="text-center py-8 text-gray-400">
+            <p>No posts yet. Be the first to create one!</p>
+          </div>
+        ) : (
+          posts.map((post) => (
+            <PremiumPostCard
+              key={post.id}
+              post={{
+                ...post,
+                creator: {
+                  displayName: post.creator?.displayName || post.creator?.username || 'Creator',
+                  username: post.creator?.username || 'unknown',
+                  avatar: post.creator?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.creator?.username}`,
+                  verified: post.creator?.isCreator || false
+                }
+              }}
+              onLike={() => console.log('Liked post:', post.id)}
+            />
+          ))
+        )}
       </div>
 
       {/* Bottom Navigation */}
