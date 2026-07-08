@@ -10,28 +10,14 @@ export default function Feed() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    console.log('Feed useEffect running')
-    const fetchPosts = async () => {
-      try {
-        setLoading(true)
-        console.log('Fetching posts from', `${API_BASE}/feed`)
-        const response = await fetch(`${API_BASE}/feed`)
-        console.log('Response status:', response.status)
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-        const data = await response.json()
-        console.log('Posts:', data.posts?.length)
-        setPosts(data.posts || [])
-      } catch (err) {
-        console.error('Error fetching posts:', err.message)
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchPosts()
+    console.log('Feed useEffect running - START')
+    setTimeout(() => {
+      console.log('Feed setTimeout running')
+      fetch('/api/v3/feed')
+        .then(r => { console.log('Feed fetch status:', r.status); return r.json(); })
+        .then(data => { console.log('Feed data:', data.posts?.length); setPosts(data.posts || []); setLoading(false); })
+        .catch(e => { console.error('Feed fetch error:', e.message); setError(e.message); setLoading(false); })
+    }, 100)
   }, [])
 
   const mockStories = [
