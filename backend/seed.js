@@ -1,28 +1,31 @@
 // Seed test data directly to database
-const { Sequelize } = require('sequelize')
+const { Sequelize, DataTypes } = require('sequelize')
 const path = require('path')
 
-// Initialize database
+// Initialize database (CORRECT PATH)
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: path.join(__dirname, 'storage', 'database.sqlite'),
+  storage: path.join(__dirname, 'storage', 'ikhwezi.db'),
   logging: false
 })
 
 // Define minimal models
 const User = sequelize.define('User', {
-  username: Sequelize.STRING,
-  email: Sequelize.STRING,
-  displayName: Sequelize.STRING,
-  avatar: Sequelize.STRING
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  username: { type: DataTypes.STRING, unique: true, allowNull: false },
+  email: { type: DataTypes.STRING, unique: true, allowNull: true },
+  displayName: DataTypes.STRING,
+  avatar: DataTypes.STRING,
+  password: { type: DataTypes.STRING, allowNull: false }
 }, { timestamps: true, tableName: 'Users' })
 
 const Video = sequelize.define('Video', {
-  userId: Sequelize.INTEGER,
-  title: Sequelize.STRING,
-  description: Sequelize.STRING,
-  filename: Sequelize.STRING,
-  isPublished: { type: Sequelize.BOOLEAN, defaultValue: true }
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false },
+  title: DataTypes.STRING,
+  description: DataTypes.TEXT,
+  filename: DataTypes.STRING,
+  isPublished: { type: DataTypes.BOOLEAN, defaultValue: true }
 }, { timestamps: true, tableName: 'Videos' })
 
 Video.belongsTo(User, { as: 'creator', foreignKey: 'userId' })
@@ -33,6 +36,10 @@ async function seed() {
     await sequelize.authenticate()
     console.log('✓ Database connected')
 
+    // SYNC TABLES FIRST!
+    await sequelize.sync()
+    console.log('✓ Database tables synchronized')
+
     // Create test user
     let user = await User.findOne({ where: { username: 'creator' } })
     if (!user) {
@@ -40,7 +47,8 @@ async function seed() {
         username: 'creator',
         email: 'creator@ikhwezi.com',
         displayName: 'Test Creator',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=creator'
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=creator',
+        password: 'hashed_password_here'
       })
       console.log('✓ Created test user')
     }
