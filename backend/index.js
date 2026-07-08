@@ -1819,6 +1819,193 @@ io.on('connection', (socket) => {
     if (userId) socket.join(`user_${userId}`);
   });
 
+  // ==================== V3 INSTAGRAM ROUTES ====================
+
+// V3 POST/FEED ROUTES
+app.post('/api/v3/posts', authenticate, requireAuth, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file required' });
+    }
+    
+    const { caption } = req.body;
+    
+    const video = await Video.create({
+      userId: req.user.id,
+      title: caption || 'Post',
+      description: caption || '',
+      filename: req.file.filename,
+      isPublished: true
+    });
+    
+    const [enriched] = await attachVideoMeta([video], req.user.id);
+    
+    // Emit real-time feed update via socket.io
+    io.emit('new-post', enriched);
+    
+    res.json(enriched);
+  } catch (err) {
+    console.error('Post creation error:', err);
+    res.status(500).json({ error: 'Failed to create post' });
+  }
+});
+
+app.get('/api/v3/feed', authenticate, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 10;
+    const offset = (page - 1) * limit;
+    
+    const videos = await Video.findAll({
+      where: { isPublished: true },
+      include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
+    });
+    
+    const videosWithMeta = await attachVideoMeta(videos, req.user?.id || null);
+    
+    res.json({
+      posts: videosWithMeta,
+      page,
+      hasMore: videos.length === limit
+    });
+  } catch (err) {
+    console.error('V3 Feed error:', err);
+    res.status(500).json({ error: 'Failed to load feed' });
+  }
+});
+
+// V3 LIVESTREAM CONTROL (ADMIN ONLY)
+app.post('/api/v3/livestream/start', requireAdmin, async (req, res) => {
+  try {
+    const { title = 'iKHWEZI Live' } = req.body;
+    
+    let liveStatus = await LiveStatus.findOne({ where: { isLive: false } });
+    
+    if (!liveStatus) {
+      liveStatus = await LiveStatus.create({
+        streamKey: uuidv4(),
+        isLive: true,
+        title,
+        viewerCount: 0,
+        startedAt: new Date()
+      });
+    } else {
+      liveStatus.isLive = true;
+      liveStatus.title = title;
+      liveStatus.startedAt = new Date();
+      liveStatus.viewerCount = 0;
+      await liveStatus.save();
+    }
+    
+    // Emit live start event
+    io.emit('livestream-started', {
+      title,
+      viewerCount: 0,
+      startedAt: liveStatus.startedAt,
+      streamKey: liveStatus.streamKey
+    });
+    
+    res.json({
+      success: true,
+      isLive: true,
+      title,
+      streamKey: liveStatus.streamKey,
+      rtmpUrl: `rtmp://13.62.54.198/live/${liveStatus.streamKey}`
+    });
+  } catch (err) {
+    console.error('Livestream start error:', err);
+    res.status(500).json({ error: 'Failed to start livestream' });
+  }
+});
+
+app.post('/api/v3/livestream/stop', requireAdmin, async (req, res) => {
+  try {
+    const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
+    
+    if (!liveStatus) {
+      return res.status(400).json({ error: 'No active livestream' });
+    }
+    
+    liveStatus.isLive = false;
+    await liveStatus.save();
+    
+    // Emit live end event
+    io.emit('livestream-stopped', {
+      title: liveStatus.title,
+      totalViewers: liveStatus.viewerCount,
+      stoppedAt: new Date()
+    });
+    
+    res.json({
+      success: true,
+      isLive: false,
+      totalViewers: liveStatus.viewerCount
+    });
+  } catch (err) {
+    console.error('Livestream stop error:', err);
+    res.status(500).json({ error: 'Failed to stop livestream' });
+  }
+});
+
+app.get('/api/v3/livestream/status', async (req, res) => {
+  try {
+    let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
+    
+    if (!liveStatus) {
+      liveStatus = await LiveStatus.create({
+        streamKey: uuidv4(),
+        isLive: false,
+        viewerCount: 0
+      });
+    }
+    
+    res.json({
+      isLive: liveStatus.isLive,
+      title: liveStatus.title || 'iKHWEZI Live',
+      viewerCount: liveStatus.viewerCount,
+      startedAt: liveStatus.startedAt,
+      streamKey: liveStatus.streamKey,
+      hlsUrl: `http://13.62.54.198:8081/hls/${liveStatus.streamKey}/index.m3u8`
+    });
+  } catch (err) {
+    console.error('V3 Livestream status error:', err);
+    res.status(500).json({ error: 'Failed to get livestream status' });
+  }
+});
+
+app.post('/api/v3/livestream/viewers/join', authenticate, async (req, res) => {
+  try {
+    const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
+    if (liveStatus) {
+      liveStatus.viewerCount += 1;
+      await liveStatus.save();
+      io.emit('viewer-count', { viewerCount: liveStatus.viewerCount });
+    }
+    res.json({ viewerCount: liveStatus?.viewerCount || 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to join livestream' });
+  }
+});
+
+app.post('/api/v3/livestream/viewers/leave', authenticate, async (req, res) => {
+  try {
+    const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
+    if (liveStatus && liveStatus.viewerCount > 0) {
+      liveStatus.viewerCount -= 1;
+      await liveStatus.save();
+      io.emit('viewer-count', { viewerCount: liveStatus.viewerCount });
+    }
+    res.json({ viewerCount: liveStatus?.viewerCount || 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to leave livestream' });
+  }
+});
+
+// ==================== SOCKET.IO HANDLERS ====================
+
   // Join a room for a specific video/stream
   socket.on('join-room', (roomId) => {
     socket.join(roomId);
