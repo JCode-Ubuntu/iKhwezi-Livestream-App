@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import axios from 'axios'
 import { PremiumPostCard, PremiumStoriesCarousel, PremiumBottomNav } from './index'
 
 const API_BASE = '/api/v3'
@@ -11,15 +10,21 @@ export default function Feed() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    console.log('Feed useEffect running')
     const fetchPosts = async () => {
       try {
         setLoading(true)
         console.log('Fetching posts from', `${API_BASE}/feed`)
-        const response = await axios.get(`${API_BASE}/feed`)
-        console.log('Posts response:', response.data)
-        setPosts(response.data.posts || [])
+        const response = await fetch(`${API_BASE}/feed`)
+        console.log('Response status:', response.status)
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+        const data = await response.json()
+        console.log('Posts:', data.posts?.length)
+        setPosts(data.posts || [])
       } catch (err) {
-        console.error('Error fetching posts:', err.message, err.response?.status)
+        console.error('Error fetching posts:', err.message)
         setError(err.message)
       } finally {
         setLoading(false)
