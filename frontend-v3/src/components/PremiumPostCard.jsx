@@ -13,9 +13,27 @@ import { colors, spacing, transitions } from '@/design-system'
  * - Description with read more
  */
 
-const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
-  const [isLiked, setIsLiked] = useState(false)
-  const [likeCount, setLikeCount] = useState(initialLikeCount)
+const PremiumPostCard = ({ 
+  post, 
+  creator,
+  image,
+  description,
+  onLike, 
+  likeCount: initialLikeCount = 0,
+  isLiked: initialIsLiked = false
+}) => {
+  // Support both post object and individual props
+  const postData = post || {
+    id: Math.random(),
+    creator: creator || { displayName: 'Creator', username: 'creator', avatar: null, verified: false },
+    image,
+    description,
+    likeCount: initialLikeCount,
+    isLiked: initialIsLiked
+  }
+
+  const [isLiked, setIsLiked] = useState(initialIsLiked || false)
+  const [likeCount, setLikeCount] = useState(postData.likeCount || initialLikeCount || 0)
   const [showHeartExplosion, setShowHeartExplosion] = useState(false)
   const [commentCount] = useState(Math.floor(Math.random() * 100))
   const [shareCount] = useState(Math.floor(Math.random() * 50))
@@ -25,7 +43,7 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
       setIsLiked(true)
       setLikeCount(likeCount + 1)
       setShowHeartExplosion(true)
-      onLike?.(post.id)
+      onLike?.(postData.id)
       setTimeout(() => setShowHeartExplosion(false), 600)
     } else {
       setIsLiked(false)
@@ -73,8 +91,8 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
           {/* Avatar */}
           <img
-            src={post.creator?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.creator?.username}`}
-            alt={post.creator?.displayName || 'Creator'}
+            src={postData.creator?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${postData.creator?.username}`}
+            alt={postData.creator?.displayName || 'Creator'}
             style={{
               width: '48px',
               height: '48px',
@@ -91,7 +109,7 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
                 ...{ fontSize: '0.95rem', fontWeight: 600, color: colors.dark.text.primary, margin: 0 },
               }}
             >
-              {post.creator?.displayName || post.creator?.username || 'Creator'}
+              {postData.creator?.displayName || postData.creator?.username || 'Creator'}
             </p>
             <p
               style={{
@@ -100,7 +118,7 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
                 margin: '2px 0 0 0',
               }}
             >
-              {formatDate(post.createdAt)}
+              {formatDate(postData.createdAt)}
             </p>
           </div>
         </div>
@@ -126,7 +144,7 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
       </div>
 
       {/* Image */}
-      {post.filename && (
+      {postData.filename && (
         <div
           style={{
             position: 'relative',
@@ -137,8 +155,8 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
           }}
         >
           <img
-            src={post.filename}
-            alt={post.title || 'Post'}
+            src={postData.filename}
+            alt={postData.title || 'Post'}
             style={{
               position: 'absolute',
               top: 0,
@@ -280,7 +298,7 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
       </div>
 
       {/* Caption */}
-      {post.description && (
+      {postData.description && (
         <div
           style={{
             padding: `0 ${spacing.lg} ${spacing.lg} ${spacing.lg}`,
@@ -290,9 +308,9 @@ const PremiumPostCard = ({ post, onLike, likeCount: initialLikeCount = 0 }) => {
           }}
         >
           <span style={{ fontWeight: 600, marginRight: spacing.xs }}>
-            {post.creator?.displayName || post.creator?.username}
+            {postData.creator?.displayName || postData.creator?.username}
           </span>
-          {post.description}
+          {postData.description}
         </div>
       )}
     </div>
