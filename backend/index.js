@@ -1840,6 +1840,60 @@ app.post('/api/v3/posts', authenticate, requireAuth, upload.single('image'), asy
   }
 });
 
+// V3 DEBUG SEED ENDPOINT (Creates test data if none exists)
+app.post('/api/v3/debug/seed', async (req, res) => {
+  try {
+    const { key } = req.body;
+    if (key !== 'ikhwezi-seed-2024') {
+      return res.status(403).json({ error: 'Invalid key' });
+    }
+
+    let user = await User.findOne({ where: { username: 'creator' } });
+    if (!user) {
+      const bcrypt = require('bcryptjs');
+      user = await User.create({
+        username: 'creator',
+        email: 'creator@ikhwezi.com',
+        password: await bcrypt.hash('Password123!', 10),
+        displayName: 'Creator Vibes',
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=creator',
+        isCreator: true,
+        isGuest: false,
+        isBanned: false,
+      });
+    }
+
+    const existing = await Video.count({ where: { userId: user.id } });
+    if (existing > 0) {
+      return res.json({ message: `Already seeded with ${existing} posts`, userId: user.id });
+    }
+
+    const posts = [
+      { title: 'Sunset Magic', description: 'Golden hour at the beach, absolutely breathtaking! 🌅' },
+      { title: 'Mountain Adventure', description: 'Peak hike with an amazing view. Nature is healing! 🏔️' },
+      { title: 'City Lights', description: 'Nighttime urban vibes in the heart of the city 🌃' },
+      { title: 'Morning Coffee', description: 'Starting the day right with perfect coffee ☕' },
+      { title: 'Going Live!', description: 'Join me for tonight\'s live stream! 🔴' }
+    ];
+
+    for (const post of posts) {
+      await Video.create({
+        userId: user.id,
+        title: post.title,
+        description: post.description,
+        isPublished: true,
+        views: Math.floor(Math.random() * 500),
+        filename: null,
+      });
+    }
+
+    res.json({ message: `Seeded ${posts.length} posts`, userId: user.id });
+  } catch (err) {
+    console.error('Seed error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/v3/feed', authenticate, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
