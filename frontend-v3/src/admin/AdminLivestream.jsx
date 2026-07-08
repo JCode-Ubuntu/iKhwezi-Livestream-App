@@ -3,7 +3,15 @@ import { Play, Square, Settings, Users, Eye } from 'lucide-react'
 import axios from 'axios'
 import io from 'socket.io-client'
 
-const API_BASE = 'http://localhost:3001/api/v3'
+// Use server IP when in production, localhost for development
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3001/api/v3'
+  : `http://${window.location.hostname}:3001/api/v3`
+
+const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3001'
+  : `http://${window.location.hostname}:3001`
+
 const ADMIN_KEY = 'your-secret-admin-key-here' // In production, use from environment
 
 let socket = null
@@ -19,7 +27,7 @@ export default function AdminLivestream() {
 
   useEffect(() => {
     // Connect to Socket.io for real-time updates
-    socket = io('http://localhost:3001', {
+    socket = io(SOCKET_URL, {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -56,7 +64,7 @@ export default function AdminLivestream() {
       setIsLive(response.data.isLive)
       setTitle(response.data.title)
       setStreamKey(response.data.streamKey)
-      setRtmpUrl(`rtmp://13.62.54.198/live/${response.data.streamKey}`)
+      setRtmpUrl(`rtmp://${window.location.hostname}/live/${response.data.streamKey}`)
       setViewers(response.data.viewerCount)
     } catch (err) {
       console.error('Status fetch error:', err)

@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { Heart, MessageCircle, Share, Search, Home, Plus, Compass } from 'lucide-react'
 import axios from 'axios'
 
-const API_BASE = 'http://localhost:3001/api/v3'
+// Use server IP when in production, localhost for development
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3001/api/v3'
+  : `http://${window.location.hostname}:3001/api/v3`
 
 export default function Feed() {
   const [posts, setPosts] = useState([])
@@ -121,7 +124,7 @@ export default function Feed() {
             </div>
 
             {/* Post Image */}
-            <img src={`http://localhost:3001/storage/videos/${post.filename}`} alt="Post" className="w-full aspect-square object-cover bg-gray-900" />
+            <img src={`http://${window.location.hostname}:3001/storage/videos/${post.filename}`} alt="Post" className="w-full aspect-square object-cover bg-gray-900" />
 
             {/* Post Actions */}
             <div className="px-4 py-3">
