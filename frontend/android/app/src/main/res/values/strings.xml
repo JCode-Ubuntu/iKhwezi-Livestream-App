@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">iKHWEZI</string>
+    <string name="title_activity_main">iKHWEZI</string>
+    <string name="package_name">com.ikhwezi.app</string>
+    <string name="custom_url_scheme">com.ikhwezi.app</string>
+</resources>

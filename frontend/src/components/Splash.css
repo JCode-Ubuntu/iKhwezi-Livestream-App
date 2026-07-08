@@ -5,3 +5,8 @@
 .splash-eyebrow { font-family: var(--font-display); color: var(--gold-400); letter-spacing:0.2em; font-size:12px; }
 .splash-title { font-family: var(--font-display); font-size:48px; color: #fff; letter-spacing:0.06em; margin:0; }
 .splash-sub { color: #d1d1d1; font-size:14px; margin-top:4px; }
+.splash-actions { display:flex; flex-direction:column; gap:12px; width:100%; max-width:300px; margin-top:16px; }
+.splash-btn { width:100%; padding:14px 0; border-radius:14px; font-size:16px; font-weight:700; cursor:pointer; border:none; transition: transform 0.15s, opacity 0.15s; letter-spacing:0.02em; }
+.splash-btn:active { transform: scale(0.97); }
+.splash-btn--primary { background: linear-gradient(135deg, #a855f7, #3b82f6); color:#fff; box-shadow: 0 8px 24px rgba(168,85,247,0.4); }
+.splash-btn--ghost { background: rgba(255,255,255,0.08); color:#fff; border: 1px solid rgba(255,255,255,0.15); }

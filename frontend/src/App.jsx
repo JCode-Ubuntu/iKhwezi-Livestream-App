@@ -20,7 +20,7 @@ const Admin = lazy(() => import('./pages/Admin'));
 const Messages = lazy(() => import('./pages/Messages'));
 
 function App() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const [showTextComposer, setShowTextComposer] = useState(false);
@@ -37,7 +37,7 @@ function App() {
     return <UltimaLoading />;
   }
 
-  if (showSplash) return <Splash />;
+  if (showSplash) return <Splash showButtons={!user} />;
 
   return (
     <SocketProvider>
