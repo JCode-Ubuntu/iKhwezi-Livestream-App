@@ -36,9 +36,8 @@ async function seed() {
     await sequelize.authenticate()
     console.log('✓ Database connected')
 
-    // SYNC TABLES FIRST!
-    await sequelize.sync()
-    console.log('✓ Database tables synchronized')
+    // Tables already exist from backend startup, no need to sync again
+    console.log('✓ Database tables already initialized')
 
     // Create test user
     let user = await User.findOne({ where: { username: 'creator' } })
@@ -46,20 +45,22 @@ async function seed() {
       user = await User.create({
         username: 'creator',
         email: 'creator@ikhwezi.com',
-        displayName: 'Test Creator',
+        displayName: 'Creator Vibes 🎬',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=creator',
         password: 'hashed_password_here'
       })
-      console.log('✓ Created test user')
+      console.log('✓ Created test user:', user.username)
+    } else {
+      console.log('✓ User already exists:', user.username)
     }
 
     // Create test posts
     const posts = [
-      { title: 'Sunset', description: 'Golden sunset at the beach' },
-      { title: 'Mountains', description: 'Amazing mountain peak adventure' },
-      { title: 'City', description: 'Urban lights and night vibes' },
-      { title: 'Coffee', description: 'Morning coffee and good energy' },
-      { title: 'Stream', description: 'Live streaming the future' }
+      { title: 'Sunset Magic', description: 'Golden hour at the beach, absolutely breathtaking! 🌅' },
+      { title: 'Mountain Adventure', description: 'Peak hike with an amazing view. Nature is amazing! ⛰️' },
+      { title: 'City Lights', description: 'Nighttime urban vibes in the heart of the city 🌃' },
+      { title: 'Morning Coffee', description: 'Starting the day right with perfect coffee ☕' },
+      { title: 'Going Live!', description: 'Join me for tonight live stream! 🔴' }
     ]
 
     let created = 0
@@ -70,20 +71,22 @@ async function seed() {
           userId: user.id,
           title: post.title,
           description: post.description,
-          filename: 'test-' + post.title.toLowerCase() + '.jpg',
+          filename: 'test-' + post.title.toLowerCase().replace(/[^a-z0-9]/g, '') + '.jpg',
           isPublished: true
         })
         created++
+        console.log(`  ✓ Created: "${post.title}"`)
       }
     }
 
-    console.log(`✓ Created ${created} test posts`)
+    console.log(`\n✓ Seed complete! Created ${created} new test posts`)
     const count = await Video.count()
     console.log(`✓ Total posts in database: ${count}`)
 
     process.exit(0)
   } catch (err) {
-    console.error('Error:', err.message)
+    console.error('❌ Seed Error:', err.message)
+    console.error('Stack:', err.stack)
     process.exit(1)
   }
 }
