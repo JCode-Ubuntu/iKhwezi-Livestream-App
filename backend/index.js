@@ -1883,7 +1883,7 @@ app.get('/api/v3/debug/seed', async (req, res) => {
         description: post.description,
         isPublished: true,
         views: Math.floor(Math.random() * 500),
-        filename: null,
+        filename: 'placeholder.jpg',
       });
     }
 
