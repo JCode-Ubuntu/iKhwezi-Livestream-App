@@ -55,6 +55,10 @@ async function seed() {
     await sequelize.authenticate()
     console.log('✓ Database connected')
 
+    // Create tables if they don't exist
+    await sequelize.sync()
+    console.log('✓ Tables synchronized')
+
     // Check if user already exists
     const existingUser = await sequelize.query(
       'SELECT * FROM Users WHERE username = ?',
