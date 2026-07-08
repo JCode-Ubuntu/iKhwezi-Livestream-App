@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { Heart, MessageCircle, Share, Search, Home, Plus, Compass } from 'lucide-react'
 import axios from 'axios'
 
-// Use server IP when in production, localhost for development
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:3001/api/v3'
-  : `http://${window.location.hostname}:3001/api/v3`
+// Use relative API paths that go through nginx proxy
+const API_BASE = '/api/v3'
 
 export default function Feed() {
   const [posts, setPosts] = useState([])

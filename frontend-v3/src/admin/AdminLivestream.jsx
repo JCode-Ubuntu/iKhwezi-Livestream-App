@@ -3,14 +3,9 @@ import { Play, Square, Settings, Users, Eye } from 'lucide-react'
 import axios from 'axios'
 import io from 'socket.io-client'
 
-// Use server IP when in production, localhost for development
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:3001/api/v3'
-  : `http://${window.location.hostname}:3001/api/v3`
-
-const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:3001'
-  : `http://${window.location.hostname}:3001`
+// Use relative paths that go through nginx proxy
+const API_BASE = '/api/v3'
+const SOCKET_URL = window.location.origin
 
 const ADMIN_KEY = 'your-secret-admin-key-here' // In production, use from environment
 
