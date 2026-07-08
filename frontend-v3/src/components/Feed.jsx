@@ -10,14 +10,10 @@ export default function Feed() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    console.log('Feed useEffect running - START')
-    setTimeout(() => {
-      console.log('Feed setTimeout running')
-      fetch('/api/v3/feed')
-        .then(r => { console.log('Feed fetch status:', r.status); return r.json(); })
-        .then(data => { console.log('Feed data:', data.posts?.length); setPosts(data.posts || []); setLoading(false); })
-        .catch(e => { console.error('Feed fetch error:', e.message); setError(e.message); setLoading(false); })
-    }, 100)
+    fetch(`${API_BASE}/feed`)
+      .then(r => r.json())
+      .then(data => { setPosts(data.posts || []); setLoading(false); })
+      .catch(e => { setError(e.message); setLoading(false); })
   }, [])
 
   const mockStories = [

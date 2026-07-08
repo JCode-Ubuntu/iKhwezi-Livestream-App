@@ -150,22 +150,42 @@ const PremiumPostCard = ({
             position: 'relative',
             width: '100%',
             paddingBottom: '100%',
-            background: colors.dark.surface.tertiary,
+            background: postData.filename === 'placeholder.jpg' 
+              ? `linear-gradient(135deg, ${colors.primary[900]} 0%, ${colors.neutral[900]} 50%, ${colors.accent[950]} 100%)`
+              : colors.dark.surface.tertiary,
             overflow: 'hidden',
           }}
         >
-          <img
-            src={postData.filename}
-            alt={postData.title || 'Post'}
-            style={{
+          {postData.filename !== 'placeholder.jpg' && (
+            <img
+              src={postData.filename}
+              alt={postData.title || 'Post'}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          )}
+          {postData.filename === 'placeholder.jpg' && (
+            <div style={{
               position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              color: colors.neutral[600],
+              fontSize: '14px',
+            }}>
+              <span style={{ fontSize: '32px', opacity: 0.4 }}>📷</span>
+              <span style={{ opacity: 0.5 }}>{postData.title || 'Post'}</span>
+            </div>
+          )}
 
           {/* Heart Explosion Animation */}
           {showHeartExplosion && (
