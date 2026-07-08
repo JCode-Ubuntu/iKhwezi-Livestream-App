@@ -13,12 +13,21 @@ export { typography } from './typography'
 export { spacing, sizing, borders, shadows } from './spacing'
 export { transitions, animations, keyframes } from './motion'
 
-// Design Tokens Export
+// Design Tokens Export with ES6 imports
+import * as colorsModule from './colors'
+import { typography as typographyModule } from './typography'
+import { spacing as spacingModule, sizing as sizingModule, borders as bordersModule, shadows as shadowsModule } from './spacing'
+import { transitions as transitionsModule, animations as animationsModule, keyframes as keyframesModule } from './motion'
+
 export const designTokens = {
-  colors: require('./colors').default,
-  typography: require('./typography').default,
-  spacing: require('./spacing').default,
-  motion: require('./motion').default,
+  colors: colorsModule.default,
+  typography: typographyModule,
+  spacing: spacingModule,
+  motion: {
+    transitions: transitionsModule,
+    animations: animationsModule,
+    keyframes: keyframesModule
+  }
 }
 
 export default designTokens
