@@ -14,10 +14,12 @@ export default function Feed() {
     const fetchPosts = async () => {
       try {
         setLoading(true)
+        console.log('Fetching posts from', `${API_BASE}/feed`)
         const response = await axios.get(`${API_BASE}/feed`)
+        console.log('Posts response:', response.data)
         setPosts(response.data.posts || [])
       } catch (err) {
-        console.error('Error fetching posts:', err)
+        console.error('Error fetching posts:', err.message, err.response?.status)
         setError(err.message)
       } finally {
         setLoading(false)
