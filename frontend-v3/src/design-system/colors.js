@@ -120,6 +120,11 @@ export const colors = {
       surface: '#161616',
       overlay: 'rgba(0, 0, 0, 0.7)',
     },
+    surface: {
+      primary: '#0a0a0a',
+      secondary: '#1a1a1a',
+      tertiary: '#2a2a2a',
+    },
     text: {
       primary: '#ffffff',
       secondary: '#e5e5e5',
@@ -135,6 +140,11 @@ export const colors = {
       tertiary: '#e5e5e5',
       surface: '#fafafa',
       overlay: 'rgba(255, 255, 255, 0.7)',
+    },
+    surface: {
+      primary: '#ffffff',
+      secondary: '#f5f5f5',
+      tertiary: '#e5e5e5',
     },
     text: {
       primary: '#0a0a0a',
