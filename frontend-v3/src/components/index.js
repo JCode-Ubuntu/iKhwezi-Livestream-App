@@ -24,6 +24,12 @@ export {
   SkeletonFeed,
 } from './LoadingSkeletons'
 
+// Premium Feature Components
+export { default as PremiumPostCard } from './PremiumPostCard'
+export { default as PremiumLiveStreamViewer } from './PremiumLiveStreamViewer'
+export { default as PremiumStoriesCarousel } from './PremiumStoriesCarousel'
+export { default as PremiumBottomNav } from './PremiumBottomNav'
+
 // Existing Components (Legacy)
 export { default as Feed } from './Feed'
 export { default as AdminLivestream } from './AdminLivestream'
