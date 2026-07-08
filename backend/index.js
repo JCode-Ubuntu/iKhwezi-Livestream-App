@@ -1840,6 +1840,82 @@ app.post('/api/v3/posts', authenticate, requireAuth, upload.single('image'), asy
   }
 });
 
+// V3 AUTH ALIASES (forward to existing auth endpoints)
+app.post('/api/v3/auth/login', authRateLimit, async (req, res) => {
+  try {
+    const { username, email, phone, password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Password required' });
+
+    const whereClause = username
+      ? { username }
+      : email ? { email } : { phone };
+
+    if (!whereClause) return res.status(400).json({ error: 'Username, email or phone required' });
+
+    const user = await User.findOne({ where: whereClause });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    if (user.isBanned) return res.status(403).json({ error: 'Account banned' });
+
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({
+      token,
+      user: { id: user.id, username: user.username, displayName: user.displayName, avatar: user.avatar, isCreator: user.isCreator }
+    });
+  } catch (err) {
+    console.error('V3 Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+app.post('/api/v3/auth/register', authRateLimit, async (req, res) => {
+  try {
+    const { username, displayName, email, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
+    const exists = await User.findOne({ where: { username } });
+    if (exists) return res.status(409).json({ error: 'Username already taken' });
+
+    if (email) {
+      const emailExists = await User.findOne({ where: { email } });
+      if (emailExists) return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const hashed = await bcrypt.hash(password, 12);
+    const user = await User.create({
+      username,
+      displayName: displayName || username,
+      email: email || null,
+      password: hashed,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+      isCreator: false,
+      isGuest: false,
+      isBanned: false,
+    });
+
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    res.status(201).json({
+      token,
+      user: { id: user.id, username: user.username, displayName: user.displayName, avatar: user.avatar, isCreator: user.isCreator }
+    });
+  } catch (err) {
+    console.error('V3 Register error:', err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+app.get('/api/v3/auth/me', authenticate, requireAuth, async (req, res) => {
+  res.json({
+    id: req.user.id,
+    username: req.user.username,
+    displayName: req.user.displayName,
+    avatar: req.user.avatar,
+    isCreator: req.user.isCreator,
+  });
+});
+
 // V3 DEBUG SEED ENDPOINT (Creates test data if none exists)
 app.get('/api/v3/debug/seed', async (req, res) => {
   try {
