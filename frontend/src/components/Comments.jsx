@@ -208,7 +208,7 @@ function Comments({ videoId, resourcePath, onClose }) {
                         alignItems: 'center',
                         gap: 4,
                         marginTop: 8,
-                        color: '#6F4FFF',
+                        color: '#E1306C',
                         fontSize: 12,
                         fontWeight: 500,
                       }}
@@ -225,7 +225,7 @@ function Comments({ videoId, resourcePath, onClose }) {
                             display: 'flex',
                             alignItems: 'center',
                             gap: 4,
-                            color: '#6F4FFF',
+                            color: '#E1306C',
                             fontSize: 12,
                             fontWeight: 500,
                           }}
@@ -291,7 +291,7 @@ function Comments({ videoId, resourcePath, onClose }) {
               fontSize: 12,
             }}>
               <span style={{ color: '#A0A0A0' }}>
-                Replying to <strong style={{ color: '#6F4FFF' }}>{replyingTo.author?.username}</strong>
+                Replying to <strong style={{ color: '#E1306C' }}>{replyingTo.author?.username}</strong>
               </span>
               <button onClick={() => setReplyingTo(null)} style={{ color: '#A0A0A0' }}>
                 <X size={16} />
@@ -313,7 +313,7 @@ function Comments({ videoId, resourcePath, onClose }) {
               typingTimer.current = window.setTimeout(() => setTyping(false), 1200);
             }}
             onBlur={e => { setTyping(false); e.target.style.borderColor = 'rgba(255,255,255,0.15)'; }}
-            onFocus={e => (e.target.style.borderColor = '#6366f1')}
+            onFocus={e => (e.target.style.borderColor = '#E1306C')}
             placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
             maxLength={MAX_LEN}
             style={{
@@ -338,7 +338,7 @@ function Comments({ videoId, resourcePath, onClose }) {
               width: 44,
               height: 44,
               borderRadius: 12,
-              background: newComment.trim() ? 'linear-gradient(135deg, #6F4FFF, #4A2FCC)' : '#252A40',
+              background: newComment.trim() ? 'linear-gradient(135deg, #E1306C, #B91C58)' : '#252A40',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

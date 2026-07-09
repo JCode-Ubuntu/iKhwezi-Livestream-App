@@ -5,10 +5,43 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { Sequelize, DataTypes, Op, QueryTypes } = require('sequelize');
 const http = require('http');
 const { Server } = require('socket.io');
+
+// SECURITY: this repository is public on GitHub. Previous versions of this
+// file hardcoded real-looking fallback values for JWT_SECRET and ADMIN_KEY
+// directly in source (e.g. 'ikhwezi_jwt_secret_2026_super_secure'), which
+// meant anyone who read the public repo could forge login tokens for any
+// account (including admin) or send the admin-key header to unlock every
+// /api/admin/* route — ban users, read everyone's email/phone, grant
+// themselves admin, start/stop the livestream, etc.
+//
+// Fix: require these to come from real environment variables. If an
+// operator hasn't set them, generate a strong random value for this process
+// lifetime instead of silently trusting a value that is now public
+// knowledge, and warn loudly so it gets fixed. This intentionally still
+// lets the server boot (so a missing env var doesn't take the whole app
+// down) but a restart without the env var set means existing login tokens
+// and the previous admin key stop working, which is the correct trade-off
+// for a leaked secret.
+function requireSecretOrGenerate(envVarName, { minLength = 32 } = {}) {
+  const fromEnv = process.env[envVarName];
+  if (fromEnv && fromEnv.length >= minLength) return fromEnv;
+  if (fromEnv) {
+    console.warn(`⚠️  ${envVarName} is set but shorter than ${minLength} characters — treating as insecure and generating a random one instead.`);
+  }
+  const generated = crypto.randomBytes(48).toString('hex');
+  console.warn('\n' + '='.repeat(78));
+  console.warn(`⚠️  SECURITY WARNING: ${envVarName} is not set (or too short) in the environment.`);
+  console.warn(`⚠️  Generated a random value for THIS PROCESS ONLY — it will change on restart.`);
+  console.warn(`⚠️  Set a persistent ${envVarName} environment variable on the server ASAP.`);
+  // Never log generated secrets — they end up in persistent logs/CI output.
+  console.warn('='.repeat(78) + '\n');
+  return generated;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -30,13 +63,28 @@ const io = new Server(server, {
   allowEIO3: true,
 });
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'ikhwezi_jwt_secret_2026_super_secure';
-const ADMIN_KEY = process.env.ADMIN_KEY || 'ikhwezi_admin_26';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PRODUCTION = NODE_ENV === 'production';
+const JWT_SECRET = requireSecretOrGenerate('JWT_SECRET');
+const ADMIN_KEY = requireSecretOrGenerate('ADMIN_KEY', { minLength: 12 });
+// Shared secret nginx-rtmp must send when calling on-publish webhooks.
+const RTMP_WEBHOOK_SECRET = process.env.RTMP_WEBHOOK_SECRET || '';
+const HLS_HOST = process.env.HLS_HOST || '';
 
-// Database setup
+// Real-money top-ups activate automatically once these are set — no code
+// changes needed. Until then, /api/wallet/topup runs in dev mode and grants
+// coins directly (clearly flagged in the response) so gifting/subscriptions
+// are fully testable end-to-end without a payment processor.
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const STRIPE_ENABLED = !!STRIPE_SECRET_KEY;
+const stripeClient = STRIPE_ENABLED ? require('stripe')(STRIPE_SECRET_KEY) : null;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// Database setup — absolute path so CWD never selects the wrong DB file.
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: './storage/ikhwezi.db',
+  storage: path.join(__dirname, 'storage', 'ikhwezi.db'),
   logging: false
 });
 
@@ -49,8 +97,10 @@ const User = sequelize.define('User', {
   username: { type: DataTypes.STRING, unique: true, allowNull: false },
   displayName: { type: DataTypes.STRING, allowNull: true },
   avatar: { type: DataTypes.STRING, allowNull: true },
+  coverImage: { type: DataTypes.STRING, allowNull: true },
   bio: { type: DataTypes.TEXT, allowNull: true },
   isCreator: { type: DataTypes.BOOLEAN, defaultValue: false },
+  isAdmin: { type: DataTypes.BOOLEAN, defaultValue: false },
   isBanned: { type: DataTypes.BOOLEAN, defaultValue: false },
   isGuest: { type: DataTypes.BOOLEAN, defaultValue: false },
   lastActive: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
@@ -166,11 +216,43 @@ const TextPost = sequelize.define('TextPost', {
   commentCount: { type: DataTypes.INTEGER, defaultValue: 0 },
 });
 
+const PostLike = sequelize.define('PostLike', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false },
+  postId: { type: DataTypes.UUID, allowNull: false },
+});
+
 const Points = sequelize.define('Points', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   creatorId: { type: DataTypes.UUID, allowNull: false, unique: true },
   totalPoints: { type: DataTypes.INTEGER, defaultValue: 0 },
   lifetimePoints: { type: DataTypes.INTEGER, defaultValue: 0 }
+});
+
+// In-app currency wallet. Coins are spent on gifts + subscriptions and are
+// credited via /api/wallet/topup — either instantly in dev mode, or through a
+// real Stripe Checkout session once STRIPE_SECRET_KEY is configured.
+const Wallet = sequelize.define('Wallet', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false, unique: true },
+  coins: { type: DataTypes.INTEGER, defaultValue: 500 }
+});
+
+const Subscription = sequelize.define('Subscription', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  subscriberId: { type: DataTypes.UUID, allowNull: false },
+  creatorId: { type: DataTypes.UUID, allowNull: false },
+  tier: { type: DataTypes.STRING, defaultValue: 'supporter' },
+  expiresAt: { type: DataTypes.DATE, allowNull: false }
+});
+
+const GiftLog = sequelize.define('GiftLog', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  fromUserId: { type: DataTypes.UUID, allowNull: false },
+  toUserId: { type: DataTypes.UUID, allowNull: false },
+  giftId: { type: DataTypes.STRING, allowNull: false },
+  coins: { type: DataTypes.INTEGER, allowNull: false },
+  roomId: { type: DataTypes.STRING, allowNull: true }
 });
 
 const LiveStatus = sequelize.define('LiveStatus', {
@@ -187,6 +269,15 @@ const AuditLog = sequelize.define('AuditLog', {
   action: { type: DataTypes.STRING, allowNull: false },
   details: { type: DataTypes.TEXT, allowNull: true },
   ip: { type: DataTypes.STRING, allowNull: true }
+});
+
+// Idempotency guard for Stripe webhook retries — prevents double-crediting coins.
+const ProcessedStripeEvent = sequelize.define('ProcessedStripeEvent', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  eventId: { type: DataTypes.STRING, unique: true, allowNull: false },
+  sessionId: { type: DataTypes.STRING, allowNull: true },
+  userId: { type: DataTypes.UUID, allowNull: true },
+  coins: { type: DataTypes.INTEGER, allowNull: true },
 });
 
 // Associations
@@ -234,6 +325,42 @@ WatchPartyParticipant.belongsTo(User, { foreignKey: 'userId' });
 
 User.hasMany(TextPost, { foreignKey: 'userId', as: 'textPosts' });
 TextPost.belongsTo(User, { foreignKey: 'userId', as: 'author' });
+TextPost.hasMany(PostLike, { foreignKey: 'postId', as: 'likes' });
+PostLike.belongsTo(TextPost, { foreignKey: 'postId' });
+PostLike.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasOne(Wallet, { foreignKey: 'userId', as: 'wallet' });
+Wallet.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasMany(Subscription, { foreignKey: 'subscriberId', as: 'subscriptions' });
+User.hasMany(Subscription, { foreignKey: 'creatorId', as: 'subscribers' });
+Subscription.belongsTo(User, { foreignKey: 'subscriberId', as: 'subscriber' });
+Subscription.belongsTo(User, { foreignKey: 'creatorId', as: 'creator' });
+
+// Public HLS playback URL — safe to expose (watch-only). Never expose streamKey/RTMP on public routes.
+function buildPublicHlsUrl(streamKey) {
+  if (HLS_HOST) {
+    return `${HLS_HOST.replace(/\/$/, '')}/hls/${streamKey}/index.m3u8`;
+  }
+  return `/hls/${streamKey}.m3u8`;
+}
+
+function requireRtmpWebhook(req, res) {
+  if (!RTMP_WEBHOOK_SECRET) {
+    if (IS_PRODUCTION) {
+      console.error('RTMP_WEBHOOK_SECRET is not set — rejecting on-publish callback in production');
+      res.status(503).send('RTMP webhook not configured');
+      return false;
+    }
+    return true; // dev: allow unauthenticated callbacks for local nginx testing
+  }
+  const provided = req.headers['x-rtmp-secret'] || req.query.secret;
+  if (provided !== RTMP_WEBHOOK_SECRET) {
+    res.status(403).send('Forbidden');
+    return false;
+  }
+  return true;
+}
 
 // Middleware
 app.use(cors({
@@ -246,19 +373,52 @@ app.use(cors({
   ],
   credentials: false,
 }));
+
+// Stripe webhook must read the raw request body for signature verification,
+// so it's registered before the global JSON parser below.
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!STRIPE_ENABLED) return res.status(503).json({ error: 'Stripe not configured' });
+  let event;
+  try {
+    event = stripeClient.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Stripe webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const userId = session.metadata?.userId;
+    const coins = parseInt(session.metadata?.coins || '0', 10);
+    if (userId && coins > 0) {
+      try {
+        const already = await ProcessedStripeEvent.findOne({ where: { eventId: event.id } });
+        if (already) {
+          return res.json({ received: true, duplicate: true });
+        }
+        const [wallet] = await Wallet.findOrCreate({ where: { userId }, defaults: { userId, coins: 500 } });
+        wallet.coins += coins;
+        await wallet.save();
+        await ProcessedStripeEvent.create({
+          eventId: event.id,
+          sessionId: session.id,
+          userId,
+          coins,
+        });
+        io.to(`user_${userId}`).emit('wallet-updated', { coins: wallet.coins });
+        await logAudit('WALLET_TOPUP_STRIPE', { userId, coins, sessionId: session.id }, null);
+      } catch (err) {
+        console.error('Stripe webhook wallet credit failed:', err);
+        return res.status(500).json({ error: 'Webhook processing failed' });
+      }
+    }
+  }
+
+  res.json({ received: true });
+});
+
 app.use(express.json());
 app.use('/storage', express.static(path.join(__dirname, 'storage')));
-
-// Serve frontend production build if present
-const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
-if (fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
-  app.get('*', (req, res) => {
-    const indexPath = path.join(frontendDist, 'index.html');
-    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
-    return res.status(404).json({ error: 'Not found' });
-  });
-}
 
 // File upload config
 const storage = multer.diskStorage({
@@ -295,6 +455,17 @@ const storyUpload = multer({
   }
 });
 
+const imageUpload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  }
+});
+
 // Auth middleware
 const authenticate = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -328,7 +499,13 @@ const requireAuth = (req, res, next) => {
 
 const requireAdmin = (req, res, next) => {
   const adminKey = req.headers['x-admin-key'];
-  if (adminKey !== ADMIN_KEY) {
+  // Constant-time comparison — a plain !== leaks how many leading characters
+  // matched via response timing, which matters more now that this is the
+  // only gate in front of user PII, bans, and admin grants.
+  const provided = Buffer.from(String(adminKey || ''));
+  const expected = Buffer.from(ADMIN_KEY);
+  const match = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  if (!match) {
     return res.status(403).json({ error: 'Admin access denied' });
   }
   next();
@@ -472,11 +649,14 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
       password: hashedPassword,
       username,
       displayName: displayName || username,
-      isCreator: true,
-      isGuest: req.body.isGuest || false
+      isCreator: false,
+      // Only mark as guest when the server recognizes the guest email pattern —
+      // never trust a client-supplied isGuest flag.
+      isGuest: !!(email && String(email).endsWith('@guest.local')),
     });
     
     await Points.create({ creatorId: user.id, totalPoints: 0, lifetimePoints: 0 });
+    await Wallet.create({ userId: user.id, coins: 500 });
     
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
     
@@ -490,6 +670,7 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
         displayName: user.displayName,
         avatar: user.avatar,
         isCreator: user.isCreator,
+        isAdmin: user.isAdmin,
         isGuest: user.isGuest
       }
     });
@@ -535,6 +716,7 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
         displayName: user.displayName,
         avatar: user.avatar,
         isCreator: user.isCreator,
+        isAdmin: user.isAdmin,
         isGuest: user.isGuest
       }
     });
@@ -555,6 +737,7 @@ app.get('/api/auth/me', authenticate, requireAuth, async (req, res) => {
     avatar: req.user.avatar,
     bio: req.user.bio,
     isCreator: req.user.isCreator,
+    isAdmin: req.user.isAdmin,
     isGuest: req.user.isGuest,
     points: points?.totalPoints || 0
   });
@@ -564,8 +747,8 @@ app.get('/api/auth/me', authenticate, requireAuth, async (req, res) => {
 
 app.get('/api/videos/feed', authenticate, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const offset = (page - 1) * limit;
     
     // Get trending videos (20%)
@@ -719,7 +902,7 @@ app.post('/api/videos/:id/star', authenticate, requireAuth, interactionRateLimit
       return res.status(400).json({ error: 'Already starred this video' });
     }
     
-    const amount = parseInt(req.body.amount) || 1;
+    const amount = Math.max(1, Math.min(100, parseInt(req.body.amount, 10) || 1));
     
     // Create star record
     await Star.create({
@@ -905,34 +1088,306 @@ app.get('/api/users/search', authenticate, async (req, res) => {
 app.get('/api/users/:id', authenticate, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id, {
-      attributes: ['id', 'username', 'displayName', 'avatar', 'bio', 'isCreator', 'createdAt']
+      attributes: ['id', 'username', 'displayName', 'avatar', 'coverImage', 'bio', 'isCreator', 'isAdmin', 'createdAt']
     });
-    
+
     if (!user) return res.status(404).json({ error: 'User not found' });
-    
+
     const videoCount = await Video.count({ where: { userId: user.id, isPublished: true } });
     const followerCount = await Follow.count({ where: { followingId: user.id } });
     const followingCount = await Follow.count({ where: { followerId: user.id } });
     const points = await Points.findOne({ where: { creatorId: user.id } });
-    
+
     let isFollowing = false;
+    let isSubscribed = false;
     if (req.user) {
       isFollowing = await Follow.findOne({
         where: { followerId: req.user.id, followingId: user.id }
       }) !== null;
+      isSubscribed = await Subscription.findOne({
+        where: { subscriberId: req.user.id, creatorId: user.id, expiresAt: { [Op.gt]: new Date() } }
+      }) !== null;
     }
-    
+
+    const subscriberCount = await Subscription.count({
+      where: { creatorId: user.id, expiresAt: { [Op.gt]: new Date() } }
+    });
+
     res.json({
       ...user.toJSON(),
       videoCount,
       followerCount,
       followingCount,
+      subscriberCount,
       totalPoints: points?.totalPoints || 0,
-      isFollowing
+      isFollowing,
+      isSubscribed
     });
   } catch (err) {
     console.error('User error:', err);
     res.status(500).json({ error: 'Failed to load user' });
+  }
+});
+
+// Update the current user's own profile — real photos only, no default avatars.
+app.patch('/api/users/me', authenticate, requireAuth, imageUpload.fields([
+  { name: 'avatar', maxCount: 1 },
+  { name: 'cover', maxCount: 1 },
+]), async (req, res) => {
+  try {
+    const { displayName, bio } = req.body;
+    if (displayName !== undefined) req.user.displayName = displayName.trim().slice(0, 60);
+    if (bio !== undefined) req.user.bio = bio.trim().slice(0, 200);
+    if (req.files?.avatar?.[0]) req.user.avatar = `/storage/uploads/${req.files.avatar[0].filename}`;
+    if (req.files?.cover?.[0]) req.user.coverImage = `/storage/uploads/${req.files.cover[0].filename}`;
+    await req.user.save();
+
+    res.json({
+      id: req.user.id,
+      username: req.user.username,
+      displayName: req.user.displayName,
+      avatar: req.user.avatar,
+      coverImage: req.user.coverImage,
+      bio: req.user.bio,
+    });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// ==================== WALLET / GIFTS / SUBSCRIPTIONS ====================
+
+const GIFT_CATALOG = {
+  rose: { coins: 10, char: '🌹', label: 'Rose' },
+  gem: { coins: 50, char: '💎', label: 'Gem' },
+  crown: { coins: 200, char: '👑', label: 'Crown' },
+  star: { coins: 500, char: '🌟', label: 'Supernova' },
+};
+const SUBSCRIPTION_COST_PER_MONTH = 500;
+
+async function getOrCreateWallet(userId) {
+  const [wallet] = await Wallet.findOrCreate({ where: { userId }, defaults: { userId, coins: 500 } });
+  return wallet;
+}
+
+app.get('/api/wallet/me', authenticate, requireAuth, async (req, res) => {
+  try {
+    const wallet = await getOrCreateWallet(req.user.id);
+    res.json({ coins: wallet.coins, giftCatalog: GIFT_CATALOG, stripeEnabled: STRIPE_ENABLED });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load wallet' });
+  }
+});
+
+// Top up coins. In dev mode (no Stripe keys configured) coins are granted
+// instantly so the gifting/subscription economy is fully testable. Once
+// STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET are set, this creates a real
+// Checkout session instead and coins are granted by the webhook above.
+app.post('/api/wallet/topup', authenticate, requireAuth, async (req, res) => {
+  try {
+    const coins = Math.min(10000, Math.max(1, parseInt(req.body.coins, 10) || 0));
+    if (!coins) return res.status(400).json({ error: 'coins must be a positive number' });
+
+    if (STRIPE_ENABLED) {
+      const priceUsd = (coins / 100).toFixed(2); // 100 coins = $1
+      const session = await stripeClient.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [{
+          price_data: {
+            currency: 'usd',
+            product_data: { name: `${coins} iKHWEZI Coins` },
+            unit_amount: Math.round(priceUsd * 100),
+          },
+          quantity: 1,
+        }],
+        metadata: { userId: req.user.id, coins: String(coins) },
+        success_url: `${FRONTEND_URL}/profile/${req.user.id}?topup=success`,
+        cancel_url: `${FRONTEND_URL}/profile/${req.user.id}?topup=cancelled`,
+      });
+      return res.json({ checkoutUrl: session.url, devMode: false });
+    }
+
+    // Dev-mode instant grant — blocked in production to prevent free unlimited coins.
+    if (IS_PRODUCTION) {
+      return res.status(503).json({ error: 'Payment processor not configured' });
+    }
+
+    const wallet = await getOrCreateWallet(req.user.id);
+    wallet.coins += coins;
+    await wallet.save();
+    res.json({ coins: wallet.coins, devMode: true });
+  } catch (err) {
+    console.error('Wallet topup error:', err);
+    res.status(500).json({ error: 'Failed to top up wallet' });
+  }
+});
+
+// Send a gift — spends coins, credits the recipient's creator points, and
+// broadcasts the moment in real-time (used by the Live chat + DM gift button).
+app.post('/api/wallet/gift', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+  try {
+    const { toUserId, giftId, roomId } = req.body;
+    const gift = GIFT_CATALOG[giftId];
+    if (!gift) return res.status(400).json({ error: 'Unknown gift' });
+    if (!toUserId || toUserId === req.user.id) return res.status(400).json({ error: 'Invalid recipient' });
+
+    const recipient = await User.findByPk(toUserId);
+    if (!recipient) return res.status(404).json({ error: 'Recipient not found' });
+
+    const wallet = await getOrCreateWallet(req.user.id);
+    if (wallet.coins < gift.coins) {
+      return res.status(402).json({ error: 'Not enough coins', coins: wallet.coins, required: gift.coins });
+    }
+    wallet.coins -= gift.coins;
+    await wallet.save();
+
+    let creatorPoints = await Points.findOne({ where: { creatorId: toUserId } });
+    if (!creatorPoints) {
+      creatorPoints = await Points.create({ creatorId: toUserId, totalPoints: gift.coins, lifetimePoints: gift.coins });
+    } else {
+      creatorPoints.totalPoints += gift.coins;
+      creatorPoints.lifetimePoints += gift.coins;
+      await creatorPoints.save();
+    }
+
+    await GiftLog.create({ fromUserId: req.user.id, toUserId, giftId, coins: gift.coins, roomId: roomId || null });
+
+    const payload = {
+      fromUserId: req.user.id,
+      fromUsername: req.user.username,
+      toUserId,
+      giftId,
+      char: gift.char,
+      label: gift.label,
+      coins: gift.coins,
+      timestamp: new Date(),
+    };
+    io.to(`user_${toUserId}`).emit('gift-received', payload);
+    if (roomId) io.to(roomId).emit('gift-received', payload);
+
+    res.json({ sent: true, coinsRemaining: wallet.coins, ...payload });
+  } catch (err) {
+    console.error('Gift error:', err);
+    res.status(500).json({ error: 'Failed to send gift' });
+  }
+});
+
+// Live gifts always target the current broadcasting admin — resolved
+// server-side so the client never has to (and can't spoof) the recipient.
+app.post('/api/live/gift', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+  try {
+    const { giftId } = req.body;
+    const gift = GIFT_CATALOG[giftId];
+    if (!gift) return res.status(400).json({ error: 'Unknown gift' });
+
+    const admin = await User.findOne({ where: { isAdmin: true } });
+    if (!admin) return res.status(404).json({ error: 'No live host configured' });
+    if (admin.id === req.user.id) return res.status(400).json({ error: 'Cannot gift yourself' });
+
+    const wallet = await getOrCreateWallet(req.user.id);
+    if (wallet.coins < gift.coins) {
+      return res.status(402).json({ error: 'Not enough coins', coins: wallet.coins, required: gift.coins });
+    }
+    wallet.coins -= gift.coins;
+    await wallet.save();
+
+    let creatorPoints = await Points.findOne({ where: { creatorId: admin.id } });
+    if (!creatorPoints) {
+      creatorPoints = await Points.create({ creatorId: admin.id, totalPoints: gift.coins, lifetimePoints: gift.coins });
+    } else {
+      creatorPoints.totalPoints += gift.coins;
+      creatorPoints.lifetimePoints += gift.coins;
+      await creatorPoints.save();
+    }
+
+    await GiftLog.create({ fromUserId: req.user.id, toUserId: admin.id, giftId, coins: gift.coins, roomId: 'live-stream' });
+
+    const payload = {
+      fromUserId: req.user.id,
+      fromUsername: req.user.username,
+      toUserId: admin.id,
+      giftId,
+      char: gift.char,
+      label: gift.label,
+      coins: gift.coins,
+      timestamp: new Date(),
+    };
+    io.to('live-stream').emit('gift-received', payload);
+    io.to(`user_${admin.id}`).emit('gift-received', payload);
+
+    res.json({ sent: true, coinsRemaining: wallet.coins, ...payload });
+  } catch (err) {
+    console.error('Live gift error:', err);
+    res.status(500).json({ error: 'Failed to send gift' });
+  }
+});
+
+app.get('/api/users/:id/subscription', authenticate, requireAuth, async (req, res) => {
+  try {
+    const sub = await Subscription.findOne({
+      where: { subscriberId: req.user.id, creatorId: req.params.id, expiresAt: { [Op.gt]: new Date() } },
+      order: [['expiresAt', 'DESC']],
+    });
+    res.json({ active: !!sub, expiresAt: sub?.expiresAt || null, tier: sub?.tier || null, costPerMonth: SUBSCRIPTION_COST_PER_MONTH });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load subscription' });
+  }
+});
+
+app.post('/api/users/:id/subscribe', authenticate, requireAuth, async (req, res) => {
+  try {
+    const creatorId = req.params.id;
+    if (creatorId === req.user.id) return res.status(400).json({ error: 'Cannot subscribe to yourself' });
+    const creator = await User.findByPk(creatorId);
+    if (!creator) return res.status(404).json({ error: 'Creator not found' });
+
+    const months = Math.max(1, parseInt(req.body.months) || 1);
+    const cost = SUBSCRIPTION_COST_PER_MONTH * months;
+
+    const wallet = await getOrCreateWallet(req.user.id);
+    if (wallet.coins < cost) {
+      return res.status(402).json({ error: 'Not enough coins', coins: wallet.coins, required: cost });
+    }
+    wallet.coins -= cost;
+    await wallet.save();
+
+    const existing = await Subscription.findOne({
+      where: { subscriberId: req.user.id, creatorId, expiresAt: { [Op.gt]: new Date() } },
+    });
+    const base = existing ? new Date(existing.expiresAt) : new Date();
+    const expiresAt = new Date(base.setMonth(base.getMonth() + months));
+
+    let sub;
+    if (existing) {
+      existing.expiresAt = expiresAt;
+      await existing.save();
+      sub = existing;
+    } else {
+      sub = await Subscription.create({ subscriberId: req.user.id, creatorId, expiresAt });
+    }
+
+    let creatorPoints = await Points.findOne({ where: { creatorId } });
+    if (!creatorPoints) {
+      creatorPoints = await Points.create({ creatorId, totalPoints: cost, lifetimePoints: cost });
+    } else {
+      creatorPoints.totalPoints += cost;
+      creatorPoints.lifetimePoints += cost;
+      await creatorPoints.save();
+    }
+
+    io.to(`user_${creatorId}`).emit('new-subscriber', {
+      subscriberId: req.user.id,
+      username: req.user.username,
+      months,
+      timestamp: new Date(),
+    });
+
+    res.json({ subscribed: true, expiresAt: sub.expiresAt, coinsRemaining: wallet.coins });
+  } catch (err) {
+    console.error('Subscribe error:', err);
+    res.status(500).json({ error: 'Failed to subscribe' });
   }
 });
 
@@ -970,7 +1425,7 @@ app.get('/api/live/status', async (req, res) => {
       title: liveStatus.title,
       viewerCount: liveStatus.viewerCount,
       startedAt: liveStatus.startedAt,
-      streamKey: liveStatus.streamKey,
+      hlsUrl: liveStatus.isLive ? buildPublicHlsUrl(liveStatus.streamKey) : null,
     });
   } catch (err) {
     console.error('Live status error:', err);
@@ -1470,9 +1925,41 @@ app.get('/api/posts', authenticate, async (req, res) => {
       limit: parseInt(limit),
       offset: parseInt(offset),
     });
-    res.json(posts);
+    let liked = new Set();
+    if (req.user) {
+      const myLikes = await PostLike.findAll({ where: { userId: req.user.id, postId: posts.map((p) => p.id) } });
+      liked = new Set(myLikes.map((l) => l.postId));
+    }
+    res.json(posts.map((p) => ({ ...p.toJSON(), isLiked: liked.has(p.id) })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to load posts' });
+  }
+});
+
+app.post('/api/posts/:id/like', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+  try {
+    const post = await TextPost.findByPk(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+
+    const existing = await PostLike.findOne({ where: { userId: req.user.id, postId: post.id } });
+    if (existing) {
+      await existing.destroy();
+      post.likeCount = Math.max(0, post.likeCount - 1);
+      await post.save();
+      return res.json({ liked: false, likeCount: post.likeCount });
+    }
+
+    await PostLike.create({ userId: req.user.id, postId: post.id });
+    post.likeCount += 1;
+    await post.save();
+    res.json({ liked: true, likeCount: post.likeCount });
+  } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      const post = await TextPost.findByPk(req.params.id);
+      return res.json({ liked: true, likeCount: post?.likeCount || 0 });
+    }
+    console.error('Post like error:', err);
+    res.status(500).json({ error: 'Like failed' });
   }
 });
 
@@ -1544,6 +2031,7 @@ app.delete('/api/videos/:id', authenticate, requireAuth, async (req, res) => {
 
 // Auto-triggered by nginx-rtmp when OBS starts streaming
 app.post('/api/live/on-publish', async (req, res) => {
+  if (!requireRtmpWebhook(req, res)) return;
   try {
     let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
     if (!liveStatus) {
@@ -1565,6 +2053,7 @@ app.post('/api/live/on-publish', async (req, res) => {
 
 // Auto-triggered by nginx-rtmp when OBS stops streaming
 app.post('/api/live/on-publish-done', async (req, res) => {
+  if (!requireRtmpWebhook(req, res)) return;
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
     if (liveStatus) {
@@ -1715,7 +2204,7 @@ app.delete('/api/admin/videos/:id', requireAdmin, async (req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'email', 'phone', 'username', 'displayName', 'isCreator', 'isBanned', 'lastActive', 'createdAt'],
+      attributes: ['id', 'email', 'phone', 'username', 'displayName', 'isCreator', 'isAdmin', 'isBanned', 'lastActive', 'createdAt'],
       include: [{ model: Points, as: 'points', attributes: ['totalPoints', 'lifetimePoints'] }],
       order: [['createdAt', 'DESC']]
     });
@@ -1735,6 +2224,24 @@ app.patch('/api/admin/users/:id/ban', requireAdmin, async (req, res) => {
     
     await logAudit(user.isBanned ? 'USER_BANNED' : 'USER_UNBANNED', { userId: user.id, username: user.username }, req.ip);
     res.json({ isBanned: user.isBanned });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Grant/revoke broadcast (Go Live) rights — the app's single-admin model:
+// only users flagged isAdmin are permitted to broadcast, gated here behind
+// the same secret ADMIN_KEY used for the rest of the admin panel.
+app.patch('/api/admin/users/:id/admin', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    user.isAdmin = !user.isAdmin;
+    await user.save();
+
+    await logAudit(user.isAdmin ? 'USER_MADE_ADMIN' : 'USER_REVOKED_ADMIN', { userId: user.id, username: user.username }, req.ip);
+    res.json({ isAdmin: user.isAdmin });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update user' });
   }
@@ -1812,7 +2319,7 @@ app.get('/api/health', (req, res) => {
 // ==================== V3 INSTAGRAM ROUTES ====================
 
 // V3 POST/FEED ROUTES
-app.post('/api/v3/posts', authenticate, requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/v3/posts', authenticate, requireAuth, imageUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image file required' });
@@ -1846,11 +2353,14 @@ app.post('/api/v3/auth/login', authRateLimit, async (req, res) => {
     const { username, email, phone, password } = req.body;
     if (!password) return res.status(400).json({ error: 'Password required' });
 
-    const whereClause = username
-      ? { username }
-      : email ? { email } : { phone };
+    const identifier = username || email || phone;
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+      return res.status(400).json({ error: 'Username, email or phone required' });
+    }
 
-    if (!whereClause) return res.status(400).json({ error: 'Username, email or phone required' });
+    const whereClause = username
+      ? { username: username.trim() }
+      : email ? { email: email.trim() } : { phone: phone.trim() };
 
     const user = await User.findOne({ where: whereClause });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
@@ -1916,12 +2426,13 @@ app.get('/api/v3/auth/me', authenticate, requireAuth, async (req, res) => {
   });
 });
 
-// V3 DEBUG SEED ENDPOINT (Creates test data if none exists)
+// V3 DEBUG SEED ENDPOINT — development only; never mount in production.
+if (!IS_PRODUCTION) {
 app.get('/api/v3/debug/seed', async (req, res) => {
   try {
     const { key } = req.query;
-    if (key !== 'ikhwezi-seed-2024') {
-      return res.status(403).json({ error: 'Invalid key', received: key });
+    if (key !== ADMIN_KEY) {
+      return res.status(403).json({ error: 'Invalid key' });
     }
 
     let user = await User.findOne({ where: { username: 'creator' } });
@@ -1969,6 +2480,7 @@ app.get('/api/v3/debug/seed', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+}
 
 app.get('/api/v3/feed', authenticate, async (req, res) => {
   try {
@@ -2020,12 +2532,12 @@ app.post('/api/v3/livestream/start', requireAdmin, async (req, res) => {
       await liveStatus.save();
     }
     
-    // Emit live start event
+    // Emit live start event — never broadcast streamKey to all clients.
     io.emit('livestream-started', {
       title,
       viewerCount: 0,
       startedAt: liveStatus.startedAt,
-      streamKey: liveStatus.streamKey
+      hlsUrl: buildPublicHlsUrl(liveStatus.streamKey),
     });
     
     res.json({
@@ -2033,7 +2545,9 @@ app.post('/api/v3/livestream/start', requireAdmin, async (req, res) => {
       isLive: true,
       title,
       streamKey: liveStatus.streamKey,
-      rtmpUrl: `rtmp://13.62.54.198/live/${liveStatus.streamKey}`
+      rtmpUrl: process.env.RTMP_HOST
+        ? `${process.env.RTMP_HOST.replace(/\/$/, '')}/${liveStatus.streamKey}`
+        : null,
     });
   } catch (err) {
     console.error('Livestream start error:', err);
@@ -2087,8 +2601,7 @@ app.get('/api/v3/livestream/status', async (req, res) => {
       title: liveStatus.title || 'iKHWEZI Live',
       viewerCount: liveStatus.viewerCount,
       startedAt: liveStatus.startedAt,
-      streamKey: liveStatus.streamKey,
-      hlsUrl: `http://13.62.54.198:8081/hls/${liveStatus.streamKey}/index.m3u8`
+      hlsUrl: liveStatus.isLive ? buildPublicHlsUrl(liveStatus.streamKey) : null,
     });
   } catch (err) {
     console.error('V3 Livestream status error:', err);
@@ -2195,6 +2708,15 @@ io.on('connection', (socket) => {
       username,
       timestamp: new Date()
     });
+  });
+
+  // WebRTC 1:1 voice/video call signaling — a thin relay. The client packs
+  // { toUserId, type: 'invite'|'accept'|'reject'|'offer'|'answer'|'ice-candidate'|'end', payload, from }
+  // and we forward it verbatim to the target user's personal room.
+  socket.on('call-signal', (data) => {
+    const { toUserId } = data || {};
+    if (!toUserId) return;
+    io.to(`user_${toUserId}`).emit('call-signal', { ...data, timestamp: new Date() });
   });
 
   socket.on('disconnect', () => {
@@ -2320,6 +2842,26 @@ const enforceInteractionUniqueness = async () => {
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_stars_user_video ON "Stars"("userId", "videoId")');
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_storyviews_story_viewer ON "StoryViews"("storyId", "viewerId")');
 };
+
+// Serve the built frontend, if present — registered last, after every /api
+// route above, so it only ever catches real SPA navigation paths. It used to
+// sit near the top of the file (before the API routes were even defined),
+// which meant it silently swallowed every GET /api/* request and returned
+// index.html instead of JSON — broken feeds, live status, profiles, wallet,
+// everything. Moving it here (and still guarding /api + /storage) fixes that
+// for good, in both local dev and production.
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/storage/')) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const indexPath = path.join(frontendDist, 'index.html');
+    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+    return res.status(404).json({ error: 'Not found' });
+  });
+}
 
 const initialize = async () => {
   try {

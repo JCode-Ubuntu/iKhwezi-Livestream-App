@@ -14,7 +14,7 @@ function UltimaLoading() {
           <p className="ultima-serif text-sm text-white/50">Stream the night</p>
         </div>
         <div className="ultima-loader-bar h-0.5 w-32 overflow-hidden rounded-full bg-white/10">
-          <div className="ultima-loader-fill h-full w-1/3 rounded-full bg-gradient-to-r from-gold-400 via-plasma-400 to-violet-400" />
+          <div className="ultima-loader-fill h-full w-1/3 rounded-full bg-gradient-to-r from-gold-400 via-pink-500 to-pink-300" />
         </div>
       </div>
     </div>

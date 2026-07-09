@@ -10,9 +10,9 @@ export default {
       },
       colors: {
         void: {
-          950: '#030014',
-          900: '#0a0618',
-          850: '#12082a',
+          950: '#0A0A0A',
+          900: '#0D0F1A',
+          850: '#12141F',
         },
         gold: {
           200: '#fde68a',
@@ -20,6 +20,13 @@ export default {
           400: '#EAB308',
           500: '#D4A012',
           600: '#B8860B',
+        },
+        pink: {
+          300: '#F7A8C0',
+          400: '#F0568F',
+          500: '#E1306C',
+          600: '#B91C58',
+          700: '#8F1442',
         },
         plasma: {
           300: '#67e8f9',
@@ -32,25 +39,26 @@ export default {
           600: '#7C3AED',
         },
         cosmic: {
-          950: '#020617',
-          900: '#0f172a',
-          850: '#0c1222',
+          950: '#0A0A0A',
+          900: '#12141F',
+          850: '#161826',
         },
         neon: {
           indigo: '#6366f1',
           purple: '#a855f7',
           cyan: '#22d3ee',
+          pink: '#E1306C',
         },
       },
       boxShadow: {
-        glass: '0 0 40px rgba(99, 102, 241, 0.35)',
-        'glass-strong': '0 0 56px rgba(168, 85, 247, 0.45)',
-        'neon-ring': '0 0 0 1px rgba(255,255,255,0.1), 0 0 32px rgba(99, 102, 241, 0.4)',
-        'ultima-glow': '0 0 60px rgba(245, 197, 66, 0.2), 0 0 120px rgba(139, 92, 246, 0.15)',
+        glass: '0 0 40px rgba(225, 48, 108, 0.28)',
+        'glass-strong': '0 0 56px rgba(225, 48, 108, 0.4)',
+        'neon-ring': '0 0 0 1px rgba(255,255,255,0.1), 0 0 32px rgba(225, 48, 108, 0.35)',
+        'ultima-glow': '0 0 60px rgba(245, 197, 66, 0.2), 0 0 120px rgba(225, 48, 108, 0.16)',
       },
       backgroundImage: {
         'cosmic-gradient':
-          'linear-gradient(to bottom right, #030014 0%, rgba(139, 92, 246, 0.2) 45%, #030014 100%)',
+          'linear-gradient(to bottom right, #0A0A0A 0%, rgba(225, 48, 108, 0.16) 45%, #0A0A0A 100%)',
         shimmer:
           'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%)',
       },

@@ -1,22 +1,42 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Radio, Users, ArrowLeft, RefreshCw, WifiOff, Camera, FlipHorizontal, X, Video as VideoIcon, MessageCircle } from 'lucide-react';
+import {
+  Radio, Users, ArrowLeft, RefreshCw, WifiOff, MessageCircle,
+  Volume2, VolumeX, Gift, Crown, Send, X, Coins,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import UltimaField from '../ultima/UltimaField';
 import ReactionsBar from '../components/ReactionsBar';
-import GlassCard from '../components/GlassCard';
-import Stories from '../components/Stories';
 import GuestPrompt from '../components/GuestPrompt';
 import { useAnimatedInteger } from '../hooks/useAnimatedInteger';
 
+const GIFT_ICONS = { rose: '🌹', gem: '💎', crown: '👑', star: '🌟' };
+
+function FlyingReaction({ char }) {
+  const left = 8 + Math.random() * 80;
+  const drift = (Math.random() - 0.5) * 90;
+  const size = 26 + Math.random() * 14;
+  return (
+    <span
+      className="ik-flying-heart absolute"
+      style={{ left: `${left}%`, fontSize: size, '--drift': `${drift}px` }}
+    >
+      {char}
+    </span>
+  );
+}
+
 function Live() {
   const navigate = useNavigate();
-  const { fetchWithAuth, user, isGuest, trackGuestInteraction } = useAuth();
+  const { fetchWithAuth, user, isGuest, trackGuestInteraction, showToast } = useAuth();
   const { socket, joinRoom, leaveRoom, sendChatMessage, sendReaction } = useSocket();
   const videoRef = useRef(null);
   const wrapRef = useRef(null);
   const hlsRef = useRef(null);
+  const activeHlsUrlRef = useRef(null);
+  const hasJoinedRef = useRef(false);
+  const reactionTimersRef = useRef([]);
   const [liveStatus, setLiveStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,17 +46,16 @@ function Live() {
   const [chatMessages, setChatMessages] = useState([]);
   const [reactions, setReactions] = useState([]);
   const [showChat, setShowChat] = useState(false);
+  const [showGifts, setShowGifts] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [stories, setStories] = useState([]);
-  const [showStories, setShowStories] = useState(false);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
-  const [showCameraPreview, setShowCameraPreview] = useState(false);
-  const [facingMode, setFacingMode] = useState('user');
-  const cameraRef = useRef(null);
-  const streamRef = useRef(null);
+  const [muted, setMuted] = useState(false);
+  const [wallet, setWallet] = useState(null);
+  const [giftCatalog, setGiftCatalog] = useState(null);
+  const [sendingGift, setSendingGift] = useState(null);
 
-  const HLS_URL = liveStatus?.streamKey
-    ? `${window.location.origin}/hls/${liveStatus.streamKey}.m3u8`
+  const HLS_URL = liveStatus?.hlsUrl
+    ? (liveStatus.hlsUrl.startsWith('http') ? liveStatus.hlsUrl : `${window.location.origin}${liveStatus.hlsUrl}`)
     : `${window.location.origin}/hls/stream.m3u8`;
 
   const displayViewers = useAnimatedInteger(viewerCount, 450);
@@ -46,39 +65,71 @@ function Live() {
     const interval = setInterval(checkLiveStatus, 5000);
     return () => {
       clearInterval(interval);
+      reactionTimersRef.current.forEach(clearTimeout);
+      reactionTimersRef.current = [];
       if (hlsRef.current) {
         hlsRef.current.destroy();
+        hlsRef.current = null;
       }
+      activeHlsUrlRef.current = null;
+      hasJoinedRef.current = false;
       leaveLive();
     };
   }, []);
 
   useEffect(() => {
     if (socket) {
-      // Join the live room
       joinRoom('live-stream');
 
-      // Listen for chat messages
       socket.on('chat-message', (message) => {
-        setChatMessages(prev => [...prev.slice(-49), message]); // Keep last 50 messages
+        setChatMessages((prev) => [...prev.slice(-49), message]);
       });
 
-      // Listen for reactions
       socket.on('reaction', (reaction) => {
-        setReactions(prev => [...prev.slice(-9), reaction]); // Keep last 10 reactions
-        // Auto-remove reaction after animation
-        setTimeout(() => {
-          setReactions(prev => prev.filter(r => r !== reaction));
-        }, 3000);
+        const rid = `${reaction.timestamp || Date.now()}-${Math.random()}`;
+        setReactions((prev) => [...prev.slice(-11), { ...reaction, rid }]);
+        const t1 = setTimeout(() => {
+          setReactions((prev) => prev.filter((r) => r.rid !== rid));
+        }, 3200);
+        reactionTimersRef.current.push(t1);
+      });
+
+      socket.on('gift-received', (gift) => {
+        const rid = `gift-${gift.timestamp || Date.now()}-${Math.random()}`;
+        const burst = Math.min(6, Math.max(1, Math.round(gift.coins / 60)));
+        for (let i = 0; i < burst; i += 1) {
+          const tBurst = setTimeout(() => {
+            const brid = `${rid}-${i}`;
+            setReactions((prev) => [...prev.slice(-11), { reaction: gift.char, rid: brid }]);
+            const tFade = setTimeout(() => setReactions((prev) => prev.filter((r) => r.rid !== brid)), 3200);
+            reactionTimersRef.current.push(tFade);
+          }, i * 120);
+          reactionTimersRef.current.push(tBurst);
+        }
+        setChatMessages((prev) => [...prev.slice(-49), {
+          id: rid,
+          isGift: true,
+          username: gift.fromUsername,
+          message: `sent ${gift.char} ${gift.label} (${gift.coins} coins)`,
+        }]);
       });
 
       return () => {
         socket.off('chat-message');
         socket.off('reaction');
+        socket.off('gift-received');
         leaveRoom('live-stream');
       };
     }
   }, [socket]);
+
+  useEffect(() => {
+    if (!user || isGuest) return;
+    fetchWithAuth('/wallet/me').then((r) => r.json()).then((data) => {
+      setWallet(data.coins ?? 0);
+      setGiftCatalog(data.giftCatalog || null);
+    }).catch(() => {});
+  }, [user, isGuest, fetchWithAuth]);
 
   const checkLiveStatus = async () => {
     try {
@@ -88,10 +139,21 @@ function Live() {
       setViewerCount(data.viewerCount || 0);
 
       if (data.isLive && videoRef.current) {
-        const hlsUrl = data.streamKey
-          ? `${window.location.origin}/hls/${data.streamKey}.m3u8`
+        const hlsUrl = data.hlsUrl
+          ? (data.hlsUrl.startsWith('http') ? data.hlsUrl : `${window.location.origin}${data.hlsUrl}`)
           : `${window.location.origin}/hls/stream.m3u8`;
-        initHls(hlsUrl);
+        if (activeHlsUrlRef.current !== hlsUrl) {
+          activeHlsUrlRef.current = hlsUrl;
+          hasJoinedRef.current = false;
+          initHls(hlsUrl);
+        }
+      } else if (!data.isLive) {
+        activeHlsUrlRef.current = null;
+        hasJoinedRef.current = false;
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
       }
     } catch (err) {
       console.error('Failed to check live status:', err);
@@ -116,15 +178,34 @@ function Live() {
     sendReaction('live-stream', reaction, user.id, user.username || user.displayName);
   };
 
-  const handleDuetRequest = () => {
-    if (user) {
-      requestDuet('live-stream', user.id, user.username || user.displayName);
+  const handleSendGift = async (giftId, gift) => {
+    if (isGuest || !user) {
+      trackGuestInteraction();
+      setShowUpgradePrompt(true);
+      return;
     }
-  };
-
-  const handleCoHostRequest = () => {
-    if (user) {
-      inviteCoHost('live-stream', user.id, user.username || user.displayName);
+    if (wallet !== null && wallet < gift.coins) {
+      showToast?.(`Not enough coins — need ${gift.coins}, you have ${wallet}`, 'error');
+      return;
+    }
+    setSendingGift(giftId);
+    try {
+      const res = await fetchWithAuth('/live/gift', {
+        method: 'POST',
+        body: JSON.stringify({ giftId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast?.(data.error || 'Failed to send gift', 'error');
+        return;
+      }
+      setWallet(data.coinsRemaining);
+      showToast?.(`${gift.char} Sent ${gift.label}!`, 'success');
+      setShowGifts(false);
+    } catch {
+      showToast?.('Failed to send gift', 'error');
+    } finally {
+      setSendingGift(null);
     }
   };
 
@@ -149,7 +230,10 @@ function Live() {
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         videoRef.current.play().catch(() => {});
-        joinLive();
+        if (!hasJoinedRef.current) {
+          hasJoinedRef.current = true;
+          joinLive();
+        }
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -175,8 +259,11 @@ function Live() {
       videoRef.current.src = url;
       videoRef.current.addEventListener('loadedmetadata', () => {
         videoRef.current.play().catch(() => {});
-        joinLive();
-      });
+        if (!hasJoinedRef.current) {
+          hasJoinedRef.current = true;
+          joinLive();
+        }
+      }, { once: true });
     }
   };
 
@@ -204,43 +291,12 @@ function Live() {
     checkLiveStatus();
   };
 
-  const startCameraPreview = async (facing) => {
-    try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (cameraRef.current) {
-        cameraRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      console.error('Camera error:', err);
-    }
-  };
-
-  const stopCameraPreview = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    setShowCameraPreview(false);
-  };
-
-  const flipCamera = () => {
-    const next = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(next);
-    startCameraPreview(next);
-  };
-
-  const handleGoLive = () => {
-    if (isGuest) { trackGuestInteraction(); setShowUpgradePrompt(true); return; }
-    setFacingMode('user');
-    setShowCameraPreview(true);
-    setTimeout(() => startCameraPreview('user'), 50);
+  const toggleMute = () => {
+    setMuted((m) => {
+      const next = !m;
+      if (videoRef.current) videoRef.current.muted = next;
+      return next;
+    });
   };
 
   const onWheelZoom = useCallback((e) => {
@@ -283,14 +339,14 @@ function Live() {
           <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 shadow-neon-ring">
             <WifiOff className="h-12 w-12 text-white/40" />
           </div>
-          <h2 className="mb-2 text-3xl font-black tracking-tight text-glow-neon">No Live Stream</h2>
+          <h2 className="ultima-text-glow mb-2 font-display text-3xl font-black tracking-tight text-white">No Live Stream</h2>
           <p className="text-lg leading-relaxed text-white/65">
-            The creator is not currently streaming. Check back soon for live content!
+            The admin isn't broadcasting right now. Check back soon — or catch up on replays.
           </p>
           <button
             type="button"
             onClick={handleRetry}
-            className="btn btn-primary mx-auto mt-6"
+            className="ultima-btn-supreme mx-auto mt-6 flex items-center gap-2 rounded-2xl px-6 py-3.5 text-sm"
           >
             <RefreshCw size={18} />
             Check Again
@@ -298,8 +354,8 @@ function Live() {
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="btn btn-ghost mx-auto mt-3 w-full max-w-xs"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, color: 'rgba(255,255,255,0.75)' }}
+            className="ik-tap-spring mx-auto mt-3 flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-semibold text-white/70"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
           >
             <ArrowLeft size={18} />
             Back to Feed
@@ -316,7 +372,7 @@ function Live() {
       <UltimaField intensity={0.25} fixed />
 
       <div className="ultima-content flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Header — in normal flow so it never overlaps video */}
+      {/* Header */}
       <div
         className="relative z-20 flex items-center justify-between px-4"
         style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: '0.5rem' }}
@@ -324,7 +380,7 @@ function Live() {
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-white/75 transition-transform active:scale-95"
+          className="ik-tap-spring flex h-10 w-10 items-center justify-center rounded-full text-white/75"
           style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)' }}
           aria-label="Back"
         >
@@ -342,14 +398,21 @@ function Live() {
             <span className="text-xs font-bold text-white">LIVE</span>
           </div>
 
-          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 font-semibold text-white shadow-glass backdrop-blur-xl">
+          <div className="ik-sparkle flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 font-semibold text-white shadow-glass backdrop-blur-xl">
             <Users size={14} />
             <span className="text-xs tabular-nums">{displayViewers}</span>
           </div>
         </div>
       </div>
 
-      {/* Video — fixed height so controls sit below it */}
+      <div className="relative z-20 -mt-1 flex items-center gap-1.5 px-4 pb-2">
+        <span className="ultima-glass-gold flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gold-200">
+          <Crown size={12} className="fill-gold-300 text-gold-300" />
+          iKHWEZI · Admin
+        </span>
+      </div>
+
+      {/* Video */}
       <div
         ref={wrapRef}
         className="relative w-full overflow-hidden bg-black"
@@ -363,24 +426,23 @@ function Live() {
           className="h-full w-full bg-black object-contain transition-transform duration-200 ease-out"
           style={{ transform: `scale(${zoom})` }}
           playsInline
-          controls
           autoPlay
+          muted={muted}
         />
 
-        {/* Reaction Particles */}
-        <div className="absolute inset-0 pointer-events-none">
-          {reactions.map((reaction, index) => (
-            <div
-              key={`${reaction.timestamp}-${index}`}
-              className="absolute animate-bounce text-4xl"
-              style={{
-                left: `${Math.random() * 80 + 10}%`,
-                top: `${Math.random() * 80 + 10}%`,
-                animationDelay: `${Math.random() * 0.5}s`,
-              }}
-            >
-              {reaction.reaction}
-            </div>
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-label={muted ? 'Unmute' : 'Mute'}
+          className="ik-tap-spring absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full text-white"
+          style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
+        >
+          {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+        </button>
+
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {reactions.map((reaction) => (
+            <FlyingReaction key={reaction.rid} char={reaction.reaction} />
           ))}
         </div>
       </div>
@@ -389,14 +451,14 @@ function Live() {
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/90">
           <WifiOff size={48} className="text-red-500" />
           <p className="text-white/70">{error}</p>
-          <button type="button" onClick={handleRetry} className="btn btn-primary">
+          <button type="button" onClick={handleRetry} className="ultima-btn-supreme rounded-2xl px-6 py-3 text-sm">
             <RefreshCw size={18} />
             Retry
           </button>
         </div>
       )}
 
-      {/* Controls panel — scrollable, clears floating nav */}
+      {/* Controls panel */}
       <div
         className="ultima-page ultima-page--flush flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-black/95 px-4 pt-3"
         style={{
@@ -414,71 +476,29 @@ function Live() {
           />
         </div>
 
-        {/* Action Buttons */}
         <div className="flex flex-wrap justify-center gap-2">
           <button
             type="button"
-            onClick={() => setShowChat((value) => !value)}
-            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition-transform active:scale-95"
+            onClick={() => setShowChat(true)}
+            className="ik-tap-spring flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white"
           >
             <MessageCircle size={14} />
-            {showChat ? 'Hide Comments' : 'Comments'}
-          </button>
-          <button
-            onClick={handleDuetRequest}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition-transform active:scale-95"
-          >
-            🎬 Duet
-          </button>
-          <button
-            onClick={handleCoHostRequest}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white transition-transform active:scale-95"
-          >
-            👥 Co-Host
+            Chat
+            {chatMessages.length > 0 && (
+              <span className="rounded-full bg-pink-500 px-1.5 py-0.5 text-[10px] font-bold">{chatMessages.length}</span>
+            )}
           </button>
           <button
             type="button"
-            onClick={handleGoLive}
-            className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-600/80 px-4 py-2 text-white transition-transform active:scale-95"
+            onClick={() => setShowGifts(true)}
+            className="ik-tap-spring flex items-center gap-1.5 rounded-full border border-gold-400/30 bg-gold-500/12 px-4 py-2 text-gold-200"
           >
-            <VideoIcon size={14} />
-            Go Live
+            <Gift size={14} />
+            Send Gift
           </button>
         </div>
 
-        {/* Chat Panel */}
-        {showChat && (
-          <div className="max-h-56 overflow-hidden rounded-lg border border-white/10 bg-black/60 backdrop-blur-xl">
-            <div className="max-h-40 overflow-y-auto p-3">
-              {chatMessages.map((msg, index) => (
-                <div key={index} className="mb-2 text-sm">
-                  <span className="font-semibold text-blue-400">{msg.username}:</span>{' '}
-                  <span className="text-white">{msg.message}</span>
-                </div>
-              ))}
-            </div>
-            {user && (
-              <div className="flex gap-2 border-t border-white/10 p-3">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendChat()}
-                  placeholder="Type a message..."
-                  className="flex-1 rounded border border-white/10 bg-black/40 px-3 py-1 text-white placeholder-white/50"
-                />
-                <button
-                  onClick={handleSendChat}
-                  className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700"
-                >
-                  Send
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        <GlassCard className="border-white/10 !bg-black/45 px-4 py-3" neon="low">
+        <div className="ultima-glass rounded-[20px] px-4 py-3">
           <h2 className="text-xl font-black tracking-tight text-white">
             {liveStatus.title || 'Live Stream'}
           </h2>
@@ -486,98 +506,119 @@ function Live() {
             iKHWEZI Live •{' '}
             {liveStatus.startedAt ? new Date(liveStatus.startedAt).toLocaleTimeString() : 'recently'}
           </p>
-        </GlassCard>
+        </div>
       </div>
 
-      <Stories
-        isOpen={showStories}
-        onClose={() => setShowStories(false)}
-        stories={stories}
-      />
-
-      {showUpgradePrompt && (
-        <GuestPrompt 
-          onClose={() => setShowUpgradePrompt(false)} 
-          context="interaction"
+      {/* Sliding chat panel */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-[120] flex flex-col rounded-t-[28px] border-t border-white/10 bg-black/90 backdrop-blur-2xl transition-transform duration-[380ms]"
+        style={{
+          height: '62vh',
+          transform: showChat ? 'translateY(0)' : 'translateY(100%)',
+          boxShadow: '0 -20px 60px rgba(0,0,0,0.6)',
+        }}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <p className="font-display text-sm font-bold uppercase tracking-wider text-white/85">Live Chat</p>
+          <button
+            type="button"
+            onClick={() => setShowChat(false)}
+            className="ik-tap-spring flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white"
+            aria-label="Close chat"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {chatMessages.length === 0 && (
+            <p className="mt-6 text-center text-sm text-white/35">Be the first to say something ✨</p>
+          )}
+          {chatMessages.map((msg, index) => (
+            <div
+              key={msg.id || index}
+              className={`mb-2.5 text-sm ${msg.isGift ? 'rounded-xl border border-gold-400/25 bg-gold-500/10 px-2.5 py-1.5' : ''}`}
+            >
+              <span className={`font-semibold ${msg.isGift ? 'text-gold-300' : 'text-pink-400'}`}>{msg.username}</span>{' '}
+              <span className={msg.isGift ? 'text-gold-200/90' : 'text-white/90'}>{msg.isGift ? msg.message : `: ${msg.message}`}</span>
+            </div>
+          ))}
+        </div>
+        {user && (
+          <div
+            className="flex gap-2 border-t border-white/10 p-3"
+            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+          >
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
+              placeholder="Say something…"
+              className="ultima-input flex-1 rounded-2xl px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/30"
+            />
+            <button
+              type="button"
+              onClick={handleSendChat}
+              aria-label="Send"
+              className="ik-tap-spring flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-gold-500 text-white"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        )}
+      </div>
+      {showChat && (
+        <div
+          className="fixed inset-0 z-[110] bg-black/40"
+          onClick={() => setShowChat(false)}
         />
       )}
 
-      {/* Camera preview overlay for Go Live */}
-      {showCameraPreview && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 200,
-          background: '#000', display: 'flex', flexDirection: 'column',
-        }}>
-          <video
-            ref={cameraRef}
-            autoPlay
-            playsInline
-            muted
-            style={{
-              flex: 1, width: '100%', objectFit: 'cover',
-              transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
-            }}
-          />
-          {/* Camera controls overlay */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0,
-            padding: '16px',
-            paddingTop: 'max(16px, env(safe-area-inset-top))',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
-            <button
-              type="button"
-              onClick={stopCameraPreview}
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'white', cursor: 'pointer',
-              }}
-            >
-              <X size={20} />
-            </button>
-
-            <div style={{
-              background: 'rgba(239,68,68,0.9)', borderRadius: 20,
-              padding: '6px 14px', fontSize: 12, fontWeight: 700,
-              color: 'white', letterSpacing: 1,
-              boxShadow: '0 0 16px rgba(239,68,68,0.5)',
-            }}>
-              PREVIEW
+      {/* Gift picker sheet */}
+      {showGifts && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/50" onClick={() => setShowGifts(false)}>
+          <div
+            className="ultima-glass-supreme w-full max-w-md rounded-t-[28px] p-5"
+            style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-display text-sm font-bold uppercase tracking-widest text-gold-200">Send a Gift</p>
+              <span className="ultima-glass-gold flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-gold-200">
+                <Coins size={13} />
+                {wallet ?? '–'}
+              </span>
             </div>
-
-            <button
-              type="button"
-              onClick={flipCamera}
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'white', cursor: 'pointer',
-              }}
-            >
-              <FlipHorizontal size={20} />
-            </button>
-          </div>
-
-          {/* Bottom info */}
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            padding: '24px 20px',
-            paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
-            background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
-              <Camera size={14} />
-              {facingMode === 'user' ? 'Front camera' : 'Back camera'} — tap flip to switch
+            <div className="grid grid-cols-4 gap-3">
+              {Object.entries(giftCatalog || { rose: { coins: 10, char: '🌹', label: 'Rose' }, gem: { coins: 50, char: '💎', label: 'Gem' }, crown: { coins: 200, char: '👑', label: 'Crown' }, star: { coins: 500, char: '🌟', label: 'Supernova' } }).map(([id, gift]) => {
+                const canAfford = wallet === null || wallet >= gift.coins;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => handleSendGift(id, gift)}
+                    disabled={sendingGift === id || !canAfford}
+                    className={`ik-btn ik-btn-bouncy ultima-glass flex flex-col items-center gap-1.5 rounded-[20px] py-4 text-white ${!canAfford ? 'opacity-40' : ''}`}
+                  >
+                    <span className="text-3xl">{gift.char}</span>
+                    <span className="text-[10px] font-semibold text-white/70">{gift.label}</span>
+                    <span className="flex items-center gap-1 text-[9px] font-bold text-gold-300">
+                      <Coins size={9} />
+                      {gift.coins}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textAlign: 'center' }}>
-              To go live, use OBS Studio and stream to your server RTMP endpoint.
-            </p>
           </div>
         </div>
+      )}
+
+      {showUpgradePrompt && (
+        <GuestPrompt
+          onClose={() => setShowUpgradePrompt(false)}
+          context="interaction"
+        />
       )}
       </div>
     </div>

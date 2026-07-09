@@ -171,6 +171,11 @@ function Admin() {
     loadUsers();
   };
 
+  const toggleAdmin = async (id) => {
+    await fetchAdmin(`/admin/users/${id}/admin`, { method: 'PATCH' });
+    loadUsers();
+  };
+
   const loadAnalytics = async () => {
     const res = await fetchAdmin('/admin/analytics');
     const data = await res.json();
@@ -194,66 +199,37 @@ function Admin() {
 
   if (!isAuthenticated) {
     return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-        background: 'var(--bg-primary)',
-      }}>
-        <div style={{
-          width: 80,
-          height: 80,
-          borderRadius: 20,
-          background: 'linear-gradient(135deg, #6F4FFF, #4A2FCC)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 24,
-          boxShadow: '0 10px 40px rgba(111, 79, 255, 0.4)',
-        }}>
-          <Shield size={40} color="white" />
+      <div className="flex flex-1 flex-col items-center justify-center bg-void-950 px-6">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-pink-500 to-gold-500 shadow-[0_10px_40px_rgba(225,48,108,0.4)]">
+          <Shield size={40} className="text-white" />
         </div>
-        
-        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Admin Access</h1>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: 32 }}>Enter admin key to continue</p>
 
-        <form onSubmit={handleLogin} style={{ width: '100%', maxWidth: 320 }}>
-          <div style={{ position: 'relative', marginBottom: 16 }}>
-            <Key size={20} color="var(--text-muted)" style={{
-              position: 'absolute',
-              left: 16,
-              top: '50%',
-              transform: 'translateY(-50%)',
-            }} />
+        <h1 className="mb-2 font-display text-3xl font-black text-white">Admin Access</h1>
+        <p className="mb-8 text-sm text-white/45">Enter admin key to continue</p>
+
+        <form onSubmit={handleLogin} className="w-full max-w-[320px]">
+          <div className="ultima-glass mb-4 flex items-center gap-3 rounded-2xl px-4 py-3.5">
+            <Key size={18} className="shrink-0 text-gold-400/75" />
             <input
               type="password"
               value={adminKey}
               onChange={(e) => setAdminKey(e.target.value)}
-              placeholder="Admin Key"
-              className="input"
-              style={{ paddingLeft: 48 }}
+              placeholder="Admin key"
+              className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
               required
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-primary"
-            style={{ width: '100%', height: 52 }}
+            className="w-full rounded-2xl bg-gradient-to-r from-gold-400 via-amber-500 to-gold-600 py-4 font-display text-sm font-bold uppercase tracking-widest text-void-950 shadow-lg shadow-gold-500/25 transition active:scale-[0.98] disabled:opacity-60"
           >
-            {loading ? 'Verifying...' : 'Access Admin Panel'}
+            {loading ? 'Verifying…' : 'Access admin panel'}
           </button>
         </form>
 
-        <button
-          onClick={() => navigate('/')}
-          className="btn btn-ghost"
-          style={{ marginTop: 24 }}
-        >
-          Back to App
+        <button onClick={() => navigate('/')} className="mt-6 text-sm font-semibold text-white/45">
+          Back to app
         </button>
       </div>
     );
@@ -268,81 +244,38 @@ function Admin() {
   ];
 
   return (
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      background: 'var(--bg-primary)',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        padding: '16px 20px',
-        background: 'var(--bg-secondary)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            background: 'linear-gradient(135deg, #6F4FFF, #4A2FCC)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <Shield size={20} color="white" />
+    <div className="flex flex-1 flex-col overflow-hidden bg-void-950">
+      <div className="flex items-center justify-between border-b border-white/[0.06] bg-void-900 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-gold-500">
+            <Shield size={20} className="text-white" />
           </div>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 700 }}>Admin Panel</h1>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>iKHWEZI Control Center</p>
+            <h1 className="text-[17px] font-bold text-white">Admin Panel</h1>
+            <p className="text-xs text-white/45">iKHWEZI control center</p>
           </div>
         </div>
         <button
           onClick={() => { setIsAuthenticated(false); setAdminKey(''); }}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            background: 'var(--bg-elevated)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-secondary)',
-          }}
+          className="ultima-glass flex h-10 w-10 items-center justify-center rounded-xl text-white/60"
         >
           <LogOut size={20} />
         </button>
       </div>
 
-      <div style={{
-        display: 'flex',
-        gap: 4,
-        padding: '12px 16px',
-        overflowX: 'auto',
-        background: 'var(--bg-secondary)',
-      }}>
+      <div className="flex gap-1.5 overflow-x-auto bg-void-900 px-4 py-3">
         {tabs.map((tab) => {
           const Icon = tab.icon;
+          const active = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 16px',
-                borderRadius: 10,
-                background: activeTab === tab.id ? 'var(--violet-glow)' : 'var(--bg-elevated)',
-                color: activeTab === tab.id ? 'white' : 'var(--text-secondary)',
-                fontWeight: 600,
-                fontSize: 13,
-                whiteSpace: 'nowrap',
-                transition: 'all 0.2s ease',
-              }}
+              className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-[13px] font-semibold transition ${
+                active
+                  ? 'bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-md shadow-pink-500/25'
+                  : 'bg-white/5 text-white/50'
+              }`}
             >
               <Icon size={16} />
               {tab.label}
@@ -351,145 +284,127 @@ function Admin() {
         })}
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+      <div className="flex-1 overflow-auto p-4">
         {activeTab === 'streaming' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div className="card">
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Stream Status</h3>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: 16,
-                background: isLive ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-elevated)',
-                borderRadius: 12,
-                marginBottom: 16,
-              }}>
-                <div style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: '50%',
-                  background: isLive ? '#EF4444' : '#6B7280',
-                  animation: isLive ? 'live-pulse 1.5s ease-in-out infinite' : 'none',
-                }} />
-                <span style={{ fontWeight: 600, color: isLive ? '#EF4444' : 'var(--text-secondary)' }}>
+          <div className="flex flex-col gap-4">
+            <div className="ultima-glass rounded-2xl p-4">
+              <h3 className="mb-4 text-[15px] font-bold text-white">Stream Status</h3>
+              <div
+                className={`mb-4 flex items-center gap-3 rounded-xl px-4 py-4 ${
+                  isLive ? 'bg-red-500/10' : 'bg-white/5'
+                }`}
+              >
+                <div className={`h-3 w-3 rounded-full ${isLive ? 'animate-pulse bg-red-500' : 'bg-white/30'}`} />
+                <span className={`text-sm font-bold ${isLive ? 'text-red-400' : 'text-white/45'}`}>
                   {isLive ? 'LIVE NOW' : 'OFFLINE'}
                 </span>
               </div>
 
-              <input
-                type="text"
-                value={liveTitle}
-                onChange={(e) => setLiveTitle(e.target.value)}
-                placeholder="Stream title"
-                className="input"
-                style={{ marginBottom: 12 }}
-              />
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                {isLive ? (
-                  <button onClick={stopLive} className="btn" style={{
-                    flex: 1,
-                    background: '#EF4444',
-                    color: 'white',
-                  }}>
-                    <Square size={18} />
-                    Stop Live
-                  </button>
-                ) : (
-                  <button onClick={startLive} className="btn btn-primary" style={{ flex: 1 }}>
-                    <Play size={18} />
-                    Go Live
-                  </button>
-                )}
+              <div className="ultima-glass mb-3 flex items-center gap-3 rounded-2xl px-4 py-3">
+                <input
+                  type="text"
+                  value={liveTitle}
+                  onChange={(e) => setLiveTitle(e.target.value)}
+                  placeholder="Stream title"
+                  className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
+                />
               </div>
+
+              {isLive ? (
+                <button
+                  onClick={stopLive}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
+                >
+                  <Square size={18} />
+                  Stop Live
+                </button>
+              ) : (
+                <button
+                  onClick={startLive}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-pink-500 to-gold-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-pink-500/25 transition active:scale-[0.98]"
+                >
+                  <Play size={18} />
+                  Go Live
+                </button>
+              )}
             </div>
 
-            <div className="card">
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Stream Key</h3>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: 12,
-              }}>
-                <div style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  background: 'var(--bg-elevated)',
-                  borderRadius: 8,
-                  fontFamily: 'monospace',
-                  fontSize: 14,
-                }}>
+            <div className="ultima-glass rounded-2xl p-4">
+              <h3 className="mb-4 text-[15px] font-bold text-white">Stream Key</h3>
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex-1 rounded-xl bg-white/5 px-4 py-3 font-mono text-sm text-white/85">
                   {showStreamKey ? streamKey : '••••••••••••••••••••'}
                 </div>
                 <button
                   onClick={() => setShowStreamKey(!showStreamKey)}
-                  className="btn btn-ghost"
-                  style={{ padding: 12 }}
+                  className="ultima-glass flex h-11 w-11 items-center justify-center rounded-xl text-white/60"
                 >
                   {showStreamKey ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
                 <button
                   onClick={copyStreamKey}
-                  className="btn btn-ghost"
-                  style={{ padding: 12 }}
+                  className="ultima-glass flex h-11 w-11 items-center justify-center rounded-xl text-white/60"
                 >
-                  {copied ? <Check size={18} color="var(--success)" /> : <Copy size={18} />}
+                  {copied ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
                 </button>
               </div>
-              <button onClick={rotateStreamKey} className="btn btn-outline" style={{ width: '100%' }}>
+              <button
+                onClick={rotateStreamKey}
+                className="ultima-glass flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold text-white/80"
+              >
                 <RefreshCw size={18} />
                 Rotate Key
               </button>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
-                RTMP URL: rtmp://localhost:1935/live
-              </p>
+              <p className="mt-3 text-xs text-white/35">RTMP URL: rtmp://localhost:1935/live</p>
             </div>
           </div>
         )}
 
         {activeTab === 'videos' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div className="card">
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Upload Video</h3>
-              <form onSubmit={handleUpload}>
+          <div className="flex flex-col gap-4">
+            <div className="ultima-glass rounded-2xl p-4">
+              <h3 className="mb-4 text-[15px] font-bold text-white">Upload Video</h3>
+              <form onSubmit={handleUpload} className="flex flex-col gap-3">
                 <input
                   type="file"
                   ref={fileInputRef}
                   accept="video/*"
-                  style={{ marginBottom: 12 }}
                   required
+                  className="text-sm text-white/70"
                 />
-                <input
-                  type="text"
-                  value={uploadForm.title}
-                  onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
-                  placeholder="Title"
-                  className="input"
-                  style={{ marginBottom: 12 }}
-                />
-                <textarea
-                  value={uploadForm.description}
-                  onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
-                  placeholder="Description"
-                  className="input"
-                  style={{ marginBottom: 12, minHeight: 80, resize: 'vertical' }}
-                />
-                <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+                  <input
+                    type="text"
+                    value={uploadForm.title}
+                    onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
+                    placeholder="Title"
+                    className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
+                  />
+                </div>
+                <div className="ultima-glass rounded-2xl px-4 py-3">
+                  <textarea
+                    value={uploadForm.description}
+                    onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+                    placeholder="Description"
+                    className="min-h-[80px] w-full resize-y bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
+                  />
+                </div>
+                <div className="flex gap-5">
+                  <label className="flex items-center gap-2 text-sm text-white/70">
                     <input
                       type="checkbox"
                       checked={uploadForm.isSponsored}
                       onChange={(e) => setUploadForm({ ...uploadForm, isSponsored: e.target.checked })}
+                      className="accent-pink-500"
                     />
                     Sponsored
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label className="flex items-center gap-2 text-sm text-white/70">
                     <input
                       type="checkbox"
                       checked={uploadForm.isTrending}
                       onChange={(e) => setUploadForm({ ...uploadForm, isTrending: e.target.checked })}
+                      className="accent-pink-500"
                     />
                     Trending
                   </label>
@@ -497,66 +412,49 @@ function Admin() {
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="btn btn-primary"
-                  style={{ width: '100%' }}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-pink-500 to-gold-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-pink-500/25 transition active:scale-[0.98] disabled:opacity-60"
                 >
                   <Upload size={18} />
-                  {uploading ? 'Uploading...' : 'Upload Video'}
+                  {uploading ? 'Uploading…' : 'Upload video'}
                 </button>
               </form>
             </div>
 
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600 }}>All Videos ({videos.length})</h3>
-                <button onClick={loadVideos} className="btn btn-ghost" style={{ padding: 8 }}>
+            <div className="ultima-glass rounded-2xl p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-[15px] font-bold text-white">All Videos ({videos.length})</h3>
+                <button onClick={loadVideos} className="text-white/50">
                   <RefreshCw size={16} />
                 </button>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="flex flex-col gap-3">
                 {videos.map((video) => (
-                  <div
-                    key={video.id}
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      padding: 12,
-                      background: 'var(--bg-elevated)',
-                      borderRadius: 12,
-                    }}
-                  >
+                  <div key={video.id} className="flex gap-3 rounded-2xl bg-white/5 p-3">
                     <video
                       src={`/storage/uploads/${video.filename}`}
-                      style={{ width: 80, height: 120, objectFit: 'cover', borderRadius: 8 }}
+                      className="h-[120px] w-20 rounded-lg object-cover"
                     />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 600, marginBottom: 4 }}>{video.title || 'Untitled'}</p>
-                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                    <div className="flex-1">
+                      <p className="mb-1 text-sm font-semibold text-white">{video.title || 'Untitled'}</p>
+                      <p className="mb-2 text-xs text-white/45">
                         @{video.creator?.username} • {video.views} views
                       </p>
-                      <div style={{ display: 'flex', gap: 8 }}>
+                      <div className="flex gap-2">
                         <button
                           onClick={() => updateVideo(video.id, { isPublished: !video.isPublished })}
-                          className="btn btn-ghost"
-                          style={{ padding: '6px 10px', fontSize: 12 }}
+                          className="rounded-lg bg-white/5 px-2.5 py-1.5 text-white/70"
                         >
                           {video.isPublished ? <Eye size={14} /> : <EyeOff size={14} />}
                         </button>
                         <button
                           onClick={() => updateVideo(video.id, { isTrending: !video.isTrending })}
-                          className="btn btn-ghost"
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: 12,
-                            color: video.isTrending ? 'var(--gold)' : 'inherit',
-                          }}
+                          className={`rounded-lg bg-white/5 px-2.5 py-1.5 ${video.isTrending ? 'text-gold-400' : 'text-white/70'}`}
                         >
                           <TrendingUp size={14} />
                         </button>
                         <button
                           onClick={() => deleteVideo(video.id)}
-                          className="btn btn-ghost"
-                          style={{ padding: '6px 10px', fontSize: 12, color: 'var(--error)' }}
+                          className="rounded-lg bg-white/5 px-2.5 py-1.5 text-red-400"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -570,45 +468,52 @@ function Admin() {
         )}
 
         {activeTab === 'users' && (
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600 }}>Users ({users.length})</h3>
-              <button onClick={loadUsers} className="btn btn-ghost" style={{ padding: 8 }}>
+          <div className="ultima-glass rounded-2xl p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-[15px] font-bold text-white">Users ({users.length})</h3>
+              <button onClick={loadUsers} className="text-white/50">
                 <RefreshCw size={16} />
               </button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {users.map((user) => (
+            <p className="mb-3 text-xs text-white/35">
+              Only accounts flagged Admin can broadcast live — grant this to your own owner account, and no one else's.
+            </p>
+            <div className="flex flex-col gap-2">
+              {users.map((u) => (
                 <div
-                  key={user.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: 12,
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 12,
-                    opacity: user.isBanned ? 0.5 : 1,
-                  }}
+                  key={u.id}
+                  className={`flex items-center gap-3 rounded-2xl bg-white/5 p-3 ${u.isBanned ? 'opacity-50' : ''}`}
                 >
-                  <div className="avatar">
-                    {user.username?.charAt(0).toUpperCase()}
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-gold-500 text-sm font-bold text-white">
+                    {u.username?.charAt(0).toUpperCase()}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 600 }}>@{user.username}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      {user.email || user.phone} • {user.points?.totalPoints || 0} pts
+                  <div className="flex-1">
+                    <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                      @{u.username}
+                      {u.isAdmin && (
+                        <span className="rounded-full border border-gold-400/30 bg-gold-500/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold-300">
+                          Admin
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-white/45">
+                      {u.email || u.phone} • {u.points?.totalPoints || 0} pts
                     </p>
                   </div>
                   <button
-                    onClick={() => toggleBan(user.id)}
-                    className="btn btn-ghost"
-                    style={{
-                      padding: 8,
-                      color: user.isBanned ? 'var(--success)' : 'var(--error)',
-                    }}
+                    onClick={() => toggleAdmin(u.id)}
+                    title={u.isAdmin ? 'Revoke broadcast rights' : 'Grant broadcast rights'}
+                    className={`rounded-lg px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide ${
+                      u.isAdmin ? 'bg-gold-500/15 text-gold-300' : 'bg-white/5 text-white/40'
+                    }`}
                   >
-                    {user.isBanned ? <UserCheck size={18} /> : <Ban size={18} />}
+                    Admin
+                  </button>
+                  <button
+                    onClick={() => toggleBan(u.id)}
+                    className={u.isBanned ? 'text-emerald-400' : 'text-red-400'}
+                  >
+                    {u.isBanned ? <UserCheck size={18} /> : <Ban size={18} />}
                   </button>
                 </div>
               ))}
@@ -617,60 +522,42 @@ function Admin() {
         )}
 
         {activeTab === 'analytics' && analytics && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'Total Users', value: analytics.totalUsers, icon: Users, color: '#6F4FFF' },
-                { label: 'New Today', value: analytics.newUsersToday, icon: UserCheck, color: '#10B981' },
-                { label: 'Active (24h)', value: analytics.activeUsers, icon: Clock, color: '#FFB800' },
-                { label: 'Total Videos', value: analytics.totalVideos, icon: Video, color: '#EF4444' },
-                { label: 'Total Views', value: analytics.totalViews, icon: Eye, color: '#6F4FFF' },
-                { label: 'Total Stars', value: analytics.totalStars, icon: Star, color: '#FFB800' },
+                { label: 'Total Users', value: analytics.totalUsers, icon: Users, color: 'text-pink-400' },
+                { label: 'New Today', value: analytics.newUsersToday, icon: UserCheck, color: 'text-emerald-400' },
+                { label: 'Active (24h)', value: analytics.activeUsers, icon: Clock, color: 'text-gold-400' },
+                { label: 'Total Videos', value: analytics.totalVideos, icon: Video, color: 'text-red-400' },
+                { label: 'Total Views', value: analytics.totalViews, icon: Eye, color: 'text-pink-400' },
+                { label: 'Total Stars', value: analytics.totalStars, icon: Star, color: 'text-gold-400' },
               ].map((stat, i) => {
                 const Icon = stat.icon;
                 return (
-                  <div key={i} className="card" style={{ textAlign: 'center' }}>
-                    <Icon size={24} color={stat.color} style={{ marginBottom: 8 }} />
-                    <p style={{ fontSize: 24, fontWeight: 700 }}>{stat.value}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{stat.label}</p>
+                  <div key={i} className="ultima-glass rounded-2xl p-4 text-center">
+                    <Icon size={24} className={`mx-auto mb-2 ${stat.color}`} />
+                    <p className="text-2xl font-bold text-white">{stat.value}</p>
+                    <p className="text-xs text-white/45">{stat.label}</p>
                   </div>
                 );
               })}
             </div>
 
-            <div className="card">
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Top Creators</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="ultima-glass rounded-2xl p-4">
+              <h3 className="mb-4 text-[15px] font-bold text-white">Top Creators</h3>
+              <div className="flex flex-col gap-2">
                 {analytics.topCreators?.map((creator, i) => (
-                  <div
-                    key={creator.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      padding: 12,
-                      background: 'var(--bg-elevated)',
-                      borderRadius: 12,
-                    }}
-                  >
-                    <span style={{
-                      width: 24,
-                      fontWeight: 700,
-                      color: i < 3 ? 'var(--gold)' : 'var(--text-secondary)',
-                    }}>
-                      #{i + 1}
-                    </span>
-                    <div className="avatar">
+                  <div key={creator.id} className="flex items-center gap-3 rounded-2xl bg-white/5 p-3">
+                    <span className={`w-6 font-bold ${i < 3 ? 'text-gold-400' : 'text-white/40'}`}>#{i + 1}</span>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-gold-500 text-sm font-bold text-white">
                       {creator.User?.username?.charAt(0).toUpperCase()}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 600 }}>@{creator.User?.username}</p>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-white">@{creator.User?.username}</p>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Star size={14} color="var(--gold)" fill="var(--gold)" />
-                      <span style={{ fontWeight: 600, color: 'var(--gold)' }}>
-                        {creator.totalPoints}
-                      </span>
+                    <div className="flex items-center gap-1">
+                      <Star size={14} className="text-gold-400" fill="currentColor" />
+                      <span className="text-sm font-bold text-gold-400">{creator.totalPoints}</span>
                     </div>
                   </div>
                 ))}
@@ -680,34 +567,21 @@ function Admin() {
         )}
 
         {activeTab === 'audit' && (
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600 }}>Audit Log (Last 20)</h3>
-              <button onClick={loadAuditLog} className="btn btn-ghost" style={{ padding: 8 }}>
+          <div className="ultima-glass rounded-2xl p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-[15px] font-bold text-white">Audit Log (Last 20)</h3>
+              <button onClick={loadAuditLog} className="text-white/50">
                 <RefreshCw size={16} />
               </button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="flex flex-col gap-2">
               {auditLog.map((log) => (
-                <div
-                  key={log.id}
-                  style={{
-                    padding: 12,
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 12,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--violet-light)' }}>{log.action}</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {new Date(log.createdAt).toLocaleString()}
-                    </span>
+                <div key={log.id} className="rounded-2xl bg-white/5 p-3">
+                  <div className="mb-1 flex justify-between">
+                    <span className="text-sm font-semibold text-pink-300">{log.action}</span>
+                    <span className="text-xs text-white/35">{new Date(log.createdAt).toLocaleString()}</span>
                   </div>
-                  {log.details && (
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                      {log.details}
-                    </p>
-                  )}
+                  {log.details && <p className="font-mono text-xs text-white/45">{log.details}</p>}
                 </div>
               ))}
             </div>

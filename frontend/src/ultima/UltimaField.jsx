@@ -17,7 +17,7 @@ function UltimaField({ intensity = 1, fixed = false }) {
       r: Math.random() * 1.6 + 0.2,
       tw: Math.random() * Math.PI * 2,
       speed: 0.003 + Math.random() * 0.014,
-      hue: Math.random() > 0.7 ? 'gold' : Math.random() > 0.5 ? 'violet' : 'white',
+      hue: Math.random() > 0.7 ? 'gold' : Math.random() > 0.5 ? 'pink' : 'white',
     }));
 
     const resize = () => {
@@ -36,8 +36,8 @@ function UltimaField({ intensity = 1, fixed = false }) {
         const alpha = 0.2 + (Math.sin(s.tw) + 1) * 0.4 * intensity;
         const color = s.hue === 'gold'
           ? `rgba(245, 197, 66, ${alpha})`
-          : s.hue === 'violet'
-            ? `rgba(167, 139, 250, ${alpha * 0.9})`
+          : s.hue === 'pink'
+            ? `rgba(240, 86, 143, ${alpha * 0.9})`
             : `rgba(255, 255, 255, ${alpha * 0.7})`;
         ctx.beginPath();
         ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);

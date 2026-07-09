@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, MessageCircle, Search, Edit, X, UserCircle2, Plus } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, Send, MessageCircle, Search, Edit, X, UserCircle2, Plus, Phone, Video } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useCall } from '../context/CallContext';
 import UltimaField from '../ultima/UltimaField';
 
 /* ── New Conversation Search Modal ── */
@@ -48,7 +49,7 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
 
       {/* Search box */}
       <div className="px-4 py-3 border-b border-white/8">
-        <div className="flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2.5 border border-white/10 focus-within:border-neon-indigo/50 transition-colors">
+        <div className="flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2.5 border border-white/10 focus-within:border-pink-400/50 transition-colors">
           <Search size={15} className="flex-shrink-0 text-white/40" />
           <input
             autoFocus
@@ -58,7 +59,7 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
             className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
           />
           {searching && (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-neon-indigo border-t-transparent flex-shrink-0" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-pink-400 border-t-transparent flex-shrink-0" />
           )}
         </div>
       </div>
@@ -91,7 +92,7 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
               <p className="font-semibold text-sm text-white truncate">{u.displayName || u.username}</p>
               <p className="text-xs text-white/40 truncate">@{u.username}</p>
             </div>
-            <Send size={16} className="text-neon-indigo flex-shrink-0" />
+            <Send size={16} className="text-pink-400 flex-shrink-0" />
           </button>
         ))}
       </div>
@@ -129,13 +130,13 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
       <div className="flex-1 overflow-y-auto">
         {loading && (
           <div className="flex justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-neon-indigo border-t-transparent" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-pink-400 border-t-transparent" />
           </div>
         )}
         {!loading && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-8">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neon-indigo/10 border border-neon-indigo/20">
-              <MessageCircle size={30} className="text-neon-indigo/60" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-pink-500/15 to-gold-500/15 border border-pink-400/20">
+              <MessageCircle size={30} className="text-pink-300/70" />
             </div>
             <div>
               <p className="text-sm font-semibold text-white/60 mb-1">No conversations yet</p>
@@ -167,7 +168,7 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
                     </span>
                   )}
                   {conv.unread > 0 && (
-                    <span className="h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-neon-indigo text-[10px] font-bold text-white">
+                    <span className="h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-gold-500 text-[10px] font-bold text-white">
                       {conv.unread > 99 ? '99+' : conv.unread}
                     </span>
                   )}
@@ -188,8 +189,8 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
         type="button"
         onClick={onNewMsg}
         aria-label="New message"
-        className="absolute bottom-4 right-4 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(99,102,241,0.5)] active:scale-95 transition-transform"
-        style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)', zIndex: 10 }}
+        className="ik-btn ik-btn-primary ik-btn-pill absolute bottom-4 right-4 px-5 py-3 shadow-[0_4px_24px_rgba(225,48,108,0.5)]"
+        style={{ zIndex: 10 }}
       >
         <Edit size={16} />
         New Message
@@ -202,6 +203,7 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
 function ChatThread({ otherUser, onBack }) {
   const { fetchWithAuth, user, showToast } = useAuth();
   const { socket, joinUserRoom } = useSocket();
+  const { startCall, phase } = useCall();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -291,9 +293,14 @@ function ChatThread({ otherUser, onBack }) {
   }, []);
 
   return (
-    // position:absolute inset-0 is intentional — h-full inside flex-1 overflow-hidden
-    // does not reliably resolve across all browsers; absolute positioning guarantees fill
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#050816' }}>
+    // position:fixed inset-0 (not absolute) — an active thread is a full-screen
+    // takeover, same as StoryCreator/ImageEditor/NewConversationModal. It must sit
+    // above the app-level bottom nav (z-90/95) rather than being clipped by it, so
+    // the message input never collides with the fixed nav bar.
+    <div
+      className="z-[250]"
+      style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#050816' }}
+    >
       {/* Header */}
       <div className="flex flex-shrink-0 items-center gap-3 px-4 py-3 border-b border-white/8 bg-[#050816]/95">
         <button type="button" onClick={onBack}
@@ -304,10 +311,28 @@ function ChatThread({ otherUser, onBack }) {
         <div className="avatar" style={{ width: 36, height: 36, fontSize: 14 }}>
           {otherUser.avatar ? <img src={otherUser.avatar} alt="" /> : otherUser.username?.charAt(0).toUpperCase()}
         </div>
-        <div>
-          <p className="font-semibold text-sm text-white">{otherUser.displayName || otherUser.username}</p>
-          <p className="text-xs text-white/40">@{otherUser.username}</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-sm text-white truncate">{otherUser.displayName || otherUser.username}</p>
+          <p className="text-xs text-white/40 truncate">@{otherUser.username}</p>
         </div>
+        <button
+          type="button"
+          onClick={() => startCall(otherUser, 'audio')}
+          disabled={phase !== 'idle'}
+          aria-label="Voice call"
+          className="ik-btn ik-btn-ghost flex h-9 w-9 items-center justify-center !p-0 text-pink-300"
+        >
+          <Phone size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={() => startCall(otherUser, 'video')}
+          disabled={phase !== 'idle'}
+          aria-label="Video call"
+          className="ik-btn ik-btn-ghost flex h-9 w-9 items-center justify-center !p-0 text-pink-300"
+        >
+          <Video size={18} />
+        </button>
       </div>
 
       {/* Messages */}
@@ -319,7 +344,7 @@ function ChatThread({ otherUser, onBack }) {
               <div
                 className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
                   mine
-                    ? 'rounded-br-sm bg-gradient-to-br from-neon-indigo to-purple-600 text-white'
+                    ? 'rounded-br-sm bg-gradient-to-br from-pink-500 to-[#C13584] text-white'
                     : 'rounded-bl-sm bg-white/8 text-white/90 border border-white/8'
                 }`}
               >
@@ -369,7 +394,7 @@ function ChatThread({ otherUser, onBack }) {
             outline: 'none',
             transition: 'border-color 0.15s',
           }}
-          onFocus={e => (e.target.style.borderColor = '#6366f1')}
+          onFocus={e => (e.target.style.borderColor = '#E1306C')}
           onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.12)')}
         />
         {/* Send button — slides in when user starts typing */}
@@ -385,7 +410,7 @@ function ChatThread({ otherUser, onBack }) {
             width: input.trim() ? 44 : 0,
             height: 44,
             borderRadius: '50%',
-            background: 'linear-gradient(135deg,#6366f1,#a855f7)',
+            background: 'linear-gradient(135deg,#E1306C,#C13584)',
             border: 'none',
             cursor: 'pointer',
             overflow: 'hidden',
@@ -408,11 +433,12 @@ function ChatThread({ otherUser, onBack }) {
 /* ── Main Messages page ── */
 function Messages() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { fetchWithAuth, user } = useAuth();
   const { socket, joinUserRoom } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeUser, setActiveUser] = useState(null);
+  const [activeUser, setActiveUser] = useState(location.state?.openUser || null);
   const [showNewMsg, setShowNewMsg] = useState(false);
 
   // Join personal socket room — re-join immediately and also whenever socket reconnects
@@ -451,7 +477,7 @@ function Messages() {
 
       {/* Header — only shown on conversation list */}
       {!activeUser && (
-        <div className="relative z-10 flex items-center gap-3 border-b border-white/8 px-4 py-3 bg-[#050816]/90 backdrop-blur-xl">
+        <div className="relative flex items-center gap-3 border-b border-white/8 px-4 py-3 bg-[#050816]/90 backdrop-blur-xl">
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -463,7 +489,7 @@ function Messages() {
           <button
             type="button"
             onClick={() => setShowNewMsg(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-neon-indigo/40 bg-neon-indigo/15 text-neon-indigo transition-all active:scale-95 hover:bg-neon-indigo/25"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-pink-400/40 bg-pink-500/15 text-pink-300 transition-all active:scale-95 hover:bg-pink-500/25"
             title="New message"
           >
             <Edit size={16} />
@@ -471,9 +497,13 @@ function Messages() {
         </div>
       )}
 
-      <div className="ultima-content relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* NOTE: no `z-10` here — a positioned ancestor with its own z-index creates a
+          stacking context that caps every fixed-position descendant (like the
+          full-screen ChatThread below) beneath the app-level bottom nav, no matter
+          how high its own z-index is. See ultima.css `.ultima-page` for the same fix. */}
+      <div className="ultima-content relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {activeUser ? (
-          <ChatThread otherUser={activeUser} onBack={() => setActiveUser(null)} />
+          <ChatThread key={activeUser.id} otherUser={activeUser} onBack={() => setActiveUser(null)} />
         ) : (
           <ConversationList conversations={conversations} onSelect={setActiveUser} loading={loading} onNewMsg={() => setShowNewMsg(true)} />
         )}

@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { CallProvider } from './context/CallContext';
 import UltimaNav from './ultima/UltimaNav';
 import Splash from './components/Splash';
 import './design-tokens.css';
@@ -10,6 +11,7 @@ import UltimaCreateSheet from './ultima/UltimaCreateSheet';
 import VideoRecorder from './components/VideoRecorder';
 import TextComposer from './components/TextComposer';
 import StoryCreator from './components/StoryCreator';
+import CallOverlay from './components/CallOverlay';
 
 const Home = lazy(() => import('./pages/Home'));
 const Live = lazy(() => import('./pages/Live'));
@@ -18,6 +20,9 @@ const Register = lazy(() => import('./pages/Register'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Messages = lazy(() => import('./pages/Messages'));
+const Explore = lazy(() => import('./pages/Explore'));
+const Reels = lazy(() => import('./pages/Reels'));
+const Community = lazy(() => import('./pages/Community'));
 
 function App() {
   const { loading, user } = useAuth();
@@ -41,12 +46,16 @@ function App() {
 
   return (
     <SocketProvider>
+      <CallProvider>
       <div className="page-container">
         <Suspense fallback={<UltimaLoading />}>
           <div className="page-enter ultima-main">
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/explore" element={<Explore />} />
+              <Route path="/reels" element={<Reels />} />
               <Route path="/live" element={<Live />} />
+              <Route path="/community" element={<Community />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
@@ -62,9 +71,9 @@ function App() {
         {showCreateSheet && (
           <UltimaCreateSheet
             onClose={() => setShowCreateSheet(false)}
-            onVideo={() => setShowVideoRecorder(true)}
-            onStory={() => setShowStoryCreator(true)}
-            onText={() => setShowTextComposer(true)}
+            onVideo={() => { setShowCreateSheet(false); setShowVideoRecorder(true); }}
+            onStory={() => { setShowCreateSheet(false); setShowStoryCreator(true); }}
+            onText={() => { setShowCreateSheet(false); setShowTextComposer(true); }}
           />
         )}
 
@@ -86,7 +95,10 @@ function App() {
             onPosted={() => setShowStoryCreator(false)}
           />
         )}
+
+        <CallOverlay />
       </div>
+      </CallProvider>
     </SocketProvider>
   );
 }

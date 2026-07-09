@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings } from 'lucide-react';
+import {
+  ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings,
+  Coins, Gift, Crown, MessageCircle, Plus,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
 import VideoEditModal from '../components/VideoEditModal';
+import ProfileEditSheet from '../components/ProfileEditSheet';
+
+const GIFT_FALLBACK = { rose: { coins: 10, char: '🌹', label: 'Rose' }, gem: { coins: 50, char: '💎', label: 'Gem' }, crown: { coins: 200, char: '👑', label: 'Crown' }, star: { coins: 500, char: '🌟', label: 'Supernova' } };
 
 function Profile() {
   const { id } = useParams();
@@ -17,6 +23,12 @@ function Profile() {
   const isOwnProfile = user?.id === id;
   const [editVideo, setEditVideo] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [wallet, setWallet] = useState(null);
+  const [giftCatalog, setGiftCatalog] = useState(null);
+  const [showGiftSheet, setShowGiftSheet] = useState(false);
+  const [showTopUp, setShowTopUp] = useState(false);
+  const [subBusy, setSubBusy] = useState(false);
 
   const engagementScore = useMemo(() => {
     if (!profile) return 0;
@@ -35,9 +47,20 @@ function Profile() {
   }, [engagementScore]);
 
   useEffect(() => {
+    setLoading(true);
+    setProfile(null);
+    setVideos([]);
     loadProfile();
     loadVideos();
   }, [id]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchWithAuth('/wallet/me').then((r) => r.json()).then((data) => {
+      setWallet(data.coins ?? 0);
+      setGiftCatalog(data.giftCatalog || null);
+    }).catch(() => {});
+  }, [isAuthenticated, fetchWithAuth]);
 
   const loadProfile = async () => {
     try {
@@ -91,6 +114,80 @@ function Profile() {
     navigate('/');
   };
 
+  const handleSendGift = async (giftId, gift) => {
+    if (wallet !== null && wallet < gift.coins) {
+      showToast(`Not enough coins — need ${gift.coins}, you have ${wallet}`, 'error');
+      return;
+    }
+    try {
+      const res = await fetchWithAuth('/wallet/gift', {
+        method: 'POST',
+        body: JSON.stringify({ toUserId: id, giftId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to send gift', 'error');
+        return;
+      }
+      setWallet(data.coinsRemaining);
+      setProfile((prev) => ({ ...prev, totalPoints: (prev.totalPoints || 0) + gift.coins }));
+      showToast(`${gift.char} Sent ${gift.label}!`, 'success');
+      setShowGiftSheet(false);
+    } catch {
+      showToast('Failed to send gift', 'error');
+    }
+  };
+
+  const handleSubscribe = async () => {
+    const cost = 500;
+    if (wallet !== null && wallet < cost) {
+      showToast(`Not enough coins — subscribing costs ${cost}/month`, 'error');
+      return;
+    }
+    setSubBusy(true);
+    try {
+      const res = await fetchWithAuth(`/users/${id}/subscribe`, {
+        method: 'POST',
+        body: JSON.stringify({ months: 1 }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to subscribe', 'error');
+        return;
+      }
+      setWallet(data.coinsRemaining);
+      setProfile((prev) => ({ ...prev, isSubscribed: true, subscriberCount: (prev.subscriberCount || 0) + 1 }));
+      showToast('Subscribed! Badge unlocked.', 'success');
+    } catch {
+      showToast('Failed to subscribe', 'error');
+    } finally {
+      setSubBusy(false);
+    }
+  };
+
+  const handleTopUp = async (coins) => {
+    try {
+      const res = await fetchWithAuth('/wallet/topup', {
+        method: 'POST',
+        body: JSON.stringify({ coins }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Top-up failed', 'error');
+        return;
+      }
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+      setWallet(data.coins);
+      showToast(`+${coins} coins added (dev mode — no payment processor configured)`, 'success');
+      setShowTopUp(false);
+    } catch {
+      showToast('Top-up failed', 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 pb-[70px]">
@@ -109,139 +206,111 @@ function Profile() {
   return (
     <div className="ultima-page ultima-scroll relative flex min-h-0 flex-1 flex-col">
       <div
-        className="relative h-40 bg-gradient-to-br from-slate-950 via-indigo-950/80 to-slate-950"
-        style={{
-          boxShadow: 'inset 0 -1px 0 rgba(99, 102, 241, 0.25)',
-        }}
+        className="relative h-40 bg-gradient-to-br from-void-950 via-[#1a0d16] to-void-950 bg-cover bg-center shadow-[inset_0_-1px_0_rgba(225,48,108,0.25)]"
+        style={profile.coverImage ? { backgroundImage: `url(${profile.coverImage})` } : undefined}
       >
+        <div className="absolute inset-0 bg-gradient-to-t from-void-950/70 via-transparent to-black/20" />
         <button
           onClick={() => navigate(-1)}
-          style={{
-            position: 'absolute',
-            top: 16,
-            left: 16,
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            background: 'rgba(0,0,0,0.35)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'rgba(255,255,255,0.75)',
-            zIndex: 10,
-          }}
+          className="ultima-glass absolute left-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full text-white/75"
         >
           <ArrowLeft size={20} />
         </button>
 
-        {isOwnProfile && (
-          <button
-            onClick={() => setShowLogoutConfirm(true)}
-            style={{
-              position: 'absolute',
-              top: 16,
-              right: 16,
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#EF4444',
-              zIndex: 10,
-            }}
-            title="Log out"
-          >
-            <LogOut size={18} />
-          </button>
-        )}
+        <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+          {isOwnProfile && (
+            <>
+              <button
+                onClick={() => setShowTopUp(true)}
+                className="ultima-glass-gold flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold text-gold-200"
+              >
+                <Coins size={14} />
+                {wallet ?? '–'}
+              </button>
+              <button
+                onClick={() => setShowLogoutConfirm(true)}
+                title="Log out"
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-red-500/30 bg-red-500/15 text-red-400"
+              >
+                <LogOut size={18} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div style={{ padding: '0 20px', marginTop: -50 }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: 16,
-          marginBottom: 16,
-        }}>
-          <div className="relative" style={{ width: 100, height: 100 }}>
-            <div
-              className="absolute -inset-1 rounded-full opacity-90 blur-md"
-              style={{
-                background: 'linear-gradient(135deg, #6366f1, #a855f7, #22d3ee)',
-              }}
-            />
-            <div style={{
-              width: 100,
-              height: 100,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 36,
-              fontWeight: 700,
-              color: 'white',
-              border: '4px solid var(--bg-primary)',
-              boxShadow: '0 0 32px rgba(99, 102, 241, 0.45)',
-              position: 'relative',
-            }}>
+      <div className="-mt-[50px] px-5">
+        <div className="mb-4 flex items-end gap-4">
+          <button
+            type="button"
+            onClick={() => isOwnProfile && setShowEditProfile(true)}
+            className="relative h-[100px] w-[100px] shrink-0"
+          >
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-pink-500 via-gold-400 to-plasma-500 opacity-90 blur-md" />
+            <div className="relative flex h-[100px] w-[100px] items-center justify-center rounded-full border-4 border-void-950 bg-gradient-to-br from-pink-500 to-gold-500 text-4xl font-bold text-white shadow-[0_0_32px_rgba(225,48,108,0.45)]">
               {profile.avatar ? (
-                <img src={profile.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                <img src={profile.avatar} alt="" className="h-full w-full rounded-full object-cover" />
               ) : (
                 profile.username?.charAt(0).toUpperCase()
               )}
             </div>
+            {isOwnProfile && (
+              <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-void-950 bg-gold-400 text-void-950">
+                <Pencil size={12} />
+              </div>
+            )}
+          </button>
+
+          <div className="flex-1 pb-2">
+            <div className="flex items-center gap-1.5">
+              <h1 className="font-display text-xl font-bold text-white">
+                {profile.displayName || profile.username}
+              </h1>
+              {profile.isAdmin && <Crown size={15} className="fill-gold-400 text-gold-400" />}
+              {profile.isSubscribed && (
+                <span className="rounded-full border border-gold-400/30 bg-gold-500/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold-300">
+                  Subscribed
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-white/45">@{profile.username}</p>
           </div>
 
-          <div style={{ flex: 1, paddingBottom: 8 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700 }}>
-              {profile.displayName || profile.username}
-            </h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-              @{profile.username}
-            </p>
-          </div>
+          {isOwnProfile && (
+            <button
+              type="button"
+              onClick={() => setShowEditProfile(true)}
+              className="ik-btn ik-btn-secondary ik-btn-sm ik-btn-pill mb-2 flex items-center gap-1.5"
+            >
+              <Pencil size={13} />
+              Edit
+            </button>
+          )}
         </div>
 
-        {profile.bio && (
-          <p style={{
-            color: 'var(--text-primary)',
-            fontSize: 14,
-            lineHeight: 1.5,
-            marginBottom: 16,
-          }}>
-            {profile.bio}
-          </p>
-        )}
+        {profile.bio && <p className="mb-4 text-sm leading-relaxed text-white/85">{profile.bio}</p>}
 
-        <div style={{
-          display: 'flex',
-          gap: 24,
-          marginBottom: 20,
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 20, fontWeight: 700 }}>{profile.videoCount || 0}</p>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Videos</p>
+        <div className="mb-5 flex gap-6">
+          <div className="text-center">
+            <p className="text-xl font-bold text-white">{profile.videoCount || 0}</p>
+            <p className="text-xs text-white/45">Videos</p>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 20, fontWeight: 700 }}>{profile.followerCount || 0}</p>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Followers</p>
+          <div className="text-center">
+            <p className="text-xl font-bold text-white">{profile.followerCount || 0}</p>
+            <p className="text-xs text-white/45">Followers</p>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 20, fontWeight: 700 }}>{profile.followingCount || 0}</p>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Following</p>
+          <div className="text-center">
+            <p className="text-xl font-bold text-white">{profile.followingCount || 0}</p>
+            <p className="text-xs text-white/45">Following</p>
           </div>
-          {profile.isCreator && (
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>
-                {profile.totalPoints || 0}
-              </p>
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Points</p>
+          <div className="text-center">
+            <p className="text-xl font-bold text-gold-400">{profile.totalPoints || 0}</p>
+            <p className="text-xs text-white/45">Points</p>
+          </div>
+          {(profile.subscriberCount || 0) > 0 && (
+            <div className="text-center">
+              <p className="text-xl font-bold text-gold-400">{profile.subscriberCount}</p>
+              <p className="text-xs text-white/45">Subs</p>
             </div>
           )}
         </div>
@@ -258,14 +327,14 @@ function Profile() {
               <p className="mt-1 text-xs text-white/45">Reactions + reach + stars (composite)</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <div className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border border-white/15 bg-gradient-to-br from-indigo-600/90 to-purple-700/90 shadow-neon-ring">
+              <div className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border border-white/15 bg-gradient-to-br from-pink-600/90 to-plasma-500/90 shadow-neon-ring">
                 <Globe className="h-8 w-8 text-white" strokeWidth={1.75} />
                 <span className="absolute -bottom-1 rounded-full border border-white/10 bg-black/80 px-2 py-0.5 text-[11px] font-black text-neon-cyan">
                   #{globalRank}
                 </span>
               </div>
               <span className="mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-white/50">
-                <Trophy className="h-3 w-3 text-amber-400" />
+                <Trophy className="h-3 w-3 text-gold-400" />
                 Global rank
               </span>
             </div>
@@ -273,121 +342,97 @@ function Profile() {
         </GlassCard>
 
         {!isOwnProfile && (
+          <div className="mb-5 flex gap-2">
+            <button
+              onClick={handleFollow}
+              className={`ik-btn flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold ${
+                profile.isFollowing ? 'ik-btn-secondary' : 'ik-btn-primary'
+              }`}
+            >
+              {profile.isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}
+              {profile.isFollowing ? 'Following' : 'Follow'}
+            </button>
+            <button
+              onClick={() => navigate('/messages', { state: { openUser: profile } })}
+              aria-label="Message"
+              className="ik-btn ik-btn-secondary flex h-[52px] w-[52px] items-center justify-center !p-0 rounded-2xl"
+            >
+              <MessageCircle size={18} />
+            </button>
+            <button
+              onClick={() => setShowGiftSheet(true)}
+              aria-label="Send gift"
+              className="ik-btn flex h-[52px] w-[52px] items-center justify-center !p-0 rounded-2xl border border-gold-400/30 bg-gold-500/12 text-gold-200"
+            >
+              <Gift size={18} />
+            </button>
+          </div>
+        )}
+
+        {!isOwnProfile && (
           <button
-            onClick={handleFollow}
-            className={profile.isFollowing ? 'btn btn-ghost' : 'btn btn-primary'}
-            style={{ width: '100%', marginBottom: 20 }}
+            type="button"
+            onClick={handleSubscribe}
+            disabled={subBusy || profile.isSubscribed}
+            className={`ik-btn ik-btn-block mb-5 flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold ${
+              profile.isSubscribed ? 'ik-btn-secondary' : ''
+            }`}
+            style={!profile.isSubscribed ? { background: 'linear-gradient(135deg,#F5C542,#B8860B)', color: '#0A0A0A' } : undefined}
           >
-            {profile.isFollowing ? (
-              <>
-                <UserCheck size={18} />
-                Following
-              </>
-            ) : (
-              <>
-                <UserPlus size={18} />
-                Follow
-              </>
-            )}
+            <Crown size={16} />
+            {profile.isSubscribed ? 'Subscribed' : 'Subscribe · 500 coins/mo'}
           </button>
         )}
 
-        <div style={{
-          display: 'flex',
-          borderBottom: '2px solid var(--bg-elevated)',
-          marginBottom: 16,
-        }}>
+        <div className="mb-4 flex border-b border-white/10">
           <button
             onClick={() => setActiveTab('videos')}
-            style={{
-              flex: 1,
-              padding: '12px 0',
-              color: activeTab === 'videos' ? 'var(--violet-light)' : 'var(--text-secondary)',
-              fontWeight: 600,
-              fontSize: 14,
-              borderBottom: activeTab === 'videos' ? '2px solid var(--violet-glow)' : 'none',
-              marginBottom: -2,
-            }}
+            className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3 text-sm font-semibold transition ${
+              activeTab === 'videos' ? 'border-pink-500 text-pink-300' : 'border-transparent text-white/45'
+            }`}
           >
-            <Video size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+            <Video size={18} />
             Videos
           </button>
           <button
             onClick={() => setActiveTab('stars')}
-            style={{
-              flex: 1,
-              padding: '12px 0',
-              color: activeTab === 'stars' ? 'var(--gold)' : 'var(--text-secondary)',
-              fontWeight: 600,
-              fontSize: 14,
-              borderBottom: activeTab === 'stars' ? '2px solid var(--gold)' : 'none',
-              marginBottom: -2,
-            }}
+            className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3 text-sm font-semibold transition ${
+              activeTab === 'stars' ? 'border-gold-400 text-gold-300' : 'border-transparent text-white/45'
+            }`}
           >
-            <Star size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+            <Star size={18} />
             Stars
           </button>
         </div>
 
         {activeTab === 'videos' && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 4,
-          }}>
+          <div className="grid grid-cols-3 gap-1">
             {videos.length === 0 ? (
-              <div style={{
-                gridColumn: '1 / -1',
-                textAlign: 'center',
-                padding: 40,
-                color: 'var(--text-secondary)',
-              }}>
-                No videos yet
-              </div>
+              <div className="col-span-full py-10 text-center text-sm text-white/40">No videos yet</div>
             ) : (
               videos.map((video) => (
                 <div
                   key={video.id}
-                  style={{
-                    aspectRatio: '9/16',
-                    background: 'var(--bg-card)',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    position: 'relative',
-                  }}
+                  className="relative aspect-[9/16] cursor-pointer overflow-hidden rounded-lg bg-white/5"
                 >
                   <video
                     src={`/storage/uploads/${video.filename}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    className="h-full w-full object-cover"
                     muted
                     onClick={() => navigate('/')}
                   />
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)',
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    padding: 8,
-                    justifyContent: 'space-between',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                  <div className="absolute inset-0 flex items-end justify-between bg-gradient-to-t from-black/60 to-transparent p-2">
+                    <div className="flex items-center gap-1 text-xs text-white">
                       <Play size={12} fill="white" />
                       {video.views || 0}
                     </div>
                     {isOwnProfile && (
                       <button
                         type="button"
-                        onClick={e => { e.stopPropagation(); setEditVideo(video); }}
-                        style={{
-                          width: 26, height: 26, borderRadius: 6,
-                          background: 'rgba(99,102,241,0.85)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setEditVideo(video); }}
+                        className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-white/20 bg-pink-600/85"
                       >
-                        <Pencil size={12} color="white" />
+                        <Pencil size={12} className="text-white" />
                       </button>
                     )}
                   </div>
@@ -398,64 +443,26 @@ function Profile() {
         )}
 
         {activeTab === 'stars' && (
-          <div style={{
-            textAlign: 'center',
-            padding: 40,
-          }}>
-            <div style={{
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #FFB80020, #FFB80010)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px',
-            }}>
-              <Star size={36} color="var(--gold)" fill="var(--gold)" />
+          <div className="py-10 text-center">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-gold-500/20 to-gold-500/5">
+              <Star size={36} className="text-gold-400" fill="currentColor" />
             </div>
-            <h3 style={{ fontSize: 24, fontWeight: 700, color: 'var(--gold)', marginBottom: 8 }}>
-              {profile.totalPoints || 0} Points
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-              Earned from fan stars
-            </p>
+            <h3 className="mb-2 text-2xl font-bold text-gold-400">{profile.totalPoints || 0} Points</h3>
+            <p className="text-sm text-white/45">Earned from fan stars</p>
           </div>
         )}
       </div>
 
-      {/* ── Account / Logout section (own profile only) ── */}
       {isOwnProfile && (
-        <div style={{ padding: '0 20px 24px' }}>
-          <div style={{
-            borderTop: '1px solid rgba(255,255,255,0.08)',
-            paddingTop: 20,
-            marginTop: 4,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Settings size={14} style={{ color: 'rgba(255,255,255,0.4)' }} />
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>
-                Account
-              </span>
+        <div className="px-5 pb-6">
+          <div className="mt-1 border-t border-white/10 pt-5">
+            <div className="mb-3 flex items-center gap-2">
+              <Settings size={14} className="text-white/40" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/35">Account</span>
             </div>
             <button
               onClick={() => setShowLogoutConfirm(true)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10,
-                padding: '14px 20px',
-                borderRadius: 14,
-                background: 'rgba(239, 68, 68, 0.08)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
-                color: '#EF4444',
-                fontWeight: 600,
-                fontSize: 15,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
+              className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-red-500/20 bg-red-500/[0.08] py-3.5 text-[15px] font-semibold text-red-400 transition active:scale-[0.98]"
             >
               <LogOut size={18} />
               Log Out
@@ -464,58 +471,37 @@ function Profile() {
         </div>
       )}
 
-      {/* Logout confirmation modal */}
       {showLogoutConfirm && (
         <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 500,
-            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 24,
-          }}
+          className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 p-6 backdrop-blur-md"
           onClick={() => setShowLogoutConfirm(false)}
         >
           <div
-            style={{
-              width: '100%', maxWidth: 320,
-              background: '#0f1124', borderRadius: 20,
-              padding: 28, border: '1px solid rgba(255,255,255,0.1)',
-              textAlign: 'center',
-            }}
-            onClick={e => e.stopPropagation()}
+            className="ultima-glass w-full max-w-[320px] rounded-3xl p-7 text-center"
+            onClick={(e) => e.stopPropagation()}
           >
-            <LogOut size={32} style={{ margin: '0 auto 12px', color: '#EF4444' }} />
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: 'white', marginBottom: 8 }}>Log out?</h3>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>You'll need to sign in again to post and interact.</p>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <LogOut size={32} className="mx-auto mb-3 text-red-400" />
+            <h3 className="mb-2 text-lg font-bold text-white">Log out?</h3>
+            <p className="mb-6 text-sm text-white/50">You'll need to sign in again to post and interact.</p>
+            <div className="flex gap-2.5">
               <button
                 type="button"
                 onClick={() => setShowLogoutConfirm(false)}
-                style={{
-                  flex: 1, padding: '11px 0', borderRadius: 12,
-                  background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
-                  color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                }}
-              >Cancel</button>
+                className="ultima-glass flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 onClick={() => { setShowLogoutConfirm(false); handleLogout(); }}
-                style={{
-                  flex: 1, padding: '11px 0', borderRadius: 12,
-                  background: '#EF4444', border: 'none',
-                  color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                }}
-              >Log out</button>
+                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white"
+              >
+                Log out
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
 
       {editVideo && (
         <VideoEditModal
@@ -530,6 +516,86 @@ function Profile() {
             setEditVideo(null);
           }}
         />
+      )}
+
+      {showEditProfile && (
+        <ProfileEditSheet
+          profile={profile}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={(updated) => setProfile((prev) => ({ ...prev, ...updated }))}
+        />
+      )}
+
+      {showGiftSheet && (
+        <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/50" onClick={() => setShowGiftSheet(false)}>
+          <div
+            className="ultima-glass-supreme w-full max-w-md rounded-t-[28px] p-5"
+            style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-display text-sm font-bold uppercase tracking-widest text-gold-200">
+                Gift @{profile.username}
+              </p>
+              <span className="ultima-glass-gold flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-gold-200">
+                <Coins size={13} />
+                {wallet ?? '–'}
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              {Object.entries(giftCatalog || GIFT_FALLBACK).map(([giftId, gift]) => {
+                const canAfford = wallet === null || wallet >= gift.coins;
+                return (
+                  <button
+                    key={giftId}
+                    type="button"
+                    onClick={() => handleSendGift(giftId, gift)}
+                    disabled={!canAfford}
+                    className={`ik-btn ik-btn-bouncy ultima-glass flex flex-col items-center gap-1.5 rounded-[20px] py-4 text-white ${!canAfford ? 'opacity-40' : ''}`}
+                  >
+                    <span className="text-3xl">{gift.char}</span>
+                    <span className="text-[10px] font-semibold text-white/70">{gift.label}</span>
+                    <span className="flex items-center gap-1 text-[9px] font-bold text-gold-300">
+                      <Coins size={9} />
+                      {gift.coins}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTopUp && (
+        <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/50" onClick={() => setShowTopUp(false)}>
+          <div
+            className="ultima-glass-supreme w-full max-w-md rounded-t-[28px] p-5"
+            style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-center font-display text-sm font-bold uppercase tracking-widest text-gold-200">
+              Top Up Coins
+            </p>
+            <p className="mb-4 text-center text-xs text-white/40">
+              100 coins ≈ $1 · dev mode grants instantly until a payment processor is connected
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[100, 500, 1000, 2500].map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => handleTopUp(amount)}
+                  className="ik-btn ik-btn-secondary flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold"
+                >
+                  <Plus size={14} />
+                  <Coins size={14} className="text-gold-300" />
+                  {amount}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

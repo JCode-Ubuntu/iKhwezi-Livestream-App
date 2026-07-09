@@ -107,7 +107,7 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
       count: video.starCount,
       active: video.hasStarred,
       onClick: handleStar,
-      activeColor: '#FFB800',
+      activeColor: '#F5C542',
       fill: video.hasStarred,
     },
     {
@@ -116,7 +116,7 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
       count: video.likeCount,
       active: video.isLiked,
       onClick: handleLike,
-      activeColor: '#EF4444',
+      activeColor: '#E1306C',
       fill: video.isLiked,
     },
     {
@@ -161,14 +161,14 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
           width: 48,
           height: 48,
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
+          background: 'linear-gradient(135deg, #E1306C, #F5C542)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: 18,
           fontWeight: 700,
           color: 'white',
-          boxShadow: '0 4px 20px rgba(111, 79, 255, 0.4)',
+          boxShadow: '0 4px 20px rgba(225, 48, 108, 0.4)',
           overflow: 'hidden',
           position: 'relative',
           transform: isAnimating === 'follow' ? 'scale(1.1)' : 'scale(1)',
@@ -186,11 +186,11 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
           width: 20,
           height: 20,
           borderRadius: '50%',
-          background: video.isFollowing ? '#10B981' : '#6F4FFF',
+          background: video.isFollowing ? '#10B981' : '#E1306C',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          border: '2px solid #0D0F1A',
+          border: '2px solid #0A0A0A',
         }}>
           {video.isFollowing ? (
             <UserCheck size={10} color="white" />

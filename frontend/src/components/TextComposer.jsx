@@ -3,9 +3,10 @@ import { X, Send, PenLine } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const BG_OPTIONS = [
+  { bg: '#1a0a14', gradient: 'linear-gradient(135deg,#E1306C,#8F1442,#0A0A0A)', label: 'Signature' },
   { bg: '#0f0c29', gradient: 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)', label: 'Midnight' },
   { bg: '#1a1a2e', gradient: 'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)', label: 'Ocean' },
-  { bg: '#0d1117', gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)', label: 'Indigo' },
+  { bg: '#221405', gradient: 'linear-gradient(135deg,#D4A012,#B8860B,#0A0A0A)', label: 'Gold' },
   { bg: '#1f0a00', gradient: 'linear-gradient(135deg,#dc2626,#b91c1c)', label: 'Fire' },
   { bg: '#001f0f', gradient: 'linear-gradient(135deg,#059669,#047857)', label: 'Forest' },
   { bg: '#1a0533', gradient: 'linear-gradient(135deg,#a855f7,#7c3aed)', label: 'Purple' },
@@ -62,19 +63,19 @@ export default function TextComposer({ onClose, onPosted }) {
   return (
     <div className="pointer-events-auto fixed inset-0 z-[300] flex flex-col bg-black/80 backdrop-blur-md" role="dialog" aria-modal="true">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 bg-[#050816]/95 px-4 py-3 backdrop-blur-xl">
+      <div className="flex items-center justify-between border-b border-white/10 bg-black/95 px-4 py-3 backdrop-blur-xl">
         <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition active:scale-95">
           <X size={18} />
         </button>
         <div className="flex items-center gap-2">
-          <PenLine size={16} className="text-neon-indigo" />
+          <PenLine size={16} className="text-pink-400" />
           <span className="text-sm font-bold text-white">New Post</span>
         </div>
         <button
           type="button"
           onClick={handlePost}
           disabled={!content.trim() || submitting}
-          className="flex items-center gap-1.5 rounded-full bg-neon-indigo px-4 py-1.5 text-sm font-bold text-white transition disabled:opacity-40 active:scale-95"
+          className="ultima-btn-supreme flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm disabled:opacity-40"
         >
           <Send size={14} />
           {submitting ? 'Posting…' : 'Post'}
@@ -100,7 +101,7 @@ export default function TextComposer({ onClose, onPosted }) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 border-t border-white/10 bg-[#050816]/95 px-4 pb-6 pt-3 backdrop-blur-xl">
+      <div className="flex flex-col gap-3 border-t border-white/10 bg-black/95 px-4 pb-6 pt-3 backdrop-blur-xl">
         {/* Background picker */}
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">Background</p>
@@ -114,8 +115,8 @@ export default function TextComposer({ onClose, onPosted }) {
                 style={{
                   width: 32, height: 32, borderRadius: 8,
                   background: opt.gradient,
-                  border: i === bgIndex ? '2px solid #818cf8' : '2px solid transparent',
-                  outline: i === bgIndex ? '1px solid rgba(129,140,248,0.4)' : 'none',
+                  border: i === bgIndex ? '2px solid #E1306C' : '2px solid transparent',
+                  outline: i === bgIndex ? '1px solid rgba(225,48,108,0.4)' : 'none',
                 }}
               />
             ))}
@@ -131,7 +132,7 @@ export default function TextComposer({ onClose, onPosted }) {
                 key={f.id}
                 type="button"
                 onClick={() => setFontStyle(f.id)}
-                className={`h-9 w-12 rounded-lg text-sm transition active:scale-95 ${fontStyle === f.id ? 'bg-neon-indigo/20 border border-neon-indigo/60 text-white' : 'bg-white/5 border border-white/10 text-white/50'}`}
+                className={`h-9 w-12 rounded-lg text-sm transition active:scale-95 ${fontStyle === f.id ? 'bg-pink-500/20 border border-pink-500/60 text-white' : 'bg-white/5 border border-white/10 text-white/50'}`}
                 style={f.style}
               >
                 {f.label}

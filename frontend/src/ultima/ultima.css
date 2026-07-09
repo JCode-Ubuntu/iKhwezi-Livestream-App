@@ -5,8 +5,14 @@
 }
 
 .ultima-page {
+  /* NOTE: deliberately no z-index here. Pairing `position: relative` with an
+     explicit z-index creates a new stacking context, which traps every
+     fixed-position descendant (gift sheets, edit sheets, chat panels, etc.)
+     below the app-level bottom nav/FABs (z-90/95) — no inner z-index, however
+     high, can escape it. Content still paints above a `fixed`/`z-0`
+     UltimaField sibling purely from DOM order (positioned siblings with
+     z-index:auto paint in tree order), so no visual regression. */
   position: relative;
-  z-index: 1;
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
@@ -24,13 +30,18 @@
 }
 
 .ultima-content {
+  /* See `.ultima-page` note above — no z-index, same reasoning. */
   position: relative;
-  z-index: 1;
 }
 
 .ultima-field {
   background:
-    radial-gradient(ellipse 140% 90% at 50% -30%, #1e0b3a 0%, #030014 42%, #000006 100%);
+    radial-gradient(ellipse 140% 90% at 50% -30%, #1a0a14 0%, #0d0f1a 42%, #0A0A0A 100%);
+}
+
+[data-theme='light'] .ultima-field {
+  background:
+    radial-gradient(ellipse 140% 90% at 50% -30%, #fdeef2 0%, #f4f3f6 42%, #FBFAF9 100%);
 }
 
 .ultima-grain {
@@ -56,7 +67,7 @@
   height: 60vw;
   top: -22%;
   left: -18%;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.6) 0%, transparent 68%);
+  background: radial-gradient(circle, rgba(225, 48, 108, 0.55) 0%, transparent 68%);
 }
 
 .ultima-aurora-b {
@@ -80,7 +91,7 @@
 .ultima-vignette {
   background:
     radial-gradient(ellipse 80% 60% at 50% 40%, transparent 30%, rgba(0, 0, 0, 0.55) 100%),
-    linear-gradient(180deg, rgba(3, 0, 20, 0.3) 0%, transparent 25%, transparent 75%, rgba(3, 0, 20, 0.6) 100%);
+    linear-gradient(180deg, rgba(10, 10, 10, 0.3) 0%, transparent 25%, transparent 75%, rgba(10, 10, 10, 0.6) 100%);
 }
 
 @keyframes ultima-drift {
@@ -104,7 +115,7 @@
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  background: linear-gradient(155deg, rgba(245, 197, 66, 0.08) 0%, rgba(139, 92, 246, 0.06) 40%, rgba(0, 0, 0, 0.4) 100%);
+  background: linear-gradient(155deg, rgba(245, 197, 66, 0.08) 0%, rgba(225, 48, 108, 0.07) 40%, rgba(0, 0, 0, 0.4) 100%);
   border: 1px solid transparent;
   background-clip: padding-box;
   backdrop-filter: blur(32px) saturate(1.5);
@@ -120,7 +131,7 @@
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(245, 197, 66, 0.45), rgba(139, 92, 246, 0.25), rgba(34, 211, 238, 0.15));
+  background: linear-gradient(135deg, rgba(245, 197, 66, 0.45), rgba(225, 48, 108, 0.3), rgba(34, 211, 238, 0.15));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -139,12 +150,12 @@
 .ultima-text-glow {
   text-shadow:
     0 0 40px rgba(245, 197, 66, 0.5),
-    0 0 80px rgba(139, 92, 246, 0.3),
+    0 0 80px rgba(225, 48, 108, 0.32),
     0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .ultima-text-supreme {
-  background: linear-gradient(135deg, #fff 0%, #fde68a 35%, #f5c542 55%, #c4b5fd 85%, #fff 100%);
+  background: linear-gradient(135deg, #fff 0%, #fde68a 35%, #f5c542 55%, #f7a8c0 85%, #fff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -169,10 +180,10 @@
 
 /* ── Navigation dock ── */
 .ultima-dock {
-  background: linear-gradient(180deg, rgba(18, 10, 36, 0.92) 0%, rgba(3, 0, 20, 0.97) 100%);
+  background: linear-gradient(180deg, rgba(20, 12, 20, 0.92) 0%, rgba(10, 10, 10, 0.97) 100%);
   border: 1px solid rgba(245, 197, 66, 0.18);
   box-shadow:
-    0 -8px 48px rgba(139, 92, 246, 0.22),
+    0 -8px 48px rgba(225, 48, 108, 0.2),
     0 24px 64px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 0 40px rgba(245, 197, 66, 0.03);
@@ -209,7 +220,7 @@
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(160deg, rgba(245,197,66,0.6), transparent 40%, rgba(139,92,246,0.4));
+  background: linear-gradient(160deg, rgba(245,197,66,0.6), transparent 40%, rgba(225,48,108,0.38));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -230,7 +241,7 @@
   transform: translateY(-3px);
   box-shadow:
     0 0 0 1px rgba(245, 197, 66, 0.4),
-    0 20px 56px rgba(139, 92, 246, 0.25),
+    0 20px 56px rgba(225, 48, 108, 0.22),
     0 0 40px rgba(245, 197, 66, 0.08);
 }
 
@@ -269,7 +280,7 @@
   width: 6px;
   height: 6px;
   rotate: 45deg;
-  background: linear-gradient(135deg, #fde68a, #8b5cf6);
+  background: linear-gradient(135deg, #fde68a, #E1306C);
   box-shadow: 0 0 12px rgba(245, 197, 66, 0.6);
 }
 
@@ -335,18 +346,18 @@
 
 /* ── Loading ── */
 .ultima-logo-ring {
-  background: linear-gradient(145deg, rgba(245, 197, 66, 0.18), rgba(139, 92, 246, 0.14));
+  background: linear-gradient(145deg, rgba(245, 197, 66, 0.18), rgba(225, 48, 108, 0.16));
   border: 1px solid rgba(245, 197, 66, 0.4);
   box-shadow:
     0 0 48px rgba(245, 197, 66, 0.25),
-    0 0 96px rgba(139, 92, 246, 0.18),
+    0 0 96px rgba(225, 48, 108, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   animation: ultima-pulse-glow 3s ease-in-out infinite;
 }
 
 @keyframes ultima-pulse-glow {
-  0%, 100% { box-shadow: 0 0 48px rgba(245,197,66,0.25), 0 0 96px rgba(139,92,246,0.18); }
-  50% { box-shadow: 0 0 64px rgba(245,197,66,0.45), 0 0 120px rgba(139,92,246,0.3); }
+  0%, 100% { box-shadow: 0 0 48px rgba(245,197,66,0.25), 0 0 96px rgba(225,48,108,0.2); }
+  50% { box-shadow: 0 0 64px rgba(245,197,66,0.45), 0 0 120px rgba(225,48,108,0.32); }
 }
 
 .ultima-loader-fill { animation: ultima-slide 1.4s ease-in-out infinite; }
@@ -358,9 +369,9 @@
 
 .ultima-supreme-banner {
   background:
-    linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(225, 48, 108, 0.22) 0%, transparent 50%),
     linear-gradient(225deg, rgba(245, 197, 66, 0.15) 0%, transparent 50%),
-    linear-gradient(180deg, #0a0618 0%, #030014 100%);
+    linear-gradient(180deg, #12141F 0%, #0A0A0A 100%);
   border-bottom: 1px solid rgba(245, 197, 66, 0.12);
 }
 
@@ -375,6 +386,230 @@
 /* Premium scrollbar */
 .ultima-scroll::-webkit-scrollbar { width: 4px; }
 .ultima-scroll::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(245,197,66,0.5), rgba(139,92,246,0.4));
+  background: linear-gradient(180deg, rgba(245,197,66,0.5), rgba(225,48,108,0.4));
   border-radius: 4px;
+}
+
+/* ── Light mode overrides for glass & text ── */
+[data-theme='light'] .ultima-glass,
+[data-theme='light'] .ultima-glass-supreme,
+[data-theme='light'] .ultima-glass-gold {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.55) 100%);
+  border-color: rgba(20, 20, 26, 0.08);
+  box-shadow:
+    0 12px 40px rgba(20, 20, 26, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  color: #14141A;
+}
+
+[data-theme='light'] .ultima-dock {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.98) 100%);
+  border-color: rgba(20, 20, 26, 0.08);
+  box-shadow:
+    0 -8px 32px rgba(225, 48, 108, 0.08),
+    0 24px 48px rgba(20, 20, 26, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+[data-theme='light'] .ultima-eyebrow { color: rgba(184, 27, 88, 0.85); }
+[data-theme='light'] .ultima-vignette { display: none; }
+[data-theme='light'] .ultima-grain { opacity: 0.02; }
+
+/* ── Premium micro-interactions ── */
+.ik-tap-spring {
+  transition: transform var(--motion-fast, 150ms) var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.ik-tap-spring:active { transform: scale(0.94); }
+
+.ik-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(110deg, rgba(255,255,255,0.04) 8%, rgba(255,255,255,0.1) 18%, rgba(255,255,255,0.04) 33%);
+  background-size: 200% 100%;
+  animation: ik-shimmer-slide 1.6s ease-in-out infinite;
+}
+@keyframes ik-shimmer-slide {
+  to { background-position-x: -200%; }
+}
+
+/* Double-tap heart burst */
+.ik-heart-burst {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 20;
+}
+.ik-heart-burst svg {
+  filter: drop-shadow(0 8px 24px rgba(225, 48, 108, 0.5));
+  animation: ik-heart-pop 0.9s var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
+}
+@keyframes ik-heart-pop {
+  0% { transform: scale(0); opacity: 0; }
+  15% { transform: scale(1.15); opacity: 1; }
+  30% { transform: scale(0.95); }
+  45% { transform: scale(1.05); }
+  75% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.1); opacity: 0; }
+}
+
+/* Flying hearts (live viewer reactions) */
+.ik-flying-heart {
+  position: absolute;
+  bottom: 0;
+  pointer-events: none;
+  animation: ik-heart-fly 3.2s ease-out forwards;
+  filter: drop-shadow(0 4px 12px rgba(225, 48, 108, 0.55));
+}
+@keyframes ik-heart-fly {
+  0% { transform: translateY(0) translateX(0) scale(0.4) rotate(0deg); opacity: 0; }
+  8% { opacity: 1; transform: translateY(-8%) scale(1) rotate(-4deg); }
+  100% { transform: translateY(-620%) translateX(var(--drift, 24px)) scale(0.75) rotate(8deg); opacity: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Premium Button System
+   Shape: 16px radius (standard), 999px (pills/FAB) · Glass depth · Inter
+   Medium/Semibold 15-16px, -0.2px tracking · Spring press (0.96, 220ms)
+   ══════════════════════════════════════════════════════════════════════ */
+
+.ik-btn {
+  /* NOTE: deliberately no `position` here. Tailwind's utilities (index.css) load
+     before this file, so any `position` value set on the shared `.ik-btn` base
+     would win the cascade tie (equal specificity, later source order) over
+     per-instance utilities like `absolute`/`fixed` used in JSX — silently
+     stripping positioning and, worse, turning the button into an in-flow flex
+     child that gets stretched to 100% of its flex-col parent's width. Buttons
+     that need a positioning context for pseudo-elements should set `position`
+     via their own variant class (e.g. `.ik-btn-live`), not here. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.2px;
+  border-radius: 16px;
+  white-space: nowrap;
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 220ms ease, opacity 220ms ease, border-color 220ms ease, background 220ms ease;
+  user-select: none;
+}
+.ik-btn:active { transform: scale(0.96); }
+.ik-btn:disabled,
+.ik-btn.is-disabled {
+  opacity: 0.45;
+  filter: saturate(0.6);
+  pointer-events: none;
+  transform: none !important;
+}
+
+/* Primary — solid pink gradient. Create Post / Go Live / Send / Save */
+.ik-btn-primary {
+  background: linear-gradient(135deg, #E1306C 0%, #C13584 100%);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 10px 28px rgba(225, 48, 108, 0.38);
+}
+.ik-btn-primary:hover {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.3) inset,
+    0 12px 36px rgba(225, 48, 108, 0.5),
+    0 0 0 1px rgba(255, 215, 0, 0.18);
+}
+.ik-btn-primary:active {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 6px 18px rgba(225, 48, 108, 0.35);
+}
+
+/* Secondary — transparent, elegant border, glow on interaction */
+.ik-btn-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(20px);
+}
+.ik-btn-secondary:hover,
+.ik-btn-secondary:focus-visible {
+  border-color: rgba(225, 48, 108, 0.55);
+  box-shadow: 0 0 0 3px rgba(225, 48, 108, 0.12), 0 0 28px rgba(225, 48, 108, 0.18);
+}
+
+/* Tertiary / Ghost — text + optional icon only. Cancel / Edit / More */
+.ik-btn-ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  border: none;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.ik-btn-ghost:hover { color: rgba(255, 255, 255, 0.92); }
+
+/* Floating Action Button — 56-64dp circular, pink-gold gradient */
+.ik-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #E1306C 0%, #F5C542 100%);
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.3) inset,
+    0 14px 36px rgba(225, 48, 108, 0.45),
+    0 0 48px rgba(245, 197, 66, 0.22);
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease;
+}
+.ik-fab:active { transform: scale(0.94); }
+
+/* Live-specific — glowing neon pink border, subtle pulse */
+.ik-btn-live {
+  background: rgba(10, 10, 10, 0.55);
+  color: #fff;
+  border: 1.5px solid rgba(225, 48, 108, 0.6);
+  box-shadow: 0 0 0 1px rgba(225, 48, 108, 0.15), 0 0 24px rgba(225, 48, 108, 0.35);
+  animation: ik-live-pulse 2.4s ease-in-out infinite;
+}
+@keyframes ik-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(225, 48, 108, 0.15), 0 0 24px rgba(225, 48, 108, 0.3); }
+  50% { box-shadow: 0 0 0 1px rgba(225, 48, 108, 0.3), 0 0 40px rgba(225, 48, 108, 0.55); }
+}
+
+/* Gift / react bouncy micro-buttons in live chat */
+.ik-btn-bouncy {
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ik-btn-bouncy:active { transform: scale(0.82) rotate(-4deg); }
+
+/* Pill size variants */
+.ik-btn-sm { padding: 8px 16px; font-size: 13px; border-radius: 14px; }
+.ik-btn-md { padding: 12px 22px; border-radius: 16px; }
+.ik-btn-lg { padding: 16px 28px; border-radius: 18px; font-size: 16px; }
+.ik-btn-pill { border-radius: 999px !important; }
+.ik-btn-block { width: 100%; }
+
+[data-theme='light'] .ik-btn-secondary {
+  background: rgba(20, 20, 26, 0.03);
+  color: #14141A;
+  border-color: rgba(20, 20, 26, 0.16);
+}
+[data-theme='light'] .ik-btn-ghost { color: rgba(20, 20, 26, 0.6); }
+[data-theme='light'] .ik-btn-ghost:hover { color: #14141A; }
+
+/* Sparkle pop for live viewer counters */
+.ik-sparkle::after {
+  content: '✦';
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--gold-400, #F5C542);
+  animation: ik-sparkle-pop 1.8s ease-in-out infinite;
+}
+@keyframes ik-sparkle-pop {
+  0%, 100% { opacity: 0.5; transform: scale(0.85) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.15) rotate(20deg); }
 }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Volume2, VolumeX, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Volume2, VolumeX, X, ChevronUp, ChevronDown, Heart, Music2, Eye } from 'lucide-react';
 import VideoPlayer from '../VideoPlayer';
 import VideoActions from '../VideoActions';
 import Comments from '../Comments';
 import FeedDiscovery from '../FeedDiscovery';
+import { useAuth } from '../../context/AuthContext';
 
 export default function FullscreenFeed({
   videos,
@@ -13,11 +14,47 @@ export default function FullscreenFeed({
   setMuted,
   onUpdate,
   showGuestPrompt,
+  showTrackMeta = false,
 }) {
+  const { isAuthenticated, fetchWithAuth } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [showComments, setShowComments] = useState(false);
+  const [burst, setBurst] = useState(null);
   const touchStartY = useRef(0);
+  const lastTapRef = useRef({ time: 0, index: -1 });
   const currentVideo = videos[currentIndex];
+
+  const handleDoubleTapLike = useCallback(
+    async (video, index) => {
+      setBurst({ index, key: Date.now() });
+      if (!isAuthenticated) {
+        showGuestPrompt?.();
+        return;
+      }
+      if (video.isLiked) return;
+      try {
+        const res = await fetchWithAuth(`/videos/${video.id}/like`, { method: 'POST' });
+        const data = await res.json();
+        onUpdate?.({ ...video, isLiked: data.liked, likeCount: data.likeCount });
+      } catch {
+        /* silent — non-critical UI flourish */
+      }
+    },
+    [isAuthenticated, fetchWithAuth, onUpdate, showGuestPrompt]
+  );
+
+  const handleSlideTap = useCallback(
+    (video, index) => {
+      const now = Date.now();
+      if (lastTapRef.current.index === index && now - lastTapRef.current.time < 320) {
+        lastTapRef.current = { time: 0, index: -1 };
+        handleDoubleTapLike(video, index);
+      } else {
+        lastTapRef.current = { time: now, index };
+      }
+    },
+    [handleDoubleTapLike]
+  );
 
   const go = useCallback(
     (dir) => {
@@ -74,12 +111,25 @@ export default function FullscreenFeed({
         }}
       >
         {videos.map((video, index) => (
-          <div key={video.id} className="relative h-screen w-full">
+          <div
+            key={video.id}
+            className="relative h-screen w-full"
+            onClick={() => handleSlideTap(video, index)}
+          >
             <VideoPlayer
               src={`/storage/uploads/${video.filename}`}
               isActive={index === currentIndex}
               muted={muted}
             />
+            {burst?.index === index && (
+              <div
+                key={burst.key}
+                className="ik-heart-burst"
+                onAnimationEnd={() => setBurst(null)}
+              >
+                <Heart size={116} className="text-pink-500" fill="#E1306C" strokeWidth={0} />
+              </div>
+            )}
             <VideoActions
               video={video}
               onUpdate={onUpdate}
@@ -94,6 +144,18 @@ export default function FullscreenFeed({
               </p>
               {video.caption && (
                 <p className="mt-2 line-clamp-3 text-sm text-white/85">{video.caption}</p>
+              )}
+              {showTrackMeta && (
+                <div className="mt-2.5 flex items-center gap-3 text-[11px] font-medium text-white/60">
+                  <span className="flex items-center gap-1.5">
+                    <Music2 size={12} className="text-pink-300" />
+                    Original audio · @{video.creator?.username || 'unknown'}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Eye size={12} />
+                    {video.views || 0}
+                  </span>
+                </div>
               )}
             </div>
           </div>

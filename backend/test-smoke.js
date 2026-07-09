@@ -5,7 +5,7 @@
 'use strict';
 const http = require('http');
 
-const BASE = `http://localhost:${process.env.PORT || 3101}`;
+const BASE = `http://localhost:${process.env.PORT || 3001}`;
 let passed = 0;
 let failed = 0;
 
@@ -15,7 +15,7 @@ function req(method, path, body, token) {
     const opts = {
       method,
       hostname: 'localhost',
-      port: process.env.PORT || 3101,
+      port: process.env.PORT || 3001,
       path,
       headers: {
         'Content-Type': 'application/json',

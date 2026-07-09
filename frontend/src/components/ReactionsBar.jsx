@@ -83,7 +83,7 @@ function ReactionsBar({
     <div
       className={`relative ${className}`}
       style={{
-        boxShadow: `0 0 ${24 + glow * 40}px rgba(99, 102, 241, ${0.2 + glow * 0.25})`,
+        boxShadow: `0 0 ${24 + glow * 40}px rgba(225, 48, 108, ${0.2 + glow * 0.25})`,
       }}
     >
       <div

@@ -6,9 +6,9 @@ function GuestPrompt({ onClose, context = 'default' }) {
   const navigate = useNavigate();
 
   const features = [
-    { icon: Star, text: 'Give stars to creators', color: '#FFB800' },
-    { icon: Heart, text: 'Like your favorite videos', color: '#EF4444' },
-    { icon: MessageCircle, text: 'Comment and reply', color: '#6F4FFF' },
+    { icon: Star, text: 'Give stars to creators', color: '#F5C542' },
+    { icon: Heart, text: 'Like your favorite videos', color: '#E1306C' },
+    { icon: MessageCircle, text: 'Comment and reply', color: '#22D3EE' },
     { icon: UserCheck, text: 'Follow creators you love', color: '#10B981' },
   ];
 
@@ -41,12 +41,12 @@ function GuestPrompt({ onClose, context = 'default' }) {
           width: 80,
           height: 80,
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
+          background: 'linear-gradient(135deg, #E1306C, #F5C542)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           margin: '0 auto 20px',
-          boxShadow: '0 10px 40px rgba(111, 79, 255, 0.4)',
+          boxShadow: '0 10px 40px rgba(225, 48, 108, 0.4)',
           animation: 'pulse 2s infinite'
         }}>
           <Zap size={36} color="white" fill="white" />

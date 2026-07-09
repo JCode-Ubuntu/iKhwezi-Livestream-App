@@ -129,7 +129,7 @@ function HlsPlayer({ src, autoPlay = true, muted = true, controls = true, onErro
             width: 50,
             height: 50,
             border: '3px solid rgba(255, 255, 255, 0.2)',
-            borderTopColor: '#6F4FFF',
+            borderTopColor: '#E1306C',
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
           }} />

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Phone, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles, Check } from 'lucide-react';
+import { Mail, Phone, Lock, User, Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
+import { UltimaCrown } from '../ultima/UltimaPrimitives';
 
 function Register() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ function Register() {
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.username || formData.username.length < 3) {
       newErrors.username = 'Username must be at least 3 characters';
     }
@@ -48,9 +49,9 @@ function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
-    
+
     setLoading(true);
 
     const userData = {
@@ -77,293 +78,170 @@ function Register() {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto ultima-page--auth">
       <UltimaField intensity={0.9} fixed />
-      <div className="ultima-content flex flex-col" style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      padding: 24,
-      overflow: 'auto',
-    }}>
-      <button
-        onClick={() => navigate('/')}
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: '50%',
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.7)',
-          marginBottom: 24,
-          cursor: 'pointer',
-        }}
-      >
-        <ArrowLeft size={20} />
-      </button>
-
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{
-          width: 80,
-          height: 80,
-          borderRadius: 24,
-          background: 'linear-gradient(135deg, #6F4FFF, #FFB800)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 20px',
-          boxShadow: '0 10px 40px rgba(111, 79, 255, 0.4)',
-        }}>
-          <Sparkles size={36} color="white" />
-        </div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Join iKHWEZI</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>Create your creator account</p>
-      </div>
-
-      <div style={{
-        display: 'flex',
-        background: 'var(--bg-elevated)',
-        borderRadius: 12,
-        padding: 4,
-        marginBottom: 20,
-      }}>
+      <div className="ultima-content flex flex-col px-6 pt-8 pb-10">
         <button
-          onClick={() => setMode('email')}
-          style={{
-            flex: 1,
-            padding: '12px 16px',
-            borderRadius: 8,
-            background: mode === 'email' ? 'linear-gradient(135deg, #6F4FFF, #4A2FCC)' : 'transparent',
-            color: mode === 'email' ? 'white' : 'var(--text-secondary)',
-            fontWeight: 600,
-            fontSize: 14,
-            transition: 'all 0.3s ease',
-          }}
+          type="button"
+          onClick={() => navigate('/')}
+          className="ultima-glass mb-8 flex h-11 w-11 items-center justify-center rounded-full text-white/70"
         >
-          <Mail size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-          Email
+          <ArrowLeft size={20} />
         </button>
-        <button
-          onClick={() => setMode('phone')}
-          style={{
-            flex: 1,
-            padding: '12px 16px',
-            borderRadius: 8,
-            background: mode === 'phone' ? 'linear-gradient(135deg, #6F4FFF, #4A2FCC)' : 'transparent',
-            color: mode === 'phone' ? 'white' : 'var(--text-secondary)',
-            fontWeight: 600,
-            fontSize: 14,
-            transition: 'all 0.3s ease',
-          }}
-        >
-          <Phone size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-          Phone
-        </button>
-      </div>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {mode === 'email' ? (
-          <div>
-            <div style={{ position: 'relative' }}>
-              <Mail size={20} color="var(--text-muted)" style={{
-                position: 'absolute',
-                left: 16,
-                top: '50%',
-                transform: 'translateY(-50%)',
-              }} />
-              <input
-                type="email"
-                placeholder="Email address"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="input"
-                style={{ paddingLeft: 48 }}
-                required
-              />
-            </div>
-            {errors.email && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{errors.email}</p>}
-          </div>
-        ) : (
-          <div>
-            <div style={{ position: 'relative' }}>
-              <Phone size={20} color="var(--text-muted)" style={{
-                position: 'absolute',
-                left: 16,
-                top: '50%',
-                transform: 'translateY(-50%)',
-              }} />
-              <input
-                type="tel"
-                placeholder="Phone number"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="input"
-                style={{ paddingLeft: 48 }}
-                required
-              />
-            </div>
-            {errors.phone && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{errors.phone}</p>}
-          </div>
-        )}
-
-        <div>
-          <div style={{ position: 'relative' }}>
-            <User size={20} color="var(--text-muted)" style={{
-              position: 'absolute',
-              left: 16,
-              top: '50%',
-              transform: 'translateY(-50%)',
-            }} />
-            <input
-              type="text"
-              placeholder="Username"
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-              className="input"
-              style={{ paddingLeft: 48 }}
-              required
-            />
-          </div>
-          {errors.username && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{errors.username}</p>}
+        <div className="mb-2 flex justify-center">
+          <UltimaCrown label="New signal" />
         </div>
+        <h1 className="ultima-text-glow text-center font-display text-4xl font-black text-white">
+          Join iKHWEZI
+        </h1>
+        <p className="mt-2 text-center text-sm text-white/45">Create your creator account</p>
 
-        <div style={{ position: 'relative' }}>
-          <User size={20} color="var(--text-muted)" style={{
-            position: 'absolute',
-            left: 16,
-            top: '50%',
-            transform: 'translateY(-50%)',
-          }} />
-          <input
-            type="text"
-            placeholder="Display name (optional)"
-            value={formData.displayName}
-            onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-            className="input"
-            style={{ paddingLeft: 48 }}
-          />
-        </div>
-
-        <div>
-          <div style={{ position: 'relative' }}>
-            <Lock size={20} color="var(--text-muted)" style={{
-              position: 'absolute',
-              left: 16,
-              top: '50%',
-              transform: 'translateY(-50%)',
-            }} />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="input"
-              style={{ paddingLeft: 48, paddingRight: 48 }}
-              required
-            />
+        <div className="ultima-glass mt-8 flex rounded-2xl p-1">
+          {['email', 'phone'].map((m) => (
             <button
+              key={m}
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                position: 'absolute',
-                right: 16,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-muted)',
-              }}
+              onClick={() => setMode(m)}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-semibold capitalize transition ${
+                mode === m
+                  ? 'bg-gradient-to-r from-gold-500/25 to-violet-500/20 text-gold-200'
+                  : 'text-white/45'
+              }`}
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {m}
             </button>
-          </div>
-          {errors.password && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{errors.password}</p>}
-        </div>
-
-        <div>
-          <div style={{ position: 'relative' }}>
-            <Lock size={20} color="var(--text-muted)" style={{
-              position: 'absolute',
-              left: 16,
-              top: '50%',
-              transform: 'translateY(-50%)',
-            }} />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Confirm password"
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              className="input"
-              style={{ paddingLeft: 48 }}
-              required
-            />
-          </div>
-          {errors.confirmPassword && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{errors.confirmPassword}</p>}
-        </div>
-
-        <div style={{
-          background: 'var(--bg-elevated)',
-          borderRadius: 12,
-          padding: 14,
-          marginTop: 4,
-        }}>
-          {requirements.map((req, index) => (
-            <div key={index} style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              marginBottom: index < requirements.length - 1 ? 8 : 0,
-            }}>
-              <div style={{
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                background: req.met ? 'var(--success)' : 'var(--bg-card)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.3s ease',
-              }}>
-                {req.met && <Check size={12} color="white" />}
-              </div>
-              <span style={{
-                fontSize: 13,
-                color: req.met ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}>
-                {req.text}
-              </span>
-            </div>
           ))}
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="btn btn-primary"
-          style={{
-            width: '100%',
-            height: 52,
-            fontSize: 16,
-            marginTop: 8,
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          {loading ? 'Creating account...' : 'Create Account'}
-        </button>
-      </form>
+        <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-white/40">
+              {mode === 'email' ? 'Email' : 'Phone'}
+            </span>
+            <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+              {mode === 'email' ? (
+                <Mail size={18} className="text-gold-400/70" />
+              ) : (
+                <Phone size={18} className="text-gold-400/70" />
+              )}
+              <input
+                type={mode === 'email' ? 'email' : 'tel'}
+                required
+                value={mode === 'email' ? formData.email : formData.phone}
+                onChange={(e) =>
+                  setFormData((f) => ({
+                    ...f,
+                    [mode === 'email' ? 'email' : 'phone']: e.target.value,
+                  }))
+                }
+                className="flex-1 bg-transparent text-white outline-none placeholder:text-white/25"
+                placeholder={mode === 'email' ? 'you@signal.space' : '+27...'}
+              />
+            </div>
+            {errors[mode] && <span className="text-xs text-red-400/90">{errors[mode]}</span>}
+          </label>
 
-      <div style={{
-        marginTop: 24,
-        textAlign: 'center',
-      }}>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-          Already have an account?{' '}
-          <Link to="/login" style={{ color: 'var(--violet-light)', fontWeight: 600 }}>
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-white/40">Username</span>
+            <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+              <User size={18} className="text-gold-400/70" />
+              <input
+                type="text"
+                required
+                value={formData.username}
+                onChange={(e) =>
+                  setFormData((f) => ({
+                    ...f,
+                    username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+                  }))
+                }
+                className="flex-1 bg-transparent text-white outline-none placeholder:text-white/25"
+                placeholder="yourname"
+              />
+            </div>
+            {errors.username && <span className="text-xs text-red-400/90">{errors.username}</span>}
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-white/40">
+              Display name <span className="text-white/25">(optional)</span>
+            </span>
+            <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+              <User size={18} className="text-gold-400/70" />
+              <input
+                type="text"
+                value={formData.displayName}
+                onChange={(e) => setFormData((f) => ({ ...f, displayName: e.target.value }))}
+                className="flex-1 bg-transparent text-white outline-none placeholder:text-white/25"
+                placeholder="How others see you"
+              />
+            </div>
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-white/40">Password</span>
+            <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+              <Lock size={18} className="text-gold-400/70" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={formData.password}
+                onChange={(e) => setFormData((f) => ({ ...f, password: e.target.value }))}
+                className="flex-1 bg-transparent text-white outline-none placeholder:text-white/25"
+                placeholder="••••••••"
+              />
+              <button type="button" onClick={() => setShowPassword((s) => !s)} className="text-white/40">
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            {errors.password && <span className="text-xs text-red-400/90">{errors.password}</span>}
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-white/40">Confirm password</span>
+            <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+              <Lock size={18} className="text-gold-400/70" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData((f) => ({ ...f, confirmPassword: e.target.value }))}
+                className="flex-1 bg-transparent text-white outline-none placeholder:text-white/25"
+                placeholder="••••••••"
+              />
+            </div>
+            {errors.confirmPassword && <span className="text-xs text-red-400/90">{errors.confirmPassword}</span>}
+          </label>
+
+          <div className="ultima-glass mt-1 flex flex-col gap-2.5 rounded-2xl px-4 py-3.5">
+            {requirements.map((req, index) => (
+              <div key={index} className="flex items-center gap-2.5">
+                <div
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors ${
+                    req.met ? 'bg-pink-500' : 'bg-white/10'
+                  }`}
+                >
+                  {req.met && <Check size={12} className="text-white" strokeWidth={3} />}
+                </div>
+                <span className={`text-xs ${req.met ? 'text-white/85' : 'text-white/35'}`}>{req.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-4 rounded-2xl bg-gradient-to-r from-gold-400 via-amber-500 to-gold-600 py-4 font-display text-sm font-bold uppercase tracking-widest text-void-950 shadow-lg shadow-gold-500/25 transition active:scale-[0.98] disabled:opacity-60"
+          >
+            {loading ? 'Creating account…' : 'Create account'}
+          </button>
+        </form>
+
+        <p className="mt-8 text-center text-sm text-white/40">
+          Already have a signal?{' '}
+          <Link to="/login" className="font-semibold text-gold-400 hover:text-gold-300">
             Sign in
           </Link>
         </p>
-      </div>
-
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ function UltimaCreateSheet({ onClose, onVideo, onStory, onText }) {
       icon: Film,
       label: 'Cinema',
       sub: 'Upload a clip',
-      gradient: 'from-violet-500 via-purple-600 to-indigo-700',
+      gradient: 'from-pink-500 via-pink-600 to-rose-800',
       onClick: onVideo,
     },
     {

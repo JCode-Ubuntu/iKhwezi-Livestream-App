@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GuestPrompt from '../components/GuestPrompt';
 import { StoryTray } from '../components/Stories';
 import StoryCreator from '../components/StoryCreator';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
+import TextPostCard from '../components/feed/TextPostCard';
 import UltimaField from '../ultima/UltimaField';
 import { UltimaCrown } from '../ultima/UltimaPrimitives';
-import { Play, Zap, Orbit, Eye, Sparkles } from 'lucide-react';
+import { Play, Zap, Orbit, Eye, Sparkles, Send } from 'lucide-react';
 
 function formatDuration(seconds) {
   if (!seconds || Number.isNaN(Number(seconds))) return '0:00';
@@ -39,7 +41,7 @@ function Spotlight({ videos, muted, onOpen }) {
           style={{ filter: 'brightness(0.5) saturate(1.2)' }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-void-950 via-void-950/40 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-violet-900/30 via-transparent to-gold-900/20" />
+        <div className="absolute inset-0 bg-gradient-to-r from-pink-700/25 via-transparent to-gold-900/20" />
 
         <div className="absolute left-5 top-5 flex items-center gap-2">
           <span className="flex items-center gap-1.5 rounded-full border border-gold-400/30 bg-gold-500/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gold-200">
@@ -88,7 +90,7 @@ function Spotlight({ videos, muted, onOpen }) {
                 style={{
                   width: i === idx ? 24 : 6,
                   background: i === idx
-                    ? 'linear-gradient(90deg, #F5C542, #8B5CF6)'
+                    ? 'linear-gradient(90deg, #F5C542, #E1306C)'
                     : 'rgba(255,255,255,0.25)',
                 }}
               />
@@ -130,8 +132,10 @@ function BentoTile({ video, tall, onClick, index }) {
 }
 
 function Home() {
-  const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction } = useAuth();
+  const navigate = useNavigate();
+  const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction, isAuthenticated } = useAuth();
   const [videos, setVideos] = useState([]);
+  const [textPosts, setTextPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -156,9 +160,11 @@ function Home() {
       loadingMore.current = true;
       try {
         const res = await fetchWithAuth(`/videos/feed?page=${pageNum}&limit=20`);
+        if (!res.ok) throw new Error(`Feed request failed: ${res.status}`);
         const data = await res.json();
-        setVideos((prev) => (append ? [...prev, ...data.videos] : data.videos));
-        setHasMore(data.hasMore);
+        const nextVideos = Array.isArray(data.videos) ? data.videos : [];
+        setVideos((prev) => (append ? [...prev, ...nextVideos] : nextVideos));
+        setHasMore(!!data.hasMore);
       } catch (err) {
         console.error('Failed to load videos:', err);
       } finally {
@@ -170,6 +176,13 @@ function Home() {
   );
 
   useEffect(() => { loadVideos(); }, [loadVideos]);
+
+  useEffect(() => {
+    fetchWithAuth('/posts?page=1&limit=20')
+      .then((r) => r.json())
+      .then((data) => setTextPosts(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [fetchWithAuth]);
 
   useEffect(() => {
     if (!sentinelRef.current) return undefined;
@@ -196,10 +209,12 @@ function Home() {
     return (trending.length >= 3 ? trending : videos).slice(0, 6);
   }, [videos]);
 
-  const gridVideos = useMemo(() => {
+  const feedItems = useMemo(() => {
     const heroIds = new Set(heroVideos.map((v) => v.id));
-    return videos.filter((v) => !heroIds.has(v.id));
-  }, [videos, heroVideos]);
+    const rest = videos.filter((v) => !heroIds.has(v.id)).map((v) => ({ type: 'video', data: v, createdAt: v.createdAt }));
+    const posts = textPosts.map((p) => ({ type: 'text', data: p, createdAt: p.createdAt }));
+    return [...rest, ...posts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [videos, heroVideos, textPosts]);
 
   const openAt = (video) => {
     const i = videos.findIndex((v) => v.id === video.id);
@@ -217,7 +232,7 @@ function Home() {
     );
   }
 
-  if (videos.length === 0) {
+  if (videos.length === 0 && textPosts.length === 0) {
     return (
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-8 text-center">
         <UltimaField intensity={1.2} fixed />
@@ -245,11 +260,23 @@ function Home() {
             </h1>
             <p className="ultima-serif mt-1 text-base text-white/45">Shine the signal</p>
           </div>
-          <div className="ultima-glass-supreme flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2">
-            <Orbit size={14} className="text-plasma-400" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/70">
-              {videos.length} signals
-            </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="ultima-glass-supreme flex items-center gap-2 rounded-full px-3.5 py-2">
+              <Orbit size={14} className="text-pink-400" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-white/70">
+                {videos.length} signals
+              </span>
+            </div>
+            {isAuthenticated && !isGuest && (
+              <button
+                type="button"
+                onClick={() => navigate('/messages')}
+                aria-label="Messages"
+                className="ultima-icon-btn ik-tap-spring flex h-10 w-10 items-center justify-center rounded-full text-white/75"
+              >
+                <Send size={17} strokeWidth={1.9} />
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -272,15 +299,28 @@ function Home() {
       </div>
 
       <div className="ultima-stagger grid grid-cols-2 gap-3 px-4 pt-5">
-        {gridVideos.map((video, index) => (
-          <BentoTile
-            key={video.id}
-            video={video}
-            tall={index % 3 === 0}
-            index={index}
-            onClick={() => openAt(video)}
-          />
-        ))}
+        {feedItems.map((item, index) =>
+          item.type === 'video' ? (
+            <BentoTile
+              key={`v-${item.data.id}`}
+              video={item.data}
+              tall={index % 3 === 0}
+              index={index}
+              onClick={() => openAt(item.data)}
+            />
+          ) : (
+            <TextPostCard
+              key={`t-${item.data.id}`}
+              post={item.data}
+              tall={index % 3 === 0}
+              onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
+              onGuestBlock={() => {
+                setGuestPromptContext('interaction');
+                setShowGuestPrompt(true);
+              }}
+            />
+          )
+        )}
       </div>
 
       <div ref={sentinelRef} className="h-12" />

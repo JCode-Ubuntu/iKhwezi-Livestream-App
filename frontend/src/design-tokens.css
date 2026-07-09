@@ -1,23 +1,49 @@
-/* iKHWEZI design tokens — colors, spacing, typography, radii, shadows */
+/* iKHWEZI design tokens — premium dark/light theme, colors, spacing, typography, radii, shadows */
 :root {
-  /* Colors */
-  --bg-900: #090909;
-  --surface-800: #141414;
-  --surface-700: #1B1B1B;
-  --border-600: #2A2A2A;
-  --gold-500: #FFC66D;
-  --gold-400: #FFF1B2;
-  --gold-300: #FFB347;
+  /* ── Core surfaces (dark — primary) ── */
+  --bg-950: #0A0A0A;
+  --bg-900: #0D0F1A;
+  --bg-850: #12141F;
+  --surface-800: #161826;
+  --surface-700: #1E2133;
+  --surface-600: #262A40;
+  --border-600: rgba(255, 255, 255, 0.09);
+  --border-500: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #F5F5F7;
+  --text-secondary: rgba(245, 245, 247, 0.64);
+  --text-muted: rgba(245, 245, 247, 0.4);
+
+  /* ── Brand accent: sophisticated hot pink ── */
+  --pink-300: #F7A8C0;
+  --pink-400: #F0568F;
+  --pink-500: #E1306C;
+  --pink-600: #B91C58;
+  --pink-700: #8F1442;
+  --pink-glow: rgba(225, 48, 108, 0.45);
+  --pink-glow-soft: rgba(225, 48, 108, 0.16);
+
+  /* ── Gold / neon highlights ── */
+  --gold-300: #FDE68A;
+  --gold-400: #F5C542;
+  --gold-500: #D4A012;
+  --gold-600: #B8860B;
+  --gold-glow: rgba(245, 197, 66, 0.35);
+
+  --neon-cyan: #22D3EE;
+  --neon-violet: #A855F7;
+
+  /* ── Semantic ── */
   --emerald-500: #10B981;
   --amber-400: #F59E0B;
   --crimson-500: #EF4444;
 
-  /* Typography */
-  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  /* ── Typography ── */
+  --font-sans: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: "Cormorant Garamond", Georgia, serif;
-  --font-display: "Syne", system-ui, sans-serif;
+  --font-display: "Syne", 'Inter', system-ui, sans-serif;
 
-  /* Spacing (8pt grid) */
+  /* ── Spacing (8pt grid) ── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 16px;
@@ -25,17 +51,48 @@
   --space-5: 32px;
   --space-6: 48px;
 
-  /* Radii */
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 28px;
+  /* ── Radii (16–24px premium rounding) ── */
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
 
-  /* Shadows */
-  --shadow-soft: 0 12px 40px rgba(0,0,0,0.55);
-  --shadow-glow: 0 0 48px rgba(255,198,109,0.14);
+  /* ── Shadows ── */
+  --shadow-soft: 0 12px 40px rgba(0, 0, 0, 0.55);
+  --shadow-glow: 0 0 48px var(--pink-glow-soft);
+  --shadow-gold-glow: 0 0 48px rgba(245, 197, 66, 0.14);
 
-  /* Motion */
+  /* ── Motion ── */
   --motion-fast: 150ms;
   --motion-medium: 280ms;
   --motion-slow: 420ms;
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+
+  color-scheme: dark;
+}
+
+/* ── Light mode (perfect, secondary) ── */
+[data-theme='light'] {
+  --bg-950: #FBFAF9;
+  --bg-900: #F4F3F6;
+  --bg-850: #ECEBF0;
+  --surface-800: #FFFFFF;
+  --surface-700: #F7F6FA;
+  --surface-600: #EFEEF4;
+  --border-600: rgba(10, 10, 10, 0.08);
+  --border-500: rgba(10, 10, 10, 0.14);
+
+  --text-primary: #14141A;
+  --text-secondary: rgba(20, 20, 26, 0.62);
+  --text-muted: rgba(20, 20, 26, 0.42);
+
+  --pink-glow: rgba(225, 48, 108, 0.28);
+  --pink-glow-soft: rgba(225, 48, 108, 0.1);
+  --gold-glow: rgba(212, 160, 18, 0.22);
+
+  --shadow-soft: 0 12px 32px rgba(20, 20, 26, 0.1);
+  --shadow-glow: 0 0 40px var(--pink-glow-soft);
+  --shadow-gold-glow: 0 0 40px rgba(212, 160, 18, 0.12);
+
+  color-scheme: light;
 }

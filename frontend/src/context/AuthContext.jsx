@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -11,10 +11,12 @@ export function AuthProvider({ children }) {
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [guestInteractions, setGuestInteractions] = useState(0);
+  const toastTimerRef = useRef(null);
 
   const showToast = useCallback((message, type = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
   const fetchWithAuth = useCallback(async (endpoint, options = {}) => {
@@ -46,10 +48,12 @@ export function AuthProvider({ children }) {
       if (response.ok) {
         const data = await response.json();
         setUser(data);
+        setIsGuest(!!data.isGuest);
       } else {
         localStorage.removeItem('ikhwezi_token');
         setToken(null);
         setUser(null);
+        setIsGuest(false);
       }
     } catch (err) {
       console.error('Auth check failed:', err);
@@ -157,6 +161,8 @@ export function AuthProvider({ children }) {
     setIsGuest(false);
     setGuestInteractions(0);
     showToast('Logged out', 'success');
+    // Re-bootstrap a guest session so the app isn't left in a broken no-auth state.
+    createGuestSession();
   };
 
   const trackGuestInteraction = useCallback(() => {

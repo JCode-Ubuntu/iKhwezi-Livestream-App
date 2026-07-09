@@ -20,7 +20,15 @@
     @apply rounded-3xl border border-white/10 bg-black/20 shadow-glass backdrop-blur-3xl;
   }
   .page-enter {
-    animation: page-enter 0.3s ease-out both;
+    /* fill-mode intentionally omitted (defaults to "none") — "both"/"forwards"
+       would leave a permanent `transform: translateY(0)` on this element
+       after the intro finishes. Per the CSS stacking spec, ANY transform
+       value other than the literal keyword `none` creates a new stacking
+       context, which silently caps every z-index inside every page (modals,
+       sheets, gift pickers, etc.) below the bottom nav's z-index — causing
+       real overlapping-button bugs. Reverting to the unanimated base value
+       (transform: none) after 0.3s removes that trap entirely. */
+    animation: page-enter 0.3s ease-out;
   }
   @keyframes page-enter {
     from {

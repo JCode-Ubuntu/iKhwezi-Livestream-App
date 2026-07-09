@@ -45,9 +45,9 @@ export function StoryTray({ onAddStory }) {
               {myGroupIndex >= 0 ? (
                 <div
                   className="h-[62px] w-[62px] rounded-full p-[2.5px]"
-                  style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7,#f59e0b)' }}
+                  style={{ background: 'linear-gradient(135deg,#E1306C,#F5C542,#F0568F)' }}
                 >
-                  <div className="h-full w-full rounded-full bg-[#050816] p-[2px]">
+                  <div className="h-full w-full rounded-full bg-[#0A0A0A] p-[2px]">
                     <StoryAvatar user={groups[myGroupIndex]?.user} size={52} />
                   </div>
                 </div>
@@ -55,11 +55,11 @@ export function StoryTray({ onAddStory }) {
                 <>
                   <div
                     className="flex h-[62px] w-[62px] items-center justify-center rounded-full border-2 border-dashed border-white/20"
-                    style={{ background: 'rgba(99,102,241,0.1)' }}
+                    style={{ background: 'rgba(225,48,108,0.1)' }}
                   >
                     <StoryAvatar user={user} size={52} />
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-neon-indigo text-xs font-black text-white shadow-lg">
+                  <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-xs font-black text-white shadow-lg">
                     +
                   </div>
                 </>
@@ -89,10 +89,10 @@ export function StoryTray({ onAddStory }) {
                   style={{
                     background: allViewed
                       ? 'rgba(255,255,255,0.2)'
-                      : 'linear-gradient(135deg,#6366f1,#a855f7,#f59e0b)',
+                      : 'linear-gradient(135deg,#E1306C,#F5C542,#F0568F)',
                   }}
                 >
-                  <div className="h-full w-full rounded-full bg-[#050816] p-[2px]">
+                  <div className="h-full w-full rounded-full bg-[#0A0A0A] p-[2px]">
                     <StoryAvatar user={group.user} size={52} />
                   </div>
                 </div>
@@ -131,7 +131,7 @@ function StoryAvatar({ user, size = 44 }) {
         width: size,
         height: size,
         fontSize: size * 0.38,
-        background: user.avatar ? undefined : 'linear-gradient(135deg,#6F4FFF,#FFB800)',
+        background: user.avatar ? undefined : 'linear-gradient(135deg,#E1306C,#F5C542)',
       }}
     >
       {user.avatar

@@ -127,11 +127,11 @@ function VideoPlayer({ src, isActive, muted = true, onVideoEnd }) {
           width: 80,
           height: 80,
           borderRadius: '50%',
-          background: 'rgba(111, 79, 255, 0.8)',
+          background: 'rgba(225, 48, 108, 0.82)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 0 40px rgba(111, 79, 255, 0.6)',
+          boxShadow: '0 0 40px rgba(225, 48, 108, 0.55)',
         }}>
           <div style={{
             width: 0,
@@ -155,7 +155,7 @@ function VideoPlayer({ src, isActive, muted = true, onVideoEnd }) {
         <div style={{
           width: `${progress}%`,
           height: '100%',
-          background: 'linear-gradient(90deg, #6F4FFF, #FFB800)',
+          background: 'linear-gradient(90deg, #E1306C, #F5C542)',
           transition: 'width 0.1s linear',
         }} />
       </div>

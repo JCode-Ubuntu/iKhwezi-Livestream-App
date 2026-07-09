@@ -1,14 +1,14 @@
 :root {
-  --bg-primary: #0D0F1A;
-  --bg-secondary: #161828;
-  --bg-card: #1E2235;
-  --bg-elevated: #252A40;
-  --violet-glow: #6F4FFF;
-  --violet-light: #9B7FFF;
-  --violet-dark: #4A2FCC;
-  --gold: #FFB800;
-  --gold-light: #FFD54F;
-  --gold-dark: #CC9200;
+  --bg-primary: #0A0A0A;
+  --bg-secondary: #12141F;
+  --bg-card: #181A26;
+  --bg-elevated: #20222f;
+  --violet-glow: #E1306C;
+  --violet-light: #F7A8C0;
+  --violet-dark: #B91C58;
+  --gold: #F5C542;
+  --gold-light: #FCE38A;
+  --gold-dark: #B8860B;
   --text-primary: #E0E0E0;
   --text-secondary: #A0A0A0;
   --text-muted: #6B7280;
@@ -77,10 +77,10 @@ input, textarea {
 
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(111, 79, 255, 0.4);
+    box-shadow: 0 0 20px rgba(225, 48, 108, 0.4);
   }
   50% {
-    box-shadow: 0 0 40px rgba(111, 79, 255, 0.8);
+    box-shadow: 0 0 40px rgba(225, 48, 108, 0.8);
   }
 }
 
@@ -150,36 +150,40 @@ input, textarea {
   justify-content: center;
   gap: 8px;
   padding: 12px 24px;
-  border-radius: 12px;
+  border-radius: 16px;
   font-size: 14px;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .btn-primary {
   background: linear-gradient(135deg, var(--violet-glow), var(--violet-dark));
   color: white;
-  box-shadow: 0 4px 20px rgba(111, 79, 255, 0.4);
+  box-shadow: 0 4px 20px rgba(225, 48, 108, 0.4);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 30px rgba(111, 79, 255, 0.6);
+  box-shadow: 0 6px 30px rgba(225, 48, 108, 0.6);
 }
 
 .btn-primary:active {
-  transform: translateY(0);
+  transform: scale(0.97);
 }
 
 .btn-gold {
   background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-  color: #000;
-  box-shadow: 0 4px 20px rgba(255, 184, 0, 0.4);
+  color: #0A0A0A;
+  box-shadow: 0 4px 20px rgba(245, 197, 66, 0.4);
 }
 
 .btn-gold:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 30px rgba(255, 184, 0, 0.6);
+  box-shadow: 0 6px 30px rgba(245, 197, 66, 0.6);
+}
+
+.btn-gold:active {
+  transform: scale(0.97);
 }
 
 .btn-outline {
@@ -189,7 +193,11 @@ input, textarea {
 }
 
 .btn-outline:hover {
-  background: rgba(111, 79, 255, 0.1);
+  background: rgba(225, 48, 108, 0.1);
+}
+
+.btn-outline:active {
+  transform: scale(0.97);
 }
 
 .btn-ghost {
@@ -201,20 +209,24 @@ input, textarea {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.btn-ghost:active {
+  transform: scale(0.94);
+}
+
 .input {
   width: 100%;
   padding: 14px 18px;
   background: var(--bg-elevated);
   border: 2px solid transparent;
-  border-radius: 12px;
+  border-radius: 16px;
   color: var(--text-primary);
   font-size: 16px;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .input:focus {
   border-color: var(--violet-glow);
-  box-shadow: 0 0 20px rgba(111, 79, 255, 0.2);
+  box-shadow: 0 0 20px rgba(225, 48, 108, 0.2);
 }
 
 .input::placeholder {
@@ -223,9 +235,9 @@ input, textarea {
 
 .card {
   background: var(--bg-card);
-  border-radius: 16px;
+  border-radius: 20px;
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .glow-border {
@@ -266,7 +278,7 @@ input, textarea {
 
 .badge-trending {
   background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-  color: #000;
+  color: #0A0A0A;
 }
 
 .avatar {
@@ -303,13 +315,13 @@ input, textarea {
   transform: translateX(-50%);
   padding: 12px 24px;
   background: var(--bg-elevated);
-  border-radius: 12px;
+  border-radius: 16px;
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   z-index: 9999;
-  animation: fade-in 0.3s ease;
+  animation: fade-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .toast-success {
@@ -342,13 +354,13 @@ input, textarea {
 
 .modal-content {
   background: var(--bg-card);
-  border-radius: 20px;
+  border-radius: 24px;
   padding: 24px;
   max-width: 400px;
   width: 100%;
   max-height: 80vh;
   overflow-y: auto;
-  animation: slide-up 0.3s ease;
+  animation: slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .modal-header {
@@ -378,4 +390,8 @@ input, textarea {
 .close-btn:hover {
   background: var(--error);
   color: white;
+}
+
+.close-btn:active {
+  transform: scale(0.9);
 }
