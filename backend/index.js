@@ -2794,10 +2794,21 @@ const ensureGuestColumn = async () => {
   const columns = await sequelize.query("PRAGMA table_info('Users')", {
     type: QueryTypes.SELECT
   });
-  const hasGuest = columns.some((column) => String(column.name).toLowerCase() === 'isguest');
+  const existing = new Set(columns.map((column) => String(column.name).toLowerCase()));
 
-  if (!hasGuest) {
-    await sequelize.query('ALTER TABLE Users ADD COLUMN isGuest TINYINT(1) NOT NULL DEFAULT 0');
+  const migrations = [
+    { name: 'isguest', sql: 'ALTER TABLE Users ADD COLUMN isGuest TINYINT(1) NOT NULL DEFAULT 0' },
+    { name: 'isadmin', sql: 'ALTER TABLE Users ADD COLUMN isAdmin TINYINT(1) NOT NULL DEFAULT 0' },
+    { name: 'coverimage', sql: 'ALTER TABLE Users ADD COLUMN coverImage VARCHAR(255)' },
+    { name: 'bio', sql: 'ALTER TABLE Users ADD COLUMN bio TEXT' },
+    { name: 'lastactive', sql: 'ALTER TABLE Users ADD COLUMN lastActive DATETIME' },
+  ];
+
+  for (const migration of migrations) {
+    if (!existing.has(migration.name)) {
+      await sequelize.query(migration.sql);
+      console.log(`Schema migration: added Users.${migration.name}`);
+    }
   }
 };
 
