@@ -239,15 +239,17 @@ function Profile() {
         </div>
       </div>
 
-      <div className="-mt-[50px] px-5">
+      {/* -mt-[30px] (was -50px): less upward pull keeps the full avatar circle
+          visible — the old 50px overlap clipped the top half behind the cover. */}
+      <div className="relative z-10 -mt-[30px] px-5">
         <div className="mb-4 flex items-end gap-4">
           <button
             type="button"
             onClick={() => isOwnProfile && setShowEditProfile(true)}
-            className="relative h-[100px] w-[100px] shrink-0"
+            className="relative h-[88px] w-[88px] shrink-0"
           >
             <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-pink-500 via-gold-400 to-plasma-500 opacity-90 blur-md" />
-            <div className="relative flex h-[100px] w-[100px] items-center justify-center rounded-full border-4 border-void-950 bg-gradient-to-br from-pink-500 to-gold-500 text-4xl font-bold text-white shadow-[0_0_32px_rgba(225,48,108,0.45)]">
+            <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-hidden rounded-full border-4 border-void-950 bg-gradient-to-br from-pink-500 to-gold-500 text-3xl font-bold text-white shadow-[0_0_32px_rgba(225,48,108,0.45)]">
               {profile.avatar ? (
                 <img src={profile.avatar} alt="" className="h-full w-full rounded-full object-cover" />
               ) : (
@@ -255,8 +257,8 @@ function Profile() {
               )}
             </div>
             {isOwnProfile && (
-              <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-void-950 bg-gold-400 text-void-950">
-                <Pencil size={12} />
+              <div className="absolute bottom-0 right-0 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-void-950 bg-gold-400 text-void-950 shadow-sm">
+                <Pencil size={11} />
               </div>
             )}
           </button>
