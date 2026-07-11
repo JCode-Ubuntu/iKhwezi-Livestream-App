@@ -50,8 +50,8 @@ const STARS = [
   },
   {
     id: 'east',
-    cx: 44,
-    cy: 36,
+    cx: 44.5,
+    cy: 33.5,
     r: 7.4,
     points: 5,
     inner: 0.38,
@@ -67,9 +67,9 @@ const STARS = [
 
 /** Constellation sketch — S-curve loop weaving through all three stars. */
 const CONSTELLATION_LOOP =
-  'M 12 36 Q 18 44 28 17 Q 38 44 44 36';
+  'M 12 36 Q 18 44 28 17 Q 39 42 44.5 33.5';
 
-const CONSTELLATION_ARC = 'M 12 36 Q 28 46 44 36';
+const CONSTELLATION_ARC = 'M 12 36 Q 28 44 44.5 33.5';
 
 const DUST = [
   { x: 7, y: 22, r: 0.4, o: 0.45 },
@@ -307,9 +307,9 @@ export default function IkCreateLogo({ className = 'h-[30px] w-[30px]' }) {
 
         {/* Direct chords — playful geometry between stars */}
         <g stroke="#FFF8DC" strokeWidth="0.45" strokeLinecap="round" opacity="0.22">
-          <line x1="12" y1="36" x2="44" y2="36" />
+          <line x1="12" y1="36" x2="44.5" y2="33.5" />
           <line x1="12" y1="36" x2="28" y2="17" />
-          <line x1="44" y1="36" x2="28" y2="17" />
+          <line x1="44.5" y1="33.5" x2="28" y2="17" />
         </g>
 
         {/* The three stars — each drifts and pulses on its own beat */}
