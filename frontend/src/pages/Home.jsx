@@ -7,8 +7,8 @@ import StoryCreator from '../components/StoryCreator';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
 import TextPostCard from '../components/feed/TextPostCard';
+import CommunityContentGrid from '../components/CommunityContentGrid';
 import UltimaField from '../ultima/UltimaField';
-import { UltimaCrown } from '../ultima/UltimaPrimitives';
 import { Play, Zap, Orbit, Eye, Sparkles, Send } from 'lucide-react';
 
 function formatDuration(seconds) {
@@ -209,6 +209,12 @@ function Home() {
     return (trending.length >= 3 ? trending : videos).slice(0, 6);
   }, [videos]);
 
+  const communityPool = useMemo(() => {
+    const heroIds = new Set(heroVideos.map((v) => v.id));
+    const rest = videos.filter((v) => !heroIds.has(v.id));
+    return rest.length >= 3 ? rest : videos;
+  }, [videos, heroVideos]);
+
   const feedItems = useMemo(() => {
     const heroIds = new Set(heroVideos.map((v) => v.id));
     const rest = videos.filter((v) => !heroIds.has(v.id)).map((v) => ({ type: 'video', data: v, createdAt: v.createdAt }));
@@ -294,11 +300,23 @@ function Home() {
         }}
       />
 
-      <div className="mt-8 px-5">
-        <UltimaCrown label="Constellation" />
-      </div>
+      <CommunityContentGrid
+        posts={communityPool}
+        refreshInterval={30000}
+        layout="row"
+        animation="fade-slide-scale"
+        maxCards={3}
+        onPostClick={(post) => openAt(post.raw || post)}
+        onRefresh={() => {
+          if (hasMore && !loadingMore.current) {
+            const next = page + 1;
+            setPage(next);
+            loadVideos(next, true);
+          }
+        }}
+      />
 
-      <div className="ultima-stagger grid grid-cols-2 gap-3 px-4 pt-5">
+      <div className="ultima-stagger grid grid-cols-2 gap-3 px-4 pt-6">
         {feedItems.map((item, index) =>
           item.type === 'video' ? (
             <BentoTile

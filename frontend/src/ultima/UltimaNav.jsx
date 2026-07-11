@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Plus, Clapperboard, User, Sparkles, Radio } from 'lucide-react';
+import { Home, Search, Clapperboard, User, Radio } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GuestPrompt from '../components/GuestPrompt';
+import IkCreateLogo from './IkCreateLogo';
 
 function UltimaNav({ onCreateClick }) {
   const { isAuthenticated, user, isGuest, trackGuestInteraction } = useAuth();
@@ -122,11 +123,10 @@ function UltimaNav({ onCreateClick }) {
         <button
           type="button"
           onClick={handleCreate}
-          className="ultima-dock-create relative mx-1.5 flex h-[52px] w-[52px] items-center justify-center rounded-[20px] text-void-950 transition-transform active:scale-90"
+          className="ultima-dock-create relative mx-1.5 flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[20px]"
           aria-label="Create"
         >
-          <Plus size={24} strokeWidth={2.5} />
-          <Sparkles size={10} className="absolute -right-0.5 -top-0.5 text-white/90" />
+          <IkCreateLogo className="relative z-[2] h-[30px] w-[30px]" />
         </button>
 
         <NavLink
