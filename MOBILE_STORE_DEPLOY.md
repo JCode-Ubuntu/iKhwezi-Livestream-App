@@ -50,6 +50,7 @@ Copies `dist/` into `android/` and `ios/` native projects.
 
 ```bash
 cd frontend
+npm run store:assets   # icons + screenshots (create-button design)
 npm run android:bundle
 ```
 
