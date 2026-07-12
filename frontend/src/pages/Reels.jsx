@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import { UltimaCrown } from '../ultima/UltimaPrimitives';
 import SkeletonStream from '../components/SkeletonStream';
-import FullscreenFeed from '../components/feed/FullscreenFeed';
+import { resolveMediaUrl } from '../config/appConfig';
 
 function formatCount(count) {
   if (!count) return '0';
@@ -22,7 +22,7 @@ function ReelTile({ video, index, onClick }) {
       style={{ aspectRatio: '9 / 16', animationDelay: `${(index % 12) * 40}ms` }}
     >
       <video
-        src={`/storage/uploads/${video.filename}`}
+        src={resolveMediaUrl(video.filename)}
         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
         muted
         playsInline

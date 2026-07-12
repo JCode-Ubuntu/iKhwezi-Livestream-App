@@ -6,6 +6,8 @@ import {
   Ban, UserCheck, Star, Video, TrendingUp, Clock, Shield
 } from 'lucide-react';
 
+import { resolveMediaUrl } from '../config/appConfig';
+
 const API_BASE = '/api';
 
 function Admin() {
@@ -431,7 +433,7 @@ function Admin() {
                 {videos.map((video) => (
                   <div key={video.id} className="flex gap-3 rounded-2xl bg-white/5 p-3">
                     <video
-                      src={`/storage/uploads/${video.filename}`}
+                      src={resolveMediaUrl(video.filename)}
                       className="h-[120px] w-20 rounded-lg object-cover"
                     />
                     <div className="flex-1">

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import { getServerUrl } from '../config/appConfig';
 
 const SocketContext = createContext();
 
@@ -18,7 +19,8 @@ export const SocketProvider = ({ children }) => {
     // Start with polling so a connection is guaranteed even if the intermediate
     // HTTPS proxy does not forward WebSocket upgrades. Socket.IO will then
     // auto-upgrade to WebSocket once the polling handshake succeeds.
-    const s = io(window.location.origin, {
+    const origin = getServerUrl() || window.location.origin;
+    const s = io(origin, {
       transports: ['polling', 'websocket'],
       path: '/socket.io',
       reconnectionAttempts: 15,

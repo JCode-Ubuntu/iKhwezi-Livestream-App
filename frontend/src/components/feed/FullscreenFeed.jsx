@@ -5,6 +5,7 @@ import VideoActions from '../VideoActions';
 import Comments from '../Comments';
 import FeedDiscovery from '../FeedDiscovery';
 import { useAuth } from '../../context/AuthContext';
+import { resolveMediaUrl } from '../../config/appConfig';
 
 export default function FullscreenFeed({
   videos,
@@ -117,7 +118,7 @@ export default function FullscreenFeed({
             onClick={() => handleSlideTap(video, index)}
           >
             <VideoPlayer
-              src={`/storage/uploads/${video.filename}`}
+              src={resolveMediaUrl(video.filename)}
               isActive={index === currentIndex}
               muted={muted}
             />

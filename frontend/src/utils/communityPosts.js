@@ -1,3 +1,5 @@
+import { resolveMediaUrl } from '../config/appConfig';
+
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif)$/i;
 const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg)$/i;
 
@@ -17,16 +19,11 @@ export function isImagePost(item) {
 
 export function mediaUrl(item) {
   const file = item.filename || item.mediaUrl || item.url;
-  if (!file) return '';
-  if (file.startsWith('http') || file.startsWith('/')) return file;
-  return `/storage/uploads/${file}`;
+  return resolveMediaUrl(file);
 }
 
 export function thumbnailUrl(item) {
-  if (item.thumbnail) {
-    const t = item.thumbnail;
-    return t.startsWith('http') || t.startsWith('/') ? t : `/storage/uploads/${t}`;
-  }
+  if (item.thumbnail) return resolveMediaUrl(item.thumbnail);
   return mediaUrl(item);
 }
 

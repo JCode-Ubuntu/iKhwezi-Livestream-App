@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, Trash2, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { resolveMediaUrl } from '../config/appConfig';
 
 export default function VideoEditModal({ video, onClose, onUpdated, onDeleted }) {
   const { fetchWithAuth, showToast } = useAuth();
@@ -74,7 +75,7 @@ export default function VideoEditModal({ video, onClose, onUpdated, onDeleted })
           {/* Preview thumbnail */}
           <div className="overflow-hidden rounded-xl bg-black" style={{ aspectRatio: '16/9' }}>
             <video
-              src={`/storage/uploads/${video.filename}`}
+              src={resolveMediaUrl(video.filename)}
               className="h-full w-full object-cover"
               muted
               playsInline

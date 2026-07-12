@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { getApiBase } from '../config/appConfig';
 
 const AuthContext = createContext(null);
-
-const API_BASE = '/api';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -29,7 +28,7 @@ export function AuthProvider({ children }) {
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const response = await fetch(`${getApiBase()}${endpoint}`, {
       ...options,
       headers,
     });
@@ -65,7 +64,7 @@ export function AuthProvider({ children }) {
   const createGuestSession = useCallback(async () => {
     try {
       const guestUsername = `guest_${Math.random().toString(36).substring(7)}`;
-      const response = await fetch(`${API_BASE}/auth/register`, {
+      const response = await fetch(`${getApiBase()}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -102,7 +101,7 @@ export function AuthProvider({ children }) {
 
   const login = async (credentials) => {
     try {
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const response = await fetch(`${getApiBase()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -129,7 +128,7 @@ export function AuthProvider({ children }) {
 
   const register = async (userData) => {
     try {
-      const response = await fetch(`${API_BASE}/auth/register`, {
+      const response = await fetch(`${getApiBase()}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),

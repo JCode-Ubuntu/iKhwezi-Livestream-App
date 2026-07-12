@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Check, Camera, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImageEditor from './ImageEditor';
+import { getApiBase } from '../config/appConfig';
 
 function ProfileEditSheet({ profile, onClose, onSaved }) {
   const { token, showToast, refreshUser } = useAuth();
@@ -46,7 +47,7 @@ function ProfileEditSheet({ profile, onClose, onSaved }) {
       if (avatarBlob) formData.append('avatar', avatarBlob, 'avatar.jpg');
       if (coverBlob) formData.append('cover', coverBlob, 'cover.jpg');
 
-      const res = await fetch('/api/users/me', {
+      const res = await fetch(`${getApiBase()}/users/me`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,

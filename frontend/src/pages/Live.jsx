@@ -9,6 +9,7 @@ import { useSocket } from '../context/SocketContext';
 import UltimaField from '../ultima/UltimaField';
 import ReactionsBar from '../components/ReactionsBar';
 import GuestPrompt from '../components/GuestPrompt';
+import { resolveStreamUrl } from '../config/appConfig';
 import { useAnimatedInteger } from '../hooks/useAnimatedInteger';
 
 const GIFT_ICONS = { rose: '🌹', gem: '💎', crown: '👑', star: '🌟' };
@@ -55,8 +56,8 @@ function Live() {
   const [sendingGift, setSendingGift] = useState(null);
 
   const HLS_URL = liveStatus?.hlsUrl
-    ? (liveStatus.hlsUrl.startsWith('http') ? liveStatus.hlsUrl : `${window.location.origin}${liveStatus.hlsUrl}`)
-    : `${window.location.origin}/hls/stream.m3u8`;
+    ? resolveStreamUrl(liveStatus.hlsUrl)
+    : resolveStreamUrl('/hls/stream.m3u8');
 
   const displayViewers = useAnimatedInteger(viewerCount, 450);
 
@@ -140,8 +141,8 @@ function Live() {
 
       if (data.isLive && videoRef.current) {
         const hlsUrl = data.hlsUrl
-          ? (data.hlsUrl.startsWith('http') ? data.hlsUrl : `${window.location.origin}${data.hlsUrl}`)
-          : `${window.location.origin}/hls/stream.m3u8`;
+          ? resolveStreamUrl(data.hlsUrl)
+          : resolveStreamUrl('/hls/stream.m3u8');
         if (activeHlsUrlRef.current !== hlsUrl) {
           activeHlsUrlRef.current = hlsUrl;
           hasJoinedRef.current = false;

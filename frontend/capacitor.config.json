@@ -1,5 +1,40 @@
 {
   "appId": "com.ikhwezi.app",
   "appName": "iKHWEZI",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "hostname": "app.ikhwezi.local",
+    "allowNavigation": [
+      "ikhwezi.site",
+      "*.ikhwezi.site"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "buildOptions": {
+      "releaseType": "AAB"
+    }
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "scrollEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#030014",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#030014"
+    },
+    "Keyboard": {
+      "resize": "body"
+    }
+  }
 }

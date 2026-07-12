@@ -10,6 +10,7 @@ import TextPostCard from '../components/feed/TextPostCard';
 import CommunityContentGrid from '../components/CommunityContentGrid';
 import UltimaField from '../ultima/UltimaField';
 import { Play, Zap, Orbit, Eye, Sparkles, Send } from 'lucide-react';
+import { resolveMediaUrl } from '../config/appConfig';
 
 function formatDuration(seconds) {
   if (!seconds || Number.isNaN(Number(seconds))) return '0:00';
@@ -32,7 +33,7 @@ function Spotlight({ videos, muted, onOpen }) {
       <div className="relative aspect-[4/5] max-h-[58vh] w-full sm:aspect-video sm:max-h-[52vh]">
         <video
           key={v.id}
-          src={`/storage/uploads/${v.filename}`}
+          src={resolveMediaUrl(v.filename)}
           className="absolute inset-0 h-full w-full object-cover"
           autoPlay
           muted={muted}
@@ -111,7 +112,7 @@ function BentoTile({ video, tall, onClick, index }) {
       style={{ height: tall ? 280 : 220, animationDelay: `${index * 60}ms` }}
     >
       <video
-        src={`/storage/uploads/${video.filename}`}
+        src={resolveMediaUrl(video.filename)}
         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
         muted
         playsInline

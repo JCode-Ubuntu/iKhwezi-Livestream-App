@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Camera, Upload, Play, Square, RefreshCw, ArrowLeft, Send, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { FILTER_PRESETS } from '../utils/filterPresets';
+import { getApiBase } from '../config/appConfig';
 
 function getExtensionFromMimeType(mimeType = '') {
   if (mimeType.includes('mp4')) return 'mp4';
@@ -152,7 +153,7 @@ function VideoRecorder({ onClose, onVideoUploaded }) {
       formData.append('title', caption || 'Untitled');
       formData.append('description', caption);
 
-      const response = await fetch('/api/videos', {
+      const response = await fetch(`${getApiBase()}/videos`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${localStorage.getItem('ikhwezi_token')}`,

@@ -4,6 +4,7 @@ import { Home, Search, Clapperboard, User, Radio } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GuestPrompt from '../components/GuestPrompt';
 import IkCreateLogo from './IkCreateLogo';
+import { getApiBase } from '../config/appConfig';
 
 function UltimaNav({ onCreateClick }) {
   const { isAuthenticated, user, isGuest, trackGuestInteraction } = useAuth();
@@ -16,7 +17,7 @@ function UltimaNav({ onCreateClick }) {
     let cancelled = false;
     const poll = async () => {
       try {
-        const res = await fetch('/api/live/status');
+        const res = await fetch(`${getApiBase()}/live/status`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) setIsLive(!!data.isLive);

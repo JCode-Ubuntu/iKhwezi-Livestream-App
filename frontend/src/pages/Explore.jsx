@@ -4,7 +4,7 @@ import { Search, X, Play, Eye, TrendingUp, Hash, Radio, ChevronRight } from 'luc
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import SkeletonStream from '../components/SkeletonStream';
-import FullscreenFeed from '../components/feed/FullscreenFeed';
+import { resolveMediaUrl } from '../config/appConfig';
 
 function UserResultRow({ result, onOpen }) {
   return (
@@ -45,7 +45,7 @@ function DiscoveryTile({ video, index, onClick }) {
       style={{ animationDelay: `${(index % 12) * 40}ms` }}
     >
       <video
-        src={`/storage/uploads/${video.filename}`}
+        src={resolveMediaUrl(video.filename)}
         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
         muted
         playsInline

@@ -11,6 +11,23 @@ build/
 .env
 .env.local
 .env.*.local
+!frontend/.env.production
+
+# Mobile signing (never commit)
+*.keystore
+*.jks
+keystore.properties
+frontend/android/keystore.properties
+
+# Capacitor / Android build artifacts
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/local.properties
+
+# Capacitor iOS
+frontend/ios/App/Pods/
+frontend/ios/DerivedData/
 
 # Database
 *.db

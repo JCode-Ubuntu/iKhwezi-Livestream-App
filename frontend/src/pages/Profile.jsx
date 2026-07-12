@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
 import VideoEditModal from '../components/VideoEditModal';
 import ProfileEditSheet from '../components/ProfileEditSheet';
+import { resolveMediaUrl } from '../config/appConfig';
 
 const GIFT_FALLBACK = { rose: { coins: 10, char: '🌹', label: 'Rose' }, gem: { coins: 50, char: '💎', label: 'Gem' }, crown: { coins: 200, char: '👑', label: 'Crown' }, star: { coins: 500, char: '🌟', label: 'Supernova' } };
 
@@ -418,7 +419,7 @@ function Profile() {
                   className="relative aspect-[9/16] cursor-pointer overflow-hidden rounded-lg bg-white/5"
                 >
                   <video
-                    src={`/storage/uploads/${video.filename}`}
+                    src={resolveMediaUrl(video.filename)}
                     className="h-full w-full object-cover"
                     muted
                     onClick={() => navigate('/')}

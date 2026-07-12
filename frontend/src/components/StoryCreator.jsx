@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Camera, Upload, ArrowLeft, Send, Image, Video, Wand2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { FILTER_PRESETS } from '../utils/filterPresets';
+import { getApiBase } from '../config/appConfig';
 import ImageEditor from './ImageEditor';
 
 export default function StoryCreator({ onClose, onPosted }) {
@@ -63,7 +64,7 @@ export default function StoryCreator({ onClose, onPosted }) {
       formData.append('story', file);
       formData.append('caption', caption.trim());
 
-      const res = await fetch('/api/stories', {
+      const res = await fetch(`${getApiBase()}/stories`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
