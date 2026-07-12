@@ -280,6 +280,22 @@ const ProcessedStripeEvent = sequelize.define('ProcessedStripeEvent', {
   coins: { type: DataTypes.INTEGER, allowNull: true },
 });
 
+// Admin-managed tailored ads (image or video) shown inline in the main feed.
+const Ad = sequelize.define('Ad', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  title: { type: DataTypes.STRING, defaultValue: '' },
+  caption: { type: DataTypes.TEXT, defaultValue: '' },
+  filename: { type: DataTypes.STRING, allowNull: false },
+  mediaType: { type: DataTypes.STRING, defaultValue: 'image' },
+  clickUrl: { type: DataTypes.STRING, defaultValue: '' },
+  ctaLabel: { type: DataTypes.STRING, defaultValue: 'Learn more' },
+  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  placement: { type: DataTypes.STRING, defaultValue: 'feed' },
+  priority: { type: DataTypes.INTEGER, defaultValue: 0 },
+  views: { type: DataTypes.INTEGER, defaultValue: 0 },
+  clicks: { type: DataTypes.INTEGER, defaultValue: 0 },
+});
+
 // Associations
 User.hasMany(Video, { foreignKey: 'userId', as: 'videos' });
 Video.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
@@ -466,6 +482,22 @@ const imageUpload = multer({
   }
 });
 
+const adUpload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.webm'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Invalid ad media type'));
+  }
+});
+
+const VIDEO_EXT = /\.(mp4|mov|webm|m4v)$/i;
+function detectAdMediaType(filename) {
+  return VIDEO_EXT.test(filename || '') ? 'video' : 'image';
+}
+
 // Auth middleware
 const authenticate = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -509,6 +541,16 @@ const requireAdmin = (req, res, next) => {
     return res.status(403).json({ error: 'Admin access denied' });
   }
   next();
+};
+
+/** Admin panel secret key OR logged-in owner account (isAdmin). */
+const requireAdminAccess = (req, res, next) => {
+  const adminKey = req.headers['x-admin-key'];
+  const provided = Buffer.from(String(adminKey || ''));
+  const expected = Buffer.from(ADMIN_KEY);
+  const keyMatch = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  if (keyMatch || req.user?.isAdmin) return next();
+  return res.status(403).json({ error: 'Admin access denied' });
 };
 
 // Audit logger
@@ -796,10 +838,57 @@ app.get('/api/videos/feed', authenticate, async (req, res) => {
     
     // Batch-enrich all videos in 5-6 queries total (no N+1)
     const videosWithMeta = await attachVideoMeta(allVideos, req.user?.id || null);
-    res.json({ videos: videosWithMeta, page, hasMore: randomVideos.length === randomCount });
+
+    const activeAds = await Ad.findAll({
+      where: { isActive: true },
+      order: [['priority', 'DESC'], ['createdAt', 'DESC']],
+    });
+
+    res.json({
+      videos: videosWithMeta,
+      ads: activeAds,
+      page,
+      hasMore: randomVideos.length === randomCount,
+    });
   } catch (err) {
     console.error('Feed error:', err);
     res.status(500).json({ error: 'Failed to load feed' });
+  }
+});
+
+app.get('/api/ads/active', authenticate, async (req, res) => {
+  try {
+    const ads = await Ad.findAll({
+      where: { isActive: true },
+      order: [['priority', 'DESC'], ['createdAt', 'DESC']],
+    });
+    res.json(ads);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load ads' });
+  }
+});
+
+app.post('/api/ads/:id/view', authenticate, async (req, res) => {
+  try {
+    const ad = await Ad.findByPk(req.params.id);
+    if (!ad || !ad.isActive) return res.status(404).json({ error: 'Ad not found' });
+    ad.views += 1;
+    await ad.save();
+    res.json({ views: ad.views });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to record view' });
+  }
+});
+
+app.post('/api/ads/:id/click', authenticate, async (req, res) => {
+  try {
+    const ad = await Ad.findByPk(req.params.id);
+    if (!ad || !ad.isActive) return res.status(404).json({ error: 'Ad not found' });
+    ad.clicks += 1;
+    await ad.save();
+    res.json({ clicks: ad.clicks, clickUrl: ad.clickUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to record click' });
   }
 });
 
@@ -1113,7 +1202,7 @@ app.get('/api/users/:id', authenticate, async (req, res) => {
       where: { creatorId: user.id, expiresAt: { [Op.gt]: new Date() } }
     });
 
-    res.json({
+    const payload = {
       ...user.toJSON(),
       videoCount,
       followerCount,
@@ -1121,8 +1210,14 @@ app.get('/api/users/:id', authenticate, async (req, res) => {
       subscriberCount,
       totalPoints: points?.totalPoints || 0,
       isFollowing,
-      isSubscribed
-    });
+      isSubscribed,
+    };
+
+    if (req.user?.isAdmin) {
+      payload.isBanned = user.isBanned;
+    }
+
+    res.json(payload);
   } catch (err) {
     console.error('User error:', err);
     res.status(500).json({ error: 'Failed to load user' });
@@ -2188,16 +2283,91 @@ app.delete('/api/admin/videos/:id', requireAdmin, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
-    
-    // Delete file
+
     const filePath = path.join(__dirname, 'storage/uploads', video.filename);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    
+
     await video.destroy();
     await logAudit('VIDEO_DELETED', { videoId: req.params.id }, req.ip);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete video' });
+  }
+});
+
+// ==================== ADMIN TAILORED ADS ====================
+
+app.get('/api/admin/ads', requireAdmin, async (req, res) => {
+  try {
+    const ads = await Ad.findAll({ order: [['priority', 'DESC'], ['createdAt', 'DESC']] });
+    res.json(ads);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load ads' });
+  }
+});
+
+app.post('/api/admin/ads', requireAdmin, adUpload.single('media'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Ad media file required' });
+
+    const { title, caption, clickUrl, ctaLabel, placement, priority, isActive } = req.body;
+    const mediaType = detectAdMediaType(req.file.filename);
+
+    const ad = await Ad.create({
+      title: title || '',
+      caption: caption || '',
+      filename: req.file.filename,
+      mediaType,
+      clickUrl: clickUrl || '',
+      ctaLabel: ctaLabel || 'Learn more',
+      placement: placement || 'feed',
+      priority: parseInt(priority, 10) || 0,
+      isActive: isActive !== 'false',
+    });
+
+    await logAudit('AD_CREATED', { adId: ad.id, title: ad.title }, req.ip);
+    res.json(ad);
+  } catch (err) {
+    console.error('Admin ad upload error:', err);
+    res.status(500).json({ error: 'Ad upload failed' });
+  }
+});
+
+app.patch('/api/admin/ads/:id', requireAdmin, async (req, res) => {
+  try {
+    const ad = await Ad.findByPk(req.params.id);
+    if (!ad) return res.status(404).json({ error: 'Ad not found' });
+
+    const { title, caption, clickUrl, ctaLabel, placement, priority, isActive } = req.body;
+    if (title !== undefined) ad.title = title;
+    if (caption !== undefined) ad.caption = caption;
+    if (clickUrl !== undefined) ad.clickUrl = clickUrl;
+    if (ctaLabel !== undefined) ad.ctaLabel = ctaLabel;
+    if (placement !== undefined) ad.placement = placement;
+    if (priority !== undefined) ad.priority = parseInt(priority, 10) || 0;
+    if (isActive !== undefined) ad.isActive = !!isActive;
+
+    await ad.save();
+    await logAudit('AD_UPDATED', { adId: ad.id, changes: req.body }, req.ip);
+    res.json(ad);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update ad' });
+  }
+});
+
+app.delete('/api/admin/ads/:id', requireAdmin, async (req, res) => {
+  try {
+    const ad = await Ad.findByPk(req.params.id);
+    if (!ad) return res.status(404).json({ error: 'Ad not found' });
+
+    const filePath = path.join(__dirname, 'storage/uploads', ad.filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    await ad.destroy();
+    await logAudit('AD_DELETED', { adId: req.params.id }, req.ip);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete ad' });
   }
 });
 
@@ -2214,14 +2384,22 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
-app.patch('/api/admin/users/:id/ban', requireAdmin, async (req, res) => {
+app.patch('/api/admin/users/:id/ban', authenticate, requireAdminAccess, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    
+
+    if (req.user && user.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot block your own account' });
+    }
+
+    if (user.isAdmin && !req.headers['x-admin-key']) {
+      return res.status(403).json({ error: 'Use admin panel to block another admin account' });
+    }
+
     user.isBanned = !user.isBanned;
     await user.save();
-    
+
     await logAudit(user.isBanned ? 'USER_BANNED' : 'USER_UNBANNED', { userId: user.id, username: user.username }, req.ip);
     res.json({ isBanned: user.isBanned });
   } catch (err) {

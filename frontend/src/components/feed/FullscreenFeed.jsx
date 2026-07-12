@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Volume2, VolumeX, X, ChevronUp, ChevronDown, Heart, Music2, Eye } from 'lucide-react';
+import { Volume2, VolumeX, X, ChevronUp, ChevronDown, Heart, Music2, Eye, Megaphone, ExternalLink } from 'lucide-react';
 import VideoPlayer from '../VideoPlayer';
 import VideoActions from '../VideoActions';
 import Comments from '../Comments';
 import FeedDiscovery from '../FeedDiscovery';
 import { useAuth } from '../../context/AuthContext';
 import { resolveMediaUrl } from '../../config/appConfig';
+import { adSlideKey } from '../../utils/feedAds';
 
 export default function FullscreenFeed({
   videos,
+  slides: slidesProp,
   startIndex,
   onClose,
   muted,
@@ -18,12 +20,53 @@ export default function FullscreenFeed({
   showTrackMeta = false,
 }) {
   const { isAuthenticated, fetchWithAuth } = useAuth();
+  const slides = slidesProp?.length
+    ? slidesProp
+    : videos.map((v) => ({ type: 'video', data: v }));
+  const discoveryVideos = videos;
+
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [showComments, setShowComments] = useState(false);
   const [burst, setBurst] = useState(null);
   const touchStartY = useRef(0);
   const lastTapRef = useRef({ time: 0, index: -1 });
-  const currentVideo = videos[currentIndex];
+  const viewedAds = useRef(new Set());
+
+  const currentSlide = slides[currentIndex];
+  const currentVideo = currentSlide?.type === 'video' ? currentSlide.data : null;
+
+  const recordAdView = useCallback(
+    async (adId) => {
+      if (!adId || viewedAds.current.has(adId)) return;
+      viewedAds.current.add(adId);
+      try {
+        await fetchWithAuth(`/ads/${adId}/view`, { method: 'POST' });
+      } catch {
+        /* non-critical */
+      }
+    },
+    [fetchWithAuth]
+  );
+
+  const handleAdClick = useCallback(
+    async (ad) => {
+      try {
+        const res = await fetchWithAuth(`/ads/${ad.id}/click`, { method: 'POST' });
+        const data = await res.json();
+        const url = data.clickUrl || ad.clickUrl;
+        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+      } catch {
+        if (ad.clickUrl) window.open(ad.clickUrl, '_blank', 'noopener,noreferrer');
+      }
+    },
+    [fetchWithAuth]
+  );
+
+  useEffect(() => {
+    if (currentSlide?.type === 'ad') {
+      recordAdView(currentSlide.data.id);
+    }
+  }, [currentIndex, currentSlide, recordAdView]);
 
   const handleDoubleTapLike = useCallback(
     async (video, index) => {
@@ -38,14 +81,16 @@ export default function FullscreenFeed({
         const data = await res.json();
         onUpdate?.({ ...video, isLiked: data.liked, likeCount: data.likeCount });
       } catch {
-        /* silent — non-critical UI flourish */
+        /* silent */
       }
     },
     [isAuthenticated, fetchWithAuth, onUpdate, showGuestPrompt]
   );
 
   const handleSlideTap = useCallback(
-    (video, index) => {
+    (slide, index) => {
+      if (slide.type === 'ad') return;
+      const video = slide.data;
       const now = Date.now();
       if (lastTapRef.current.index === index && now - lastTapRef.current.time < 320) {
         lastTapRef.current = { time: 0, index: -1 };
@@ -61,11 +106,11 @@ export default function FullscreenFeed({
     (dir) => {
       setCurrentIndex((i) => {
         const next = i + dir;
-        if (next < 0 || next >= videos.length) return i;
+        if (next < 0 || next >= slides.length) return i;
         return next;
       });
     },
-    [videos.length]
+    [slides.length]
   );
 
   useEffect(() => {
@@ -111,54 +156,98 @@ export default function FullscreenFeed({
           transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       >
-        {videos.map((video, index) => (
+        {slides.map((slide, index) => (
           <div
-            key={video.id}
+            key={slide.type === 'ad' ? adSlideKey(slide.data) : slide.data.id}
             className="relative h-screen w-full"
-            onClick={() => handleSlideTap(video, index)}
+            onClick={() => handleSlideTap(slide, index)}
           >
-            <VideoPlayer
-              src={resolveMediaUrl(video.filename)}
-              isActive={index === currentIndex}
-              muted={muted}
-            />
-            {burst?.index === index && (
-              <div
-                key={burst.key}
-                className="ik-heart-burst"
-                onAnimationEnd={() => setBurst(null)}
-              >
-                <Heart size={116} className="text-pink-500" fill="#E1306C" strokeWidth={0} />
-              </div>
-            )}
-            <VideoActions
-              video={video}
-              onUpdate={onUpdate}
-              onShowComments={() => setShowComments(true)}
-              onShowLogin={showGuestPrompt}
-            />
-            <div
-              className="pointer-events-none absolute bottom-36 left-4 z-10 max-w-[calc(100%-5.5rem)]"
-            >
-              <p className="font-display text-sm font-bold text-gold-300">
-                @{video.creator?.username || 'unknown'}
-              </p>
-              {video.caption && (
-                <p className="mt-2 line-clamp-3 text-sm text-white/85">{video.caption}</p>
-              )}
-              {showTrackMeta && (
-                <div className="mt-2.5 flex items-center gap-3 text-[11px] font-medium text-white/60">
-                  <span className="flex items-center gap-1.5">
-                    <Music2 size={12} className="text-pink-300" />
-                    Original audio · @{video.creator?.username || 'unknown'}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Eye size={12} />
-                    {video.views || 0}
-                  </span>
+            {slide.type === 'ad' ? (
+              <>
+                {slide.data.mediaType === 'video' ? (
+                  <VideoPlayer
+                    src={resolveMediaUrl(slide.data.filename)}
+                    isActive={index === currentIndex}
+                    muted={muted}
+                  />
+                ) : (
+                  <img
+                    src={resolveMediaUrl(slide.data.filename)}
+                    alt={slide.data.title || 'Sponsored'}
+                    className="h-full w-full object-cover"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-void-950 via-transparent to-void-950/30" />
+                <div className="absolute left-4 top-20 flex items-center gap-1.5 rounded-full border border-gold-400/35 bg-black/45 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gold-200 backdrop-blur-sm">
+                  <Megaphone size={12} />
+                  Sponsored
                 </div>
-              )}
-            </div>
+                <div className="pointer-events-none absolute bottom-36 left-4 z-10 max-w-[calc(100%-5.5rem)]">
+                  <p className="font-display text-sm font-bold text-gold-300">
+                    {slide.data.title || 'iKHWEZI'}
+                  </p>
+                  {slide.data.caption && (
+                    <p className="mt-2 line-clamp-3 text-sm text-white/85">{slide.data.caption}</p>
+                  )}
+                </div>
+                {slide.data.clickUrl && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAdClick(slide.data);
+                    }}
+                    className="absolute bottom-28 left-4 right-20 z-20 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-gold-400 to-amber-500 py-3.5 text-sm font-bold text-void-950 shadow-lg shadow-gold-500/30"
+                  >
+                    <ExternalLink size={16} />
+                    {slide.data.ctaLabel || 'Learn more'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <VideoPlayer
+                  src={resolveMediaUrl(slide.data.filename)}
+                  isActive={index === currentIndex}
+                  muted={muted}
+                />
+                {burst?.index === index && (
+                  <div
+                    key={burst.key}
+                    className="ik-heart-burst"
+                    onAnimationEnd={() => setBurst(null)}
+                  >
+                    <Heart size={116} className="text-pink-500" fill="#E1306C" strokeWidth={0} />
+                  </div>
+                )}
+                <VideoActions
+                  video={slide.data}
+                  onUpdate={onUpdate}
+                  onShowComments={() => setShowComments(true)}
+                  onShowLogin={showGuestPrompt}
+                />
+                <div className="pointer-events-none absolute bottom-36 left-4 z-10 max-w-[calc(100%-5.5rem)]">
+                  <p className="font-display text-sm font-bold text-gold-300">
+                    @{slide.data.creator?.username || 'unknown'}
+                  </p>
+                  {slide.data.caption && (
+                    <p className="mt-2 line-clamp-3 text-sm text-white/85">{slide.data.caption}</p>
+                  )}
+                  {showTrackMeta && (
+                    <div className="mt-2.5 flex items-center gap-3 text-[11px] font-medium text-white/60">
+                      <span className="flex items-center gap-1.5">
+                        <Music2 size={12} className="text-pink-300" />
+                        Original audio · @{slide.data.creator?.username || 'unknown'}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Eye size={12} />
+                        {slide.data.views || 0}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -173,7 +262,7 @@ export default function FullscreenFeed({
           <ChevronUp size={20} />
         </button>
       )}
-      {currentIndex < videos.length - 1 && (
+      {currentIndex < slides.length - 1 && (
         <button
           type="button"
           onClick={() => go(1)}
@@ -188,7 +277,7 @@ export default function FullscreenFeed({
         className="absolute right-3 z-[15]"
         style={{ top: 'max(4.75rem, calc(env(safe-area-inset-top, 0px) + 3.5rem))' }}
       >
-        <FeedDiscovery videos={videos} currentIndex={currentIndex} onPickIndex={setCurrentIndex} />
+        <FeedDiscovery videos={discoveryVideos} currentIndex={currentIndex} onPickIndex={setCurrentIndex} />
       </div>
 
       {showComments && currentVideo && (

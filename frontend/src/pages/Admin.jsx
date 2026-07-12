@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Key, Radio, Upload, Users, BarChart3, FileText, LogOut,
   RefreshCw, Play, Square, Eye, EyeOff, Copy, Check, Trash2,
-  Ban, UserCheck, Star, Video, TrendingUp, Clock, Shield
+  Ban, UserCheck, Star, Video, TrendingUp, Clock, Shield, Megaphone
 } from 'lucide-react';
 
 import { resolveMediaUrl } from '../config/appConfig';
@@ -17,6 +17,7 @@ function Admin() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('streaming');
   const fileInputRef = useRef(null);
+  const adFileInputRef = useRef(null);
 
   const [streamKey, setStreamKey] = useState('');
   const [isLive, setIsLive] = useState(false);
@@ -36,6 +37,18 @@ function Admin() {
     isTrending: false,
   });
   const [uploading, setUploading] = useState(false);
+
+  const [ads, setAds] = useState([]);
+  const [adUploadForm, setAdUploadForm] = useState({
+    title: '',
+    caption: '',
+    clickUrl: '',
+    ctaLabel: 'Learn more',
+    placement: 'feed',
+    priority: 0,
+    isActive: true,
+  });
+  const [adUploading, setAdUploading] = useState(false);
 
   const fetchAdmin = async (endpoint, options = {}) => {
     return fetch(`${API_BASE}${endpoint}`, {
@@ -168,8 +181,13 @@ function Admin() {
     setUsers(data);
   };
 
-  const toggleBan = async (id) => {
-    await fetchAdmin(`/admin/users/${id}/ban`, { method: 'PATCH' });
+  const toggleBan = async (u) => {
+    const blocking = !u.isBanned;
+    const msg = blocking
+      ? `Block @${u.username}? They will lose access to the app.`
+      : `Unblock @${u.username} and restore their access?`;
+    if (!confirm(msg)) return;
+    await fetchAdmin(`/admin/users/${u.id}/ban`, { method: 'PATCH' });
     loadUsers();
   };
 
@@ -190,9 +208,72 @@ function Admin() {
     setAuditLog(data);
   };
 
+  const loadAds = async () => {
+    const res = await fetchAdmin('/admin/ads');
+    const data = await res.json();
+    setAds(Array.isArray(data) ? data : []);
+  };
+
+  const handleAdUpload = async (e) => {
+    e.preventDefault();
+    const file = adFileInputRef.current?.files[0];
+    if (!file) return alert('Select an image or video for the ad');
+
+    setAdUploading(true);
+    const formData = new FormData();
+    formData.append('media', file);
+    formData.append('title', adUploadForm.title);
+    formData.append('caption', adUploadForm.caption);
+    formData.append('clickUrl', adUploadForm.clickUrl);
+    formData.append('ctaLabel', adUploadForm.ctaLabel);
+    formData.append('placement', adUploadForm.placement);
+    formData.append('priority', String(adUploadForm.priority));
+    formData.append('isActive', adUploadForm.isActive ? 'true' : 'false');
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/ads`, {
+        method: 'POST',
+        headers: { 'X-Admin-Key': adminKey },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      setAdUploadForm({
+        title: '',
+        caption: '',
+        clickUrl: '',
+        ctaLabel: 'Learn more',
+        placement: 'feed',
+        priority: 0,
+        isActive: true,
+      });
+      if (adFileInputRef.current) adFileInputRef.current.value = '';
+      loadAds();
+    } catch {
+      alert('Ad upload failed');
+    } finally {
+      setAdUploading(false);
+    }
+  };
+
+  const updateAd = async (id, updates) => {
+    await fetchAdmin(`/admin/ads/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    loadAds();
+  };
+
+  const deleteAd = async (id) => {
+    if (!confirm('Delete this ad?')) return;
+    await fetchAdmin(`/admin/ads/${id}`, { method: 'DELETE' });
+    loadAds();
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       loadVideos();
+      loadAds();
       loadUsers();
       loadAnalytics();
       loadAuditLog();
@@ -240,6 +321,7 @@ function Admin() {
   const tabs = [
     { id: 'streaming', icon: Radio, label: 'Streaming' },
     { id: 'videos', icon: Video, label: 'Videos' },
+    { id: 'ads', icon: Megaphone, label: 'Tailored Ads' },
     { id: 'users', icon: Users, label: 'Users' },
     { id: 'analytics', icon: BarChart3, label: 'Analytics' },
     { id: 'audit', icon: FileText, label: 'Audit Log' },
@@ -469,6 +551,162 @@ function Admin() {
           </div>
         )}
 
+        {activeTab === 'ads' && (
+          <div className="flex flex-col gap-4">
+            <div className="ultima-glass rounded-2xl p-4">
+              <h3 className="mb-1 text-[15px] font-bold text-white">Upload tailored ad</h3>
+              <p className="mb-4 text-xs text-white/40">
+                Ads appear inline on the home feed and fullscreen viewer — same screen as videos and posts.
+              </p>
+              <form onSubmit={handleAdUpload} className="flex flex-col gap-3">
+                <input
+                  type="file"
+                  ref={adFileInputRef}
+                  accept="image/*,video/*"
+                  required
+                  className="text-sm text-white/70"
+                />
+                <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+                  <input
+                    type="text"
+                    value={adUploadForm.title}
+                    onChange={(e) => setAdUploadForm({ ...adUploadForm, title: e.target.value })}
+                    placeholder="Ad title"
+                    className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
+                  />
+                </div>
+                <div className="ultima-glass rounded-2xl px-4 py-3">
+                  <textarea
+                    value={adUploadForm.caption}
+                    onChange={(e) => setAdUploadForm({ ...adUploadForm, caption: e.target.value })}
+                    placeholder="Caption shown on the feed card"
+                    className="min-h-[72px] w-full resize-y bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
+                  />
+                </div>
+                <div className="ultima-glass flex items-center gap-3 rounded-2xl px-4 py-3">
+                  <input
+                    type="url"
+                    value={adUploadForm.clickUrl}
+                    onChange={(e) => setAdUploadForm({ ...adUploadForm, clickUrl: e.target.value })}
+                    placeholder="Link URL (optional)"
+                    className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="ultima-glass rounded-2xl px-4 py-3">
+                    <input
+                      type="text"
+                      value={adUploadForm.ctaLabel}
+                      onChange={(e) => setAdUploadForm({ ...adUploadForm, ctaLabel: e.target.value })}
+                      placeholder="Button label"
+                      className="w-full bg-transparent text-[15px] text-white outline-none placeholder:text-white/25"
+                    />
+                  </div>
+                  <div className="ultima-glass rounded-2xl px-4 py-3">
+                    <select
+                      value={adUploadForm.placement}
+                      onChange={(e) => setAdUploadForm({ ...adUploadForm, placement: e.target.value })}
+                      className="w-full bg-transparent text-[15px] text-white outline-none"
+                    >
+                      <option value="feed" className="bg-void-900">Feed + fullscreen</option>
+                      <option value="spotlight" className="bg-void-900">Spotlight only</option>
+                      <option value="all" className="bg-void-900">Everywhere</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm text-white/70">
+                    <input
+                      type="checkbox"
+                      checked={adUploadForm.isActive}
+                      onChange={(e) => setAdUploadForm({ ...adUploadForm, isActive: e.target.checked })}
+                      className="accent-gold-500"
+                    />
+                    Active
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-white/70">
+                    Priority
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={adUploadForm.priority}
+                      onChange={(e) => setAdUploadForm({ ...adUploadForm, priority: Number(e.target.value) })}
+                      className="w-16 rounded-lg bg-white/10 px-2 py-1 text-white"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  disabled={adUploading}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-gold-400 to-amber-500 py-3.5 text-sm font-bold text-void-950 shadow-lg shadow-gold-500/25 transition active:scale-[0.98] disabled:opacity-60"
+                >
+                  <Megaphone size={18} />
+                  {adUploading ? 'Uploading…' : 'Publish ad'}
+                </button>
+              </form>
+            </div>
+
+            <div className="ultima-glass rounded-2xl p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-[15px] font-bold text-white">All ads ({ads.length})</h3>
+                <button onClick={loadAds} className="text-white/50">
+                  <RefreshCw size={16} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-3">
+                {ads.map((ad) => (
+                  <div key={ad.id} className="flex gap-3 rounded-2xl bg-white/5 p-3">
+                    {ad.mediaType === 'video' ? (
+                      <video
+                        src={resolveMediaUrl(ad.filename)}
+                        className="h-[120px] w-20 rounded-lg object-cover"
+                        muted
+                        playsInline
+                      />
+                    ) : (
+                      <img
+                        src={resolveMediaUrl(ad.filename)}
+                        alt={ad.title || 'Ad'}
+                        className="h-[120px] w-20 rounded-lg object-cover"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="mb-1 truncate text-sm font-semibold text-white">
+                        {ad.title || 'Untitled ad'}
+                      </p>
+                      <p className="mb-1 text-xs text-white/45">
+                        {ad.placement} · priority {ad.priority} · {ad.views || 0} views · {ad.clicks || 0} clicks
+                      </p>
+                      {ad.clickUrl && (
+                        <p className="mb-2 truncate text-[10px] text-gold-300/80">{ad.clickUrl}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateAd(ad.id, { isActive: !ad.isActive })}
+                          className="rounded-lg bg-white/5 px-2.5 py-1.5 text-white/70"
+                          title={ad.isActive ? 'Deactivate' : 'Activate'}
+                        >
+                          {ad.isActive ? <Eye size={14} /> : <EyeOff size={14} />}
+                        </button>
+                        <button
+                          onClick={() => deleteAd(ad.id)}
+                          className="rounded-lg bg-white/5 px-2.5 py-1.5 text-red-400"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {!ads.length && (
+                  <p className="py-6 text-center text-sm text-white/35">No ads yet — upload your first tailored ad above.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'users' && (
           <div className="ultima-glass rounded-2xl p-4">
             <div className="mb-4 flex items-center justify-between">
@@ -478,7 +716,7 @@ function Admin() {
               </button>
             </div>
             <p className="mb-3 text-xs text-white/35">
-              Only accounts flagged Admin can broadcast live — grant this to your own owner account, and no one else's.
+              Grant Admin for broadcast rights. Use Block to ban a user from logging in (owner + admin panel).
             </p>
             <div className="flex flex-col gap-2">
               {users.map((u) => (
@@ -512,10 +750,13 @@ function Admin() {
                     Admin
                   </button>
                   <button
-                    onClick={() => toggleBan(u.id)}
-                    className={u.isBanned ? 'text-emerald-400' : 'text-red-400'}
+                    onClick={() => toggleBan(u)}
+                    title={u.isBanned ? 'Unblock user' : 'Block user'}
+                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide ${
+                      u.isBanned ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
+                    }`}
                   >
-                    {u.isBanned ? <UserCheck size={18} /> : <Ban size={18} />}
+                    {u.isBanned ? 'Unblock' : 'Block'}
                   </button>
                 </div>
               ))}

@@ -7,10 +7,17 @@ import StoryCreator from '../components/StoryCreator';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
 import TextPostCard from '../components/feed/TextPostCard';
+import AdTile from '../components/feed/AdTile';
 import CommunityContentGrid from '../components/CommunityContentGrid';
 import UltimaField from '../ultima/UltimaField';
 import { Play, Zap, Orbit, Eye, Sparkles, Send } from 'lucide-react';
 import { resolveMediaUrl } from '../config/appConfig';
+import {
+  filterAdsByPlacement,
+  mixAdsIntoFeed,
+  mixAdsIntoSlides,
+  findSlideIndex,
+} from '../utils/feedAds';
 
 function formatDuration(seconds) {
   if (!seconds || Number.isNaN(Number(seconds))) return '0:00';
@@ -136,6 +143,7 @@ function Home() {
   const navigate = useNavigate();
   const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction, isAuthenticated } = useAuth();
   const [videos, setVideos] = useState([]);
+  const [ads, setAds] = useState([]);
   const [textPosts, setTextPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -165,6 +173,9 @@ function Home() {
         const data = await res.json();
         const nextVideos = Array.isArray(data.videos) ? data.videos : [];
         setVideos((prev) => (append ? [...prev, ...nextVideos] : nextVideos));
+        if (Array.isArray(data.ads)) {
+          setAds(data.ads);
+        }
         setHasMore(!!data.hasMore);
       } catch (err) {
         console.error('Failed to load videos:', err);
@@ -205,6 +216,8 @@ function Home() {
     setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
   }, []);
 
+  const feedAds = useMemo(() => filterAdsByPlacement(ads, 'feed'), [ads]);
+
   const heroVideos = useMemo(() => {
     const trending = videos.filter((v) => v.isTrending || v.isSponsored);
     return (trending.length >= 3 ? trending : videos).slice(0, 6);
@@ -213,19 +226,42 @@ function Home() {
   const communityPool = useMemo(() => {
     const heroIds = new Set(heroVideos.map((v) => v.id));
     const rest = videos.filter((v) => !heroIds.has(v.id));
-    return rest.length >= 3 ? rest : videos;
-  }, [videos, heroVideos]);
+    const adItems = feedAds.map((ad) => ({
+      id: `ad-${ad.id}`,
+      isAd: true,
+      adId: ad.id,
+      filename: ad.filename,
+      mediaType: ad.mediaType,
+      caption: ad.caption || ad.title,
+      isTrending: true,
+      creator: { username: 'iKHWEZI', displayName: 'Sponsored' },
+      raw: ad,
+    }));
+    const merged = [...adItems, ...(rest.length >= 3 ? rest : videos)];
+    return merged;
+  }, [videos, heroVideos, feedAds]);
 
   const feedItems = useMemo(() => {
     const heroIds = new Set(heroVideos.map((v) => v.id));
     const rest = videos.filter((v) => !heroIds.has(v.id)).map((v) => ({ type: 'video', data: v, createdAt: v.createdAt }));
     const posts = textPosts.map((p) => ({ type: 'text', data: p, createdAt: p.createdAt }));
-    return [...rest, ...posts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }, [videos, heroVideos, textPosts]);
+    const sorted = [...rest, ...posts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return mixAdsIntoFeed(sorted, feedAds, { interval: 4 });
+  }, [videos, heroVideos, textPosts, feedAds]);
 
-  const openAt = (video) => {
-    const i = videos.findIndex((v) => v.id === video.id);
-    setFullscreenIndex(i >= 0 ? i : 0);
+  const fullscreenSlides = useMemo(() => {
+    const videoSlides = videos.map((v) => ({ type: 'video', data: v }));
+    return mixAdsIntoSlides(videoSlides, ads, { interval: 6 });
+  }, [videos, ads]);
+
+  const openAt = (item, type = 'video') => {
+    if (type === 'ad') {
+      const idx = findSlideIndex(fullscreenSlides, item, 'ad');
+      setFullscreenIndex(idx >= 0 ? idx : 0);
+      return;
+    }
+    const idx = findSlideIndex(fullscreenSlides, item, 'video');
+    setFullscreenIndex(idx >= 0 ? idx : 0);
   };
 
   if (loading && videos.length === 0) {
@@ -307,7 +343,13 @@ function Home() {
         layout="row"
         animation="fade-slide-scale"
         maxCards={3}
-        onPostClick={(post) => openAt(post.raw || post)}
+        onPostClick={(post) => {
+          if (post.isAd || post.adId) {
+            openAt(post.raw || post, 'ad');
+          } else {
+            openAt(post.raw || post, 'video');
+          }
+        }}
         onRefresh={() => {
           if (hasMore && !loadingMore.current) {
             const next = page + 1;
@@ -325,7 +367,15 @@ function Home() {
               video={item.data}
               tall={index % 3 === 0}
               index={index}
-              onClick={() => openAt(item.data)}
+              onClick={() => openAt(item.data, 'video')}
+            />
+          ) : item.type === 'ad' ? (
+            <AdTile
+              key={`a-${item.data.id}`}
+              ad={item.data}
+              tall={index % 3 === 0}
+              index={index}
+              onClick={() => openAt(item.data, 'ad')}
             />
           ) : (
             <TextPostCard
@@ -352,6 +402,7 @@ function Home() {
       {fullscreenIndex !== null && (
         <FullscreenFeed
           videos={videos}
+          slides={fullscreenSlides}
           startIndex={fullscreenIndex}
           onClose={() => setFullscreenIndex(null)}
           muted={muted}

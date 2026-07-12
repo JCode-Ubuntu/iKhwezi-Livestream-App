@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings,
-  Coins, Gift, Crown, MessageCircle, Plus,
+  Coins, Gift, Crown, MessageCircle, Plus, Ban, Shield,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
@@ -30,6 +30,9 @@ function Profile() {
   const [showGiftSheet, setShowGiftSheet] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
   const [subBusy, setSubBusy] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
+
+  const isAppAdmin = !!user?.isAdmin;
 
   const engagementScore = useMemo(() => {
     if (!profile) return 0;
@@ -107,6 +110,31 @@ function Profile() {
       showToast(data.following ? 'Following!' : 'Unfollowed', 'success');
     } catch (err) {
       showToast('Failed to follow', 'error');
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!isAppAdmin || isOwnProfile) return;
+    const blocking = !profile?.isBanned;
+    const msg = blocking
+      ? `Block @${profile.username}? They will not be able to log in or use the app.`
+      : `Unblock @${profile.username} and restore their access?`;
+    if (!confirm(msg)) return;
+
+    setBlockBusy(true);
+    try {
+      const res = await fetchWithAuth(`/admin/users/${id}/ban`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to update block status', 'error');
+        return;
+      }
+      setProfile((prev) => ({ ...prev, isBanned: data.isBanned }));
+      showToast(data.isBanned ? 'User blocked' : 'User unblocked', 'success');
+    } catch {
+      showToast('Failed to update block status', 'error');
+    } finally {
+      setBlockBusy(false);
     }
   };
 
@@ -275,6 +303,11 @@ function Profile() {
                   Subscribed
                 </span>
               )}
+              {profile.isBanned && isAppAdmin && (
+                <span className="rounded-full border border-red-400/35 bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-300">
+                  Blocked
+                </span>
+              )}
             </div>
             <p className="text-sm text-white/45">@{profile.username}</p>
           </div>
@@ -369,7 +402,29 @@ function Profile() {
             >
               <Gift size={18} />
             </button>
+            {isAppAdmin && (
+              <button
+                type="button"
+                onClick={handleBlockUser}
+                disabled={blockBusy}
+                title={profile.isBanned ? 'Unblock user' : 'Block user'}
+                className={`ik-btn flex h-[52px] min-w-[52px] items-center justify-center gap-1.5 !px-3 rounded-2xl text-sm font-bold ${
+                  profile.isBanned
+                    ? 'border border-emerald-400/30 bg-emerald-500/12 text-emerald-200'
+                    : 'border border-red-400/35 bg-red-500/12 text-red-300'
+                }`}
+              >
+                {profile.isBanned ? <UserCheck size={18} /> : <Ban size={18} />}
+              </button>
+            )}
           </div>
+        )}
+
+        {isAppAdmin && !isOwnProfile && (
+          <p className="mb-4 flex items-center gap-1.5 text-[11px] text-white/40">
+            <Shield size={12} className="text-gold-400/80" />
+            Owner controls — block removes login and app access for this account.
+          </p>
         )}
 
         {!isOwnProfile && (

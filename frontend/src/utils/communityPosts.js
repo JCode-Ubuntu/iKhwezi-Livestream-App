@@ -39,9 +39,12 @@ export function normalizeCommunityPost(item) {
     starCount: item.starCount ?? item.likeCount ?? 0,
     viewCount: item.views ?? 0,
     isTrending: !!(item.isTrending || item.isSponsored),
+    isAd: !!item.isAd,
+    adId: item.adId,
+    caption: item.caption,
     createdAt: item.createdAt,
     carouselCover: item.carouselCover || null,
-    raw: item,
+    raw: item.raw || item,
   };
 }
 

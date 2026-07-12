@@ -51,6 +51,12 @@ function CommunityMiniCard({ post, onClick, animPhase, index }) {
 
       <div className="absolute inset-0 bg-gradient-to-t from-void-950 via-void-950/25 to-void-950/10" />
 
+      {post.isAd && (
+        <span className="absolute left-2.5 top-2.5 rounded-full border border-gold-400/35 bg-black/50 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-gold-200">
+          Sponsored
+        </span>
+      )}
+
       {isVideo && (
         <span className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/45 text-white shadow-lg backdrop-blur-sm transition group-hover:scale-105">
           <Play size={14} fill="currentColor" className="ml-0.5" />
@@ -229,6 +235,10 @@ export default function CommunityContentGrid({
   }, [pool.length, refreshInterval, rotate, prepareNext]);
 
   const handleClick = (post) => {
+    if (post.isAd) {
+      onPostClick?.(post);
+      return;
+    }
     if (post.type === 'image') {
       setImageViewer(post);
       return;
