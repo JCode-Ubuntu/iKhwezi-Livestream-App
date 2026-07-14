@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings,
@@ -33,6 +33,12 @@ function Profile() {
   const [blockBusy, setBlockBusy] = useState(false);
 
   const isAppAdmin = !!user?.isAdmin;
+  // Profile is reused (not remounted) when navigating between users' profiles
+  // via links/back-nav, so an in-flight fetch for the previous `id` can
+  // resolve after a newer one starts. Without checking this ref at resolve
+  // time, an out-of-order response would overwrite the correct profile with
+  // stale data for the wrong user.
+  const activeIdRef = useRef(id);
 
   const engagementScore = useMemo(() => {
     if (!profile) return 0;
@@ -51,11 +57,12 @@ function Profile() {
   }, [engagementScore]);
 
   useEffect(() => {
+    activeIdRef.current = id;
     setLoading(true);
     setProfile(null);
     setVideos([]);
-    loadProfile();
-    loadVideos();
+    loadProfile(id);
+    loadVideos(id);
   }, [id]);
 
   useEffect(() => {
@@ -66,28 +73,31 @@ function Profile() {
     }).catch(() => {});
   }, [isAuthenticated, fetchWithAuth]);
 
-  const loadProfile = async () => {
+  const loadProfile = async (requestedId) => {
     try {
-      const res = await fetchWithAuth(`/users/${id}`);
+      const res = await fetchWithAuth(`/users/${requestedId}`);
+      if (activeIdRef.current !== requestedId) return;
       if (res.ok) {
         const data = await res.json();
+        if (activeIdRef.current !== requestedId) return;
         setProfile(data);
       } else {
         navigate('/');
       }
     } catch (err) {
       console.error('Failed to load profile:', err);
-      navigate('/');
+      if (activeIdRef.current === requestedId) navigate('/');
     } finally {
-      setLoading(false);
+      if (activeIdRef.current === requestedId) setLoading(false);
     }
   };
 
-  const loadVideos = async () => {
+  const loadVideos = async (requestedId) => {
     try {
-      const res = await fetchWithAuth(`/users/${id}/videos`);
+      const res = await fetchWithAuth(`/users/${requestedId}/videos`);
       const data = await res.json();
-      setVideos(data);
+      if (activeIdRef.current !== requestedId) return;
+      setVideos(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load videos:', err);
     }

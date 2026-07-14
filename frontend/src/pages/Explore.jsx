@@ -4,6 +4,7 @@ import { Search, X, Play, Eye, TrendingUp, Hash, Radio, ChevronRight } from 'luc
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import SkeletonStream from '../components/SkeletonStream';
+import FullscreenFeed from '../components/feed/FullscreenFeed';
 import { resolveMediaUrl } from '../config/appConfig';
 
 function UserResultRow({ result, onOpen }) {
@@ -73,27 +74,42 @@ function Explore() {
   const [searching, setSearching] = useState(false);
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const [muted, setMuted] = useState(true);
   const debounceRef = useRef(null);
+  // Debounce only stops a *pending* (not-yet-fired) search from starting —
+  // once the 300ms timeout fires and the fetch is in flight, typing again
+  // starts a second fetch without cancelling the first. If that first,
+  // now-stale request resolves after the second one (easily happens under
+  // real network latency), it overwrote `users` with results for a query
+  // the user has already changed. This ref tracks the latest query so a
+  // late response can be dropped instead of applied.
+  const latestQueryRef = useRef('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetchWithAuth('/videos/feed?page=1&limit=30');
-        const data = await res.json();
-        setVideos(data.videos || []);
-      } catch (err) {
-        console.error('Failed to load discovery feed', err);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadDiscoveryFeed = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const res = await fetchWithAuth('/videos/feed?page=1&limit=30');
+      if (!res.ok) throw new Error(`Discovery feed request failed: ${res.status}`);
+      const data = await res.json();
+      setVideos(Array.isArray(data.videos) ? data.videos : []);
+    } catch (err) {
+      console.error('Failed to load discovery feed', err);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [fetchWithAuth]);
+
+  useEffect(() => { loadDiscoveryFeed(); }, [loadDiscoveryFeed]);
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    latestQueryRef.current = trimmed;
+    if (!trimmed) {
       setUsers([]);
       setSearching(false);
       return;
@@ -101,13 +117,14 @@ function Explore() {
     setSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetchWithAuth(`/users/search?q=${encodeURIComponent(query.trim())}&limit=20`);
+        const res = await fetchWithAuth(`/users/search?q=${encodeURIComponent(trimmed)}&limit=20`);
         const data = await res.json();
+        if (latestQueryRef.current !== trimmed) return;
         setUsers(Array.isArray(data) ? data : data.users || []);
       } catch (err) {
         console.error('Search failed', err);
       } finally {
-        setSearching(false);
+        if (latestQueryRef.current === trimmed) setSearching(false);
       }
     }, 300);
     return () => clearTimeout(debounceRef.current);
@@ -177,6 +194,13 @@ function Explore() {
           </div>
         ) : loading ? (
           <SkeletonStream rows={5} />
+        ) : loadError ? (
+          <div className="flex flex-col items-center gap-3 px-8 py-20 text-center">
+            <p className="text-sm text-white/45">Couldn't load discovery feed. Check your connection.</p>
+            <button type="button" onClick={loadDiscoveryFeed} className="ik-btn ik-btn-secondary ik-btn-sm ik-btn-pill px-5">
+              Retry
+            </button>
+          </div>
         ) : (
           <div className="ultima-stagger grid grid-cols-3 gap-1.5 px-3 pb-24 pt-2">
             {videos.map((video, index) => (

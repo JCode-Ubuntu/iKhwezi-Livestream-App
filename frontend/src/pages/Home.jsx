@@ -146,6 +146,7 @@ function Home() {
   const [ads, setAds] = useState([]);
   const [textPosts, setTextPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
@@ -177,8 +178,14 @@ function Home() {
           setAds(data.ads);
         }
         setHasMore(!!data.hasMore);
+        setLoadError(false);
       } catch (err) {
         console.error('Failed to load videos:', err);
+        // Without this, a failed fetch left videos/textPosts both empty and
+        // fell through to the "Void awaits" empty-state below, which tells
+        // the user the platform has no content — actively misleading during
+        // a network blip or backend outage instead of offering a retry.
+        if (!append) setLoadError(true);
       } finally {
         setLoading(false);
         loadingMore.current = false;
@@ -270,6 +277,28 @@ function Home() {
         <UltimaField fixed />
         <div className="ultima-content flex min-h-0 flex-1 flex-col">
           <SkeletonStream rows={4} />
+        </div>
+      </div>
+    );
+  }
+
+  if (videos.length === 0 && textPosts.length === 0 && loadError) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-8 text-center">
+        <UltimaField intensity={1.2} fixed />
+        <div className="ultima-glass-gold relative z-10 flex max-w-sm flex-col items-center gap-5 rounded-[32px] px-8 py-12">
+          <Sparkles className="h-12 w-12 text-white/40" />
+          <h2 className="ultima-text-glow font-display text-2xl font-black text-white">Couldn't load your feed</h2>
+          <p className="text-sm leading-relaxed text-white/55">
+            Check your connection and try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setLoading(true); loadVideos(1, false); }}
+            className="ik-btn ik-btn-primary ik-btn-pill px-6 py-2.5 text-sm font-bold"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );

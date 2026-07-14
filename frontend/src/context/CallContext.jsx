@@ -51,6 +51,16 @@ export function CallProvider({ children }) {
   const localStreamRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
   const peerRef = useRef(null);
+  // Mirrors of `phase`/`callType` for the call-signal handler below. The
+  // handler previously read `phase`/`callType` directly from closure and
+  // listed them as effect deps, so socket.off()+socket.on() ran on every
+  // single phase transition (idle -> ringing -> connecting -> active -> idle
+  // is 3-4 churns per call). Refs let the handler see current values without
+  // tearing down/recreating the listener on every state change.
+  const phaseRef = useRef(phase);
+  const callTypeRef = useRef(callType);
+  phaseRef.current = phase;
+  callTypeRef.current = callType;
 
   const cleanup = useCallback(() => {
     if (pcRef.current) {
@@ -174,7 +184,7 @@ export function CallProvider({ children }) {
 
     const handler = async ({ type, payload, from }) => {
       if (type === 'invite') {
-        if (phase !== 'idle') {
+        if (phaseRef.current !== 'idle') {
           socket.emit('call-signal', { toUserId: from.id, type: 'reject', payload: { reason: 'busy' }, from: { id: user?.id } });
           return;
         }
@@ -188,8 +198,8 @@ export function CallProvider({ children }) {
       if (type === 'accept') {
         // Caller side: callee accepted, now create offer.
         try {
-          const stream = await getLocalMedia(callType);
-          const pc = createPeerConnection(peerRef.current.id, callType);
+          const stream = await getLocalMedia(callTypeRef.current);
+          const pc = createPeerConnection(peerRef.current.id, callTypeRef.current);
           stream.getTracks().forEach((track) => pc.addTrack(track, stream));
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
@@ -262,7 +272,7 @@ export function CallProvider({ children }) {
 
     socket.on('call-signal', handler);
     return () => socket.off('call-signal', handler);
-  }, [socket, phase, callType, getLocalMedia, createPeerConnection, signal, cleanup, user]);
+  }, [socket, getLocalMedia, createPeerConnection, signal, cleanup, user]);
 
   // Clear stale errors after a few seconds
   useEffect(() => {

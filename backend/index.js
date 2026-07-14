@@ -565,6 +565,43 @@ const logAudit = async (action, details, ip) => {
 
 const normalizeCommentContent = (raw) => String(raw || '').trim().replace(/\s+/g, ' ');
 
+// Fisher-Yates — `array.sort(() => Math.random() - 0.5)` (used previously)
+// is a well-known broken shuffle: comparator-based sorts assume a
+// transitive, consistent comparator, and a random one violates that, so the
+// result is neither uniformly random nor even guaranteed to visit every
+// element with V8's sort implementation. This is an actual, correct shuffle.
+function shuffleArray(array) {
+  const result = array.slice();
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+// Atomic viewer-count updates. The four join/leave routes below previously
+// did `liveStatus.viewerCount += 1; await liveStatus.save()` — a
+// read-modify-write. Two concurrent requests can both read the same value,
+// both compute value+1, and both write the same result back, silently
+// losing one increment (classic lost-update race). These issue a single
+// `UPDATE ... SET viewerCount = viewerCount +/- 1` statement instead, which
+// SQLite executes atomically, then reloads the instance to return the
+// authoritative post-update count.
+async function incrementViewerCount(liveStatus) {
+  await liveStatus.increment('viewerCount', { by: 1 });
+  await liveStatus.reload();
+  return liveStatus.viewerCount;
+}
+
+async function decrementViewerCount(liveStatus) {
+  await sequelize.query(
+    'UPDATE LiveStatuses SET viewerCount = MAX(0, viewerCount - 1) WHERE id = :id',
+    { replacements: { id: liveStatus.id }, type: QueryTypes.UPDATE }
+  );
+  await liveStatus.reload();
+  return liveStatus.viewerCount;
+}
+
 // ── Batch video meta helper (eliminates N+1 queries) ──────────────
 async function attachVideoMeta(videos, userId) {
   if (!videos.length) return [];
@@ -793,26 +830,33 @@ app.get('/api/videos/feed', authenticate, async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const offset = (page - 1) * limit;
     
-    // Get trending videos (20%)
-    const trendingCount = Math.ceil(limit * 0.2);
-    const trending = await Video.findAll({
+    // Get trending videos (20%) — capped so trending + sponsored can never
+    // exceed the requested page size (previously uncapped, which let
+    // `randomCount` below go negative for small `limit` values; Sequelize
+    // passes a negative LIMIT straight through to SQLite, which treats a
+    // negative LIMIT as "no limit at all" and silently returns every
+    // published video instead of respecting pagination).
+    const trendingCount = Math.min(limit - 1, Math.ceil(limit * 0.2));
+    const trending = trendingCount > 0 ? await Video.findAll({
       where: { isPublished: true, isTrending: true },
       include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
       order: sequelize.random(),
       limit: trendingCount
-    });
+    }) : [];
     
-    // Get sponsored videos (10%) - one per batch
-    const sponsored = await Video.findAll({
+    // Get sponsored videos (10%) - one per batch, only if there's room left
+    const sponsored = (limit - trending.length) > 0 ? await Video.findAll({
       where: { isPublished: true, isSponsored: true },
       include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
       order: sequelize.random(),
       limit: 1
-    });
+    }) : [];
     
-    // Get random videos (70%)
-    const randomCount = limit - trending.length - sponsored.length;
-    const randomVideos = await Video.findAll({
+    // Get random videos (70%) — clamped to 0 so a small `limit` (e.g. 1)
+    // combined with trending/sponsored results can never produce a negative
+    // Sequelize `limit`.
+    const randomCount = Math.max(0, limit - trending.length - sponsored.length);
+    const randomVideos = randomCount > 0 ? await Video.findAll({
       where: { 
         isPublished: true,
         id: { [Op.notIn]: [...trending.map(v => v.id), ...sponsored.map(v => v.id)] }
@@ -821,11 +865,10 @@ app.get('/api/videos/feed', authenticate, async (req, res) => {
       order: sequelize.random(),
       limit: randomCount,
       offset
-    });
+    }) : [];
     
     // Mix videos with sponsor every 8-10 videos
-    let allVideos = [...randomVideos, ...trending];
-    allVideos = allVideos.sort(() => Math.random() - 0.5);
+    let allVideos = shuffleArray([...randomVideos, ...trending]);
     
     if (sponsored.length > 0) {
       const sponsorIndex = Math.floor(Math.random() * 3) + 7; // Position 7-9
@@ -1532,9 +1575,7 @@ app.post('/api/live/join', authenticate, async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
     if (liveStatus) {
-      liveStatus.viewerCount += 1;
-      await liveStatus.save();
-      res.json({ viewerCount: liveStatus.viewerCount });
+      res.json({ viewerCount: await incrementViewerCount(liveStatus) });
     } else {
       res.json({ viewerCount: 0 });
     }
@@ -1546,10 +1587,8 @@ app.post('/api/live/join', authenticate, async (req, res) => {
 app.post('/api/live/leave', authenticate, async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
-    if (liveStatus && liveStatus.viewerCount > 0) {
-      liveStatus.viewerCount -= 1;
-      await liveStatus.save();
-      res.json({ viewerCount: liveStatus.viewerCount });
+    if (liveStatus) {
+      res.json({ viewerCount: await decrementViewerCount(liveStatus) });
     } else {
       res.json({ viewerCount: 0 });
     }
@@ -2012,13 +2051,19 @@ app.post('/api/messages/:userId', authenticate, requireAuth, async (req, res) =>
 
 app.get('/api/posts', authenticate, async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    // Unvalidated page/limit previously let a non-numeric or out-of-range
+    // query string (e.g. ?limit=abc or ?limit=999999999) reach Sequelize as
+    // NaN or an unbounded value — NaN made SQLite throw (surfaced as a
+    // generic 500), and a huge limit had no upper bound at all. Clamped the
+    // same way `/api/videos/feed` already does.
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const offset = (page - 1) * limit;
     const posts = await TextPost.findAll({
       include: [{ model: User, as: 'author', attributes: ['id', 'username', 'displayName', 'avatar'] }],
       order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit,
+      offset,
     });
     let liked = new Set();
     if (req.user) {
@@ -2692,7 +2737,15 @@ app.post('/api/v3/livestream/start', requireAdmin, async (req, res) => {
   try {
     const { title = 'iKHWEZI Live' } = req.body;
     
-    let liveStatus = await LiveStatus.findOne({ where: { isLive: false } });
+    // NOTE: previously queried `where: { isLive: false }` instead of "the
+    // most recent row" (the pattern every other live-status route uses).
+    // If the current row already had isLive:true — e.g. this route firing
+    // right after /api/admin/live/start — this would either grab a stale
+    // older row or create a brand-new LiveStatus with a different
+    // streamKey, splitting stream state across two rows and pointing
+    // viewers at the wrong HLS URL. Matched to the same "latest row" lookup
+    // used by /api/admin/live/start and /api/live/status.
+    let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
     
     if (!liveStatus) {
       liveStatus = await LiveStatus.create({
@@ -2791,8 +2844,7 @@ app.post('/api/v3/livestream/viewers/join', authenticate, async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
     if (liveStatus) {
-      liveStatus.viewerCount += 1;
-      await liveStatus.save();
+      await incrementViewerCount(liveStatus);
       io.emit('viewer-count', { viewerCount: liveStatus.viewerCount });
     }
     res.json({ viewerCount: liveStatus?.viewerCount || 0 });
@@ -2804,9 +2856,8 @@ app.post('/api/v3/livestream/viewers/join', authenticate, async (req, res) => {
 app.post('/api/v3/livestream/viewers/leave', authenticate, async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
-    if (liveStatus && liveStatus.viewerCount > 0) {
-      liveStatus.viewerCount -= 1;
-      await liveStatus.save();
+    if (liveStatus) {
+      await decrementViewerCount(liveStatus);
       io.emit('viewer-count', { viewerCount: liveStatus.viewerCount });
     }
     res.json({ viewerCount: liveStatus?.viewerCount || 0 });

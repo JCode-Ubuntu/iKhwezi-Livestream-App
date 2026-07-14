@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="iKHWEZI" />
@@ -19,7 +19,14 @@
       }
       html, body, #root {
         width: 100%;
+        /* `100%`/`100vh` on mobile browsers is based on the *largest* viewport
+           (address bar collapsed), so content sits behind the address bar when
+           it's expanded. `100dvh` tracks the real, current visible viewport.
+           The `100%` line stays first as a fallback for browsers that don't
+           support `dvh` — an unsupported value invalidates only that one
+           declaration, not the whole rule. */
         height: 100%;
+        height: 100dvh;
         background: #030014;
         font-family: 'Inter', system-ui, sans-serif;
         overflow: hidden;

@@ -11,6 +11,12 @@ export function AuthProvider({ children }) {
   const [isGuest, setIsGuest] = useState(false);
   const [guestInteractions, setGuestInteractions] = useState(0);
   const toastTimerRef = useRef(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
 
   const showToast = useCallback((message, type = 'success') => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -38,12 +44,13 @@ export function AuthProvider({ children }) {
 
   const fetchMe = useCallback(async () => {
     if (!token) {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
       return;
     }
     
     try {
       const response = await fetchWithAuth('/auth/me');
+      if (!mountedRef.current) return;
       if (response.ok) {
         const data = await response.json();
         setUser(data);
@@ -57,13 +64,24 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Auth check failed:', err);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [token, fetchWithAuth]);
 
-  const createGuestSession = useCallback(async () => {
+  // Generates a random guest identifier. Not cryptographically significant —
+  // this only needs to be unique enough to avoid a username collision on
+  // registration, which is why createGuestSession() below still retries with
+  // a fresh id rather than trusting uniqueness outright.
+  const randomGuestSuffix = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+    }
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  };
+
+  const createGuestSession = useCallback(async (attempt = 0) => {
+    const guestUsername = `guest_${randomGuestSuffix()}`;
     try {
-      const guestUsername = `guest_${Math.random().toString(36).substring(7)}`;
       const response = await fetch(`${getApiBase()}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -75,21 +93,36 @@ export function AuthProvider({ children }) {
           isGuest: true
         }),
       });
-      
+
+      if (!mountedRef.current) return;
+
       if (response.ok) {
         const data = await response.json();
         localStorage.setItem('ikhwezi_token', data.token);
         setToken(data.token);
         setUser(data.user);
         setIsGuest(true);
+        return;
       }
+
+      // Username collisions are the one realistically retryable failure here
+      // (409/400 from the backend's unique constraint) — anything else
+      // (network down, 500, etc.) retrying immediately won't help.
+      if (response.status === 409 || response.status === 400) {
+        if (attempt < 2) {
+          return createGuestSession(attempt + 1);
+        }
+      }
+      console.error('Guest session creation failed with status', response.status);
+      showToast("Couldn't start a session — check your connection and try reloading.", 'error');
     } catch (err) {
+      if (!mountedRef.current) return;
       console.error('Guest session creation failed:', err);
-      setLoading(false);
+      showToast("Couldn't start a session — check your connection and try reloading.", 'error');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (token) {

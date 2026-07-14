@@ -38,6 +38,7 @@ function Live() {
   const activeHlsUrlRef = useRef(null);
   const hasJoinedRef = useRef(false);
   const reactionTimersRef = useRef([]);
+  const mountedRef = useRef(true);
   const [liveStatus, setLiveStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -65,6 +66,7 @@ function Live() {
     checkLiveStatus();
     const interval = setInterval(checkLiveStatus, 5000);
     return () => {
+      mountedRef.current = false;
       clearInterval(interval);
       reactionTimersRef.current.forEach(clearTimeout);
       reactionTimersRef.current = [];
@@ -82,20 +84,20 @@ function Live() {
     if (socket) {
       joinRoom('live-stream');
 
-      socket.on('chat-message', (message) => {
+      const onChatMessage = (message) => {
         setChatMessages((prev) => [...prev.slice(-49), message]);
-      });
+      };
 
-      socket.on('reaction', (reaction) => {
+      const onReaction = (reaction) => {
         const rid = `${reaction.timestamp || Date.now()}-${Math.random()}`;
         setReactions((prev) => [...prev.slice(-11), { ...reaction, rid }]);
         const t1 = setTimeout(() => {
           setReactions((prev) => prev.filter((r) => r.rid !== rid));
         }, 3200);
         reactionTimersRef.current.push(t1);
-      });
+      };
 
-      socket.on('gift-received', (gift) => {
+      const onGiftReceived = (gift) => {
         const rid = `gift-${gift.timestamp || Date.now()}-${Math.random()}`;
         const burst = Math.min(6, Math.max(1, Math.round(gift.coins / 60)));
         for (let i = 0; i < burst; i += 1) {
@@ -113,12 +115,23 @@ function Live() {
           username: gift.fromUsername,
           message: `sent ${gift.char} ${gift.label} (${gift.coins} coins)`,
         }]);
-      });
+      };
+
+      // socket is a single instance shared app-wide (SocketContext creates it
+      // once), so socket.off('event-name') without a handler reference would
+      // remove ALL listeners registered for that name — not just this
+      // component's. Currently Live.jsx is the only place that registers
+      // these three events, so it was a latent footgun rather than an active
+      // bug, but passing the exact handler reference is the correct pattern
+      // regardless of what else may listen in the future.
+      socket.on('chat-message', onChatMessage);
+      socket.on('reaction', onReaction);
+      socket.on('gift-received', onGiftReceived);
 
       return () => {
-        socket.off('chat-message');
-        socket.off('reaction');
-        socket.off('gift-received');
+        socket.off('chat-message', onChatMessage);
+        socket.off('reaction', onReaction);
+        socket.off('gift-received', onGiftReceived);
         leaveRoom('live-stream');
       };
     }
@@ -136,6 +149,7 @@ function Live() {
     try {
       const res = await fetchWithAuth('/live/status');
       const data = await res.json();
+      if (!mountedRef.current) return;
       setLiveStatus(data);
       setViewerCount(data.viewerCount || 0);
 
@@ -159,7 +173,7 @@ function Live() {
     } catch (err) {
       console.error('Failed to check live status:', err);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 

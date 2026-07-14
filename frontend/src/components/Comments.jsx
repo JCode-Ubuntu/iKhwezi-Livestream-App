@@ -37,32 +37,43 @@ function Comments({ videoId, resourcePath, onClose }) {
   const [typing, setTyping] = useState(false);
   const typingTimer = useRef(null);
   const inputRef = useRef(null);
+  // Comments stays mounted while the user swipes between videos in
+  // FullscreenFeed (only videoId/resourcePath change), so a fetch for the
+  // previous video can still be in flight — or resolve out of order — when a
+  // new one starts. Without this guard, setComments()/setLoading() from a
+  // stale request can land after a newer one, showing the wrong video's
+  // comments with no loading indicator to signal anything changed.
+  const requestIdRef = useRef(0);
+
+  const commentsPath = resourcePath || `/videos/${videoId}/comments`;
 
   useEffect(() => {
-    loadComments();
-  }, [resourcePath, videoId]);
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setComments([]);
+
+    (async () => {
+      try {
+        const res = await fetchWithAuth(commentsPath);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || 'Failed to load comments');
+        }
+        if (requestIdRef.current !== requestId) return;
+        setComments(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (requestIdRef.current !== requestId) return;
+        showToast('Failed to load comments', 'error');
+        setComments([]);
+      } finally {
+        if (requestIdRef.current === requestId) setLoading(false);
+      }
+    })();
+  }, [commentsPath]);
 
   useEffect(() => () => {
     if (typingTimer.current) clearTimeout(typingTimer.current);
   }, []);
-
-  const commentsPath = resourcePath || `/videos/${videoId}/comments`;
-
-  const loadComments = async () => {
-    try {
-      const res = await fetchWithAuth(commentsPath);
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || 'Failed to load comments');
-      }
-      setComments(Array.isArray(data) ? data : []);
-    } catch (err) {
-      showToast('Failed to load comments', 'error');
-      setComments([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();

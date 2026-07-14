@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { CallProvider } from './context/CallContext';
@@ -12,6 +12,7 @@ import VideoRecorder from './components/VideoRecorder';
 import TextComposer from './components/TextComposer';
 import StoryCreator from './components/StoryCreator';
 import CallOverlay from './components/CallOverlay';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Home = lazy(() => import('./pages/Home'));
 const Live = lazy(() => import('./pages/Live'));
@@ -26,6 +27,7 @@ const Community = lazy(() => import('./pages/Community'));
 
 function App() {
   const { loading, user } = useAuth();
+  const location = useLocation();
   const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const [showTextComposer, setShowTextComposer] = useState(false);
@@ -48,23 +50,25 @@ function App() {
     <SocketProvider>
       <CallProvider>
       <div className="page-container">
-        <Suspense fallback={<UltimaLoading />}>
-          <div className="page-enter ultima-main">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/explore" element={<Explore />} />
-              <Route path="/reels" element={<Reels />} />
-              <Route path="/live" element={<Live />} />
-              <Route path="/community" element={<Community />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/profile/:id" element={<Profile />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-        </Suspense>
+        <ErrorBoundary key={location.pathname}>
+          <Suspense fallback={<UltimaLoading />}>
+            <div className="page-enter ultima-main">
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/explore" element={<Explore />} />
+                <Route path="/reels" element={<Reels />} />
+                <Route path="/live" element={<Live />} />
+                <Route path="/community" element={<Community />} />
+                <Route path="/messages" element={<Messages />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/profile/:id" element={<Profile />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </Suspense>
+        </ErrorBoundary>
 
         <UltimaNav onCreateClick={() => setShowCreateSheet(true)} />
 

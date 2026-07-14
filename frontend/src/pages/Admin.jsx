@@ -123,9 +123,25 @@ function Admin() {
   };
 
   const loadVideos = async () => {
-    const res = await fetchAdmin('/admin/videos');
-    const data = await res.json();
-    setVideos(data);
+    try {
+      const res = await fetchAdmin('/admin/videos');
+      const data = await res.json();
+      // fetchAdmin() never checked res.ok, so an expired/invalid admin key
+      // (401 { error: ... }) or any other error response got passed straight
+      // into setVideos() as-is — a non-array — and the videos.map() below
+      // threw a render-crashing TypeError instead of showing a login/error
+      // state. Same root cause repeated in loadUsers/loadAnalytics/loadAuditLog.
+      if (!res.ok || !Array.isArray(data)) {
+        console.error('Failed to load videos:', data);
+        setVideos([]);
+        if (res.status === 401) setIsAuthenticated(false);
+        return;
+      }
+      setVideos(data);
+    } catch (err) {
+      console.error('Failed to load videos:', err);
+      setVideos([]);
+    }
   };
 
   const handleUpload = async (e) => {
@@ -176,9 +192,20 @@ function Admin() {
   };
 
   const loadUsers = async () => {
-    const res = await fetchAdmin('/admin/users');
-    const data = await res.json();
-    setUsers(data);
+    try {
+      const res = await fetchAdmin('/admin/users');
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data)) {
+        console.error('Failed to load users:', data);
+        setUsers([]);
+        if (res.status === 401) setIsAuthenticated(false);
+        return;
+      }
+      setUsers(data);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      setUsers([]);
+    }
   };
 
   const toggleBan = async (u) => {
@@ -197,15 +224,35 @@ function Admin() {
   };
 
   const loadAnalytics = async () => {
-    const res = await fetchAdmin('/admin/analytics');
-    const data = await res.json();
-    setAnalytics(data);
+    try {
+      const res = await fetchAdmin('/admin/analytics');
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('Failed to load analytics:', data);
+        if (res.status === 401) setIsAuthenticated(false);
+        return;
+      }
+      setAnalytics(data);
+    } catch (err) {
+      console.error('Failed to load analytics:', err);
+    }
   };
 
   const loadAuditLog = async () => {
-    const res = await fetchAdmin('/admin/audit-log');
-    const data = await res.json();
-    setAuditLog(data);
+    try {
+      const res = await fetchAdmin('/admin/audit-log');
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data)) {
+        console.error('Failed to load audit log:', data);
+        setAuditLog([]);
+        if (res.status === 401) setIsAuthenticated(false);
+        return;
+      }
+      setAuditLog(data);
+    } catch (err) {
+      console.error('Failed to load audit log:', err);
+      setAuditLog([]);
+    }
   };
 
   const loadAds = async () => {

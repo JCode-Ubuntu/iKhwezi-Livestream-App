@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Camera, Upload, ArrowLeft, Send, Image, Video, Wand2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { FILTER_PRESETS } from '../utils/filterPresets';
@@ -19,6 +19,17 @@ export default function StoryCreator({ onClose, onPosted }) {
 
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const previewUrlRef = useRef(previewUrl);
+  previewUrlRef.current = previewUrl;
+
+  // The X button (and the header back-arrow once mode is 'select') call
+  // onClose() directly without going through goBack(), which is the only
+  // place that revoked the blob: URL — closing while a preview is showing
+  // left that object URL (and the memory backing it) alive for the life of
+  // the page/app session.
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
 
   const handleFileSelect = (e) => {
     const f = e.target.files?.[0];

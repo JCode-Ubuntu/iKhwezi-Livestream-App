@@ -84,6 +84,7 @@ function Community() {
   const [challenges, setChallenges] = useState([]);
   const [parties, setParties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [joiningId, setJoiningId] = useState(null);
 
@@ -98,6 +99,7 @@ function Community() {
   const load = useCallback(async () => {
     if (!isAuthenticated) { setLoading(false); return; }
     setLoading(true);
+    setLoadError(false);
     try {
       const [cRes, pRes] = await Promise.all([
         fetchWithAuth('/challenges'),
@@ -105,8 +107,14 @@ function Community() {
       ]);
       setChallenges(cRes.ok ? await cRes.json() : []);
       setParties(pRes.ok ? await pRes.json() : []);
+      if (!cRes.ok && !pRes.ok) setLoadError(true);
     } catch (err) {
       console.error('Failed to load community data:', err);
+      // Previously silent — a failed fetch left both lists empty and fell
+      // through to "No active challenges yet"/"No watch parties are live"
+      // (a distinct message per tab), wrongly implying the community
+      // section is just quiet instead of unreachable.
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -226,6 +234,17 @@ function Community() {
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-28 animate-shimmer-slide rounded-[22px] bg-gradient-to-r from-white/[0.03] via-white/[0.07] to-white/[0.03] bg-[length:200%_100%]" />
             ))}
+          </div>
+        ) : loadError ? (
+          <div className="py-16 text-center">
+            <p className="mb-3 text-sm text-white/45">Couldn't load community content. Check your connection.</p>
+            <button
+              type="button"
+              onClick={load}
+              className="ik-btn ik-btn-secondary ik-btn-sm ik-btn-pill px-5"
+            >
+              Retry
+            </button>
           </div>
         ) : tab === 'challenges' ? (
           challenges.length === 0 ? (

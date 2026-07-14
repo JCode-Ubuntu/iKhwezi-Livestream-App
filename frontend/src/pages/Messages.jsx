@@ -18,7 +18,10 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
     setSearching(true);
     try {
       const res = await fetchWithAuth(`/users/search?q=${encodeURIComponent(q)}&limit=20`);
-      if (res.ok) setResults(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setResults(Array.isArray(data) ? data : []);
+      }
     } catch {}
     finally { setSearching(false); }
   }, [fetchWithAuth]);

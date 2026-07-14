@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 
 const DEFAULT_EMOJIS = [
   { id: 'fire', char: '🔥' },
@@ -49,6 +49,11 @@ function ReactionsBar({
     Object.fromEntries(emojis.map((e) => [e.id, 0]))
   );
   const [bursts, setBursts] = useState([]);
+  const burstTimersRef = useRef([]);
+
+  useEffect(() => () => {
+    burstTimersRef.current.forEach(clearTimeout);
+  }, []);
 
   const glow = Math.min(1, engagement / 200);
 
@@ -60,9 +65,11 @@ function ReactionsBar({
       setCounts((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
       const bid = `${id}-${Date.now()}`;
       setBursts((b) => [...b, { bid, char, x: `${20 + Math.random() * 60}%` }]);
-      setTimeout(() => {
+      const timerId = setTimeout(() => {
         setBursts((b) => b.filter((x) => x.bid !== bid));
+        burstTimersRef.current = burstTimersRef.current.filter((t) => t !== timerId);
       }, 900);
+      burstTimersRef.current.push(timerId);
       if (navigator.vibrate) {
         try {
           navigator.vibrate(12);

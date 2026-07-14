@@ -30,12 +30,21 @@ function ImageEditor({ src, aspect = 1, title = 'Edit photo', onCancel, onSave }
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setImgLoaded(false);
     const img = new Image();
     img.onload = () => {
+      // No current call site changes `src` on an already-mounted ImageEditor,
+      // but if a future one did, a slow-loading previous image resolving
+      // after a newer one starts would otherwise overwrite naturalSize with
+      // stale dimensions — corrupting the crop math in handleSave, which
+      // reads naturalSize to map on-screen pan/zoom onto the output canvas.
+      if (cancelled) return;
       setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
       setImgLoaded(true);
     };
     img.src = src;
+    return () => { cancelled = true; };
   }, [src]);
 
   const filterString = useCallback(() => {

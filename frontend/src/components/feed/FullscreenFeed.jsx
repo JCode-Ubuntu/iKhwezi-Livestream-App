@@ -31,6 +31,21 @@ export default function FullscreenFeed({
   const touchStartY = useRef(0);
   const lastTapRef = useRef({ time: 0, index: -1 });
   const viewedAds = useRef(new Set());
+  const lastStartIndexRef = useRef(startIndex);
+
+  // All current call sites (Home/Reels/Explore) only ever mount this
+  // component fresh — `startIndex` never changes on an already-mounted
+  // instance today, since they gate rendering behind `fullscreenIndex !==
+  // null` and the underlying feed isn't interactive while this covers the
+  // screen. Still, `useState(startIndex)` alone would silently ignore a
+  // future caller that reuses one instance for multiple opens (e.g. a "next
+  // video" deep link), so re-sync defensively if it ever does change.
+  useEffect(() => {
+    if (startIndex !== lastStartIndexRef.current) {
+      lastStartIndexRef.current = startIndex;
+      setCurrentIndex(startIndex);
+    }
+  }, [startIndex]);
 
   const currentSlide = slides[currentIndex];
   const currentVideo = currentSlide?.type === 'video' ? currentSlide.data : null;
@@ -156,7 +171,21 @@ export default function FullscreenFeed({
           transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       >
-        {slides.map((slide, index) => (
+        {slides.map((slide, index) => {
+          // Every slide used to render a real <video src> unconditionally,
+          // regardless of distance from currentIndex — with infinite scroll
+          // feeding this list (up to dozens/hundreds of slides), that meant
+          // every scrolled-through video stayed mounted with a live <video>
+          // element pointed at a real media URL, so browsers kept
+          // buffering/decoding all of them at once. Mobile WebViews (this
+          // ships inside a Capacitor app) enforce a low concurrent
+          // <video>/decoder limit — iOS Safari in particular silently fails
+          // to play once it's exceeded — so this caused videos to stop
+          // playing or stutter after scrolling through a handful of items.
+          // Only the current slide and its immediate neighbors (for a
+          // smooth swipe transition) get a real, network-loading `src`.
+          const isNearCurrent = Math.abs(index - currentIndex) <= 1;
+          return (
           <div
             key={slide.type === 'ad' ? adSlideKey(slide.data) : slide.data.id}
             className="relative h-screen w-full"
@@ -166,7 +195,7 @@ export default function FullscreenFeed({
               <>
                 {slide.data.mediaType === 'video' ? (
                   <VideoPlayer
-                    src={resolveMediaUrl(slide.data.filename)}
+                    src={isNearCurrent ? resolveMediaUrl(slide.data.filename) : ''}
                     isActive={index === currentIndex}
                     muted={muted}
                   />
@@ -207,7 +236,7 @@ export default function FullscreenFeed({
             ) : (
               <>
                 <VideoPlayer
-                  src={resolveMediaUrl(slide.data.filename)}
+                  src={isNearCurrent ? resolveMediaUrl(slide.data.filename) : ''}
                   isActive={index === currentIndex}
                   muted={muted}
                 />
@@ -249,7 +278,8 @@ export default function FullscreenFeed({
               </>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {currentIndex > 0 && (

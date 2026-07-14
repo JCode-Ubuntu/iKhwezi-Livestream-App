@@ -9,8 +9,33 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - JWT_SECRET=ikhwezi_jwt_secret_2026_super_secure
-      - ADMIN_KEY=ikhwezi_admin_26
+      # SECURITY: JWT_SECRET / ADMIN_KEY must NEVER be hardcoded here — this
+      # file is committed to a public repo, so any literal value here is
+      # public knowledge forever (even after it's replaced, it's still in
+      # git history). They are read from a `.env` file placed next to this
+      # docker-compose.yml on the server (gitignored, never committed) or
+      # from the shell environment. Docker Compose substitutes `${VAR}`
+      # from either automatically. If unset, the backend safely generates a
+      # random per-process secret instead of falling back to a public value
+      # (see backend/index.js requireSecretOrGenerate) — set real, stable
+      # values in the server's .env so restarts don't invalidate every
+      # logged-in session.
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_KEY=${ADMIN_KEY}
+      # KNOWN GAP (see audit report): backend/index.js's requireRtmpWebhook()
+      # rejects /api/live/on-publish(-done) with 503 whenever this is unset
+      # in production — and nginx-rtmp's on_publish/on_publish_done config
+      # below does not currently send this secret at all (nginx.conf is a
+      # static file; nginx-rtmp's stock image has no env-substitution step
+      # to inject it). Net effect: right now, in this exact configuration,
+      # nginx-rtmp-module treats that 503 as "reject the publish", so OBS
+      # cannot go live via on-publish auto-detection at all. Setting this
+      # alone does NOT fix that — nginx.conf/the nginx-rtmp image also needs
+      # to be changed to send it, which needs a Docker environment to build
+      # and verify (not available where this audit was performed). See the
+      # audit report's "RTMP webhook auth" finding for the two remediation
+      # options and pick one before relying on auto-detected live status.
+      - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET}
       - RTMP_SERVER=rtmp://nginx-rtmp:1935/live
       - HLS_URL=https://ikhwezi.site/hls
     volumes:

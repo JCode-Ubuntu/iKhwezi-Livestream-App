@@ -66,6 +66,14 @@ function VideoPlayer({ src, isActive, muted = true, onVideoEnd }) {
   const heldLongRef = useRef(false);
   const suppressClickRef = useRef(false);
 
+  useEffect(() => () => {
+    // In a swipe feed it's routine to swipe away mid-press, unmounting this
+    // instance before onPointerUp/Leave ever fires — without this, the
+    // 480ms timer still fires afterward (vibrating the device and flipping
+    // magnify state on a dead instance) since nothing else ever clears it.
+    if (longPressRef.current) clearTimeout(longPressRef.current);
+  }, []);
+
   const onPointerDown = () => {
     heldLongRef.current = false;
     longPressRef.current = window.setTimeout(() => {

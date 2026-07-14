@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Heart, MessageCircle, Share2, Star, UserPlus, UserCheck, Eye } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
   const { isAuthenticated, fetchWithAuth, showToast } = useAuth();
   const [isAnimating, setIsAnimating] = useState(null);
+  const animTimerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(animTimerRef.current), []);
 
   const handleLike = async () => {
     if (!isAuthenticated) {
@@ -13,7 +16,8 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
     }
 
     setIsAnimating('like');
-    setTimeout(() => setIsAnimating(null), 300);
+    clearTimeout(animTimerRef.current);
+    animTimerRef.current = setTimeout(() => setIsAnimating(null), 300);
 
     try {
       const res = await fetchWithAuth(`/videos/${video.id}/like`, { method: 'POST' });
@@ -36,7 +40,8 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
     }
 
     setIsAnimating('star');
-    setTimeout(() => setIsAnimating(null), 500);
+    clearTimeout(animTimerRef.current);
+    animTimerRef.current = setTimeout(() => setIsAnimating(null), 500);
 
     try {
       const res = await fetchWithAuth(`/videos/${video.id}/star`, {
@@ -62,7 +67,8 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
     }
 
     setIsAnimating('follow');
-    setTimeout(() => setIsAnimating(null), 300);
+    clearTimeout(animTimerRef.current);
+    animTimerRef.current = setTimeout(() => setIsAnimating(null), 300);
 
     try {
       const res = await fetchWithAuth(`/users/${video.creator?.id}/follow`, { method: 'POST' });

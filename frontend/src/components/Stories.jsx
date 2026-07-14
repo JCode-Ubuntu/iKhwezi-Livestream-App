@@ -155,6 +155,17 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
   const touchStartX = useRef(0);
   const touchStartTime = useRef(0);
   const longPressRef = useRef(null);
+  const advanceTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    // A touch-and-hold that's still active when the viewer closes (e.g. the
+    // "no more groups" auto-close path below, or a delete) left this 180ms
+    // timer armed with nothing left to clear it — it would still fire
+    // setPaused() on an unmounted instance. advanceTimerRef covers the two
+    // 0ms setTimeouts in advance() for the same reason.
+    clearTimeout(longPressRef.current);
+    clearTimeout(advanceTimerRef.current);
+  }, []);
 
   const currentGroup = groups[groupIdx];
   const currentStory = currentGroup?.stories?.[storyIdx];
@@ -178,14 +189,14 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
       // Move to adjacent group
       const nextG = groupIdx + dir;
       if (nextG >= 0 && nextG < groups.length) {
-        setTimeout(() => {
+        advanceTimerRef.current = setTimeout(() => {
           setGroupIdx(nextG);
           setStoryIdx(dir > 0 ? 0 : (groups[nextG]?.stories?.length || 1) - 1);
         }, 0);
         return si; // will be overwritten
       }
       // No more groups
-      setTimeout(onClose, 0);
+      advanceTimerRef.current = setTimeout(onClose, 0);
       return si;
     });
   }, [groupIdx, groups, onClose]);

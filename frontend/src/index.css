@@ -6,7 +6,12 @@
   html,
   body,
   #root {
-    @apply h-full w-full overflow-hidden antialiased;
+    @apply w-full overflow-hidden antialiased;
+    /* dvh tracks the real visible viewport (accounts for mobile browser
+       address bars); 100% is kept first as a fallback for engines without
+       dvh support. See index.html for the same reasoning. */
+    height: 100%;
+    height: 100dvh;
   }
 }
 

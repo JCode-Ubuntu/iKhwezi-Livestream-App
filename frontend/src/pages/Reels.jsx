@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import { UltimaCrown } from '../ultima/UltimaPrimitives';
 import SkeletonStream from '../components/SkeletonStream';
+import FullscreenFeed from '../components/feed/FullscreenFeed';
 import { resolveMediaUrl } from '../config/appConfig';
 
 function formatCount(count) {
@@ -47,22 +48,30 @@ function Reels() {
   const { fetchWithAuth } = useAuth();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const [muted, setMuted] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetchWithAuth('/videos/feed?page=1&limit=40');
-        const data = await res.json();
-        setVideos(data.videos || []);
-      } catch (err) {
-        console.error('Failed to load reels', err);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadReels = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const res = await fetchWithAuth('/videos/feed?page=1&limit=40');
+      if (!res.ok) throw new Error(`Reels request failed: ${res.status}`);
+      const data = await res.json();
+      setVideos(Array.isArray(data.videos) ? data.videos : []);
+    } catch (err) {
+      console.error('Failed to load reels', err);
+      // Previously silent — an empty `videos` from a failed fetch rendered
+      // the same "No reels yet. Be the first to post one." message as a
+      // genuinely empty feed, with no way to tell the two apart or retry.
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [fetchWithAuth]);
+
+  useEffect(() => { loadReels(); }, [loadReels]);
 
   const updateVideo = useCallback((updated) => {
     setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
@@ -88,6 +97,14 @@ function Reels() {
 
         {loading ? (
           <SkeletonStream rows={5} />
+        ) : loadError ? (
+          <div className="flex flex-col items-center gap-3 px-8 py-20 text-center">
+            <Clapperboard className="h-10 w-10 text-white/25" />
+            <p className="text-sm text-white/45">Couldn't load reels. Check your connection.</p>
+            <button type="button" onClick={loadReels} className="ik-btn ik-btn-secondary ik-btn-sm ik-btn-pill px-5">
+              Retry
+            </button>
+          </div>
         ) : videos.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-8 py-20 text-center">
             <Clapperboard className="h-10 w-10 text-white/25" />
