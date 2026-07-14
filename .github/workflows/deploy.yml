@@ -40,6 +40,7 @@ jobs:
               COMPOSE="docker-compose"
             fi
 
-            $COMPOSE up --build -d
+            $COMPOSE build --no-cache frontend backend
+            $COMPOSE up -d --force-recreate frontend backend
             docker image prune -f
             echo "✅ Deployed $(git rev-parse --short HEAD) at $(date)"
