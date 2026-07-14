@@ -2686,14 +2686,15 @@ app.get('/api/v3/debug/seed', async (req, res) => {
       { title: 'Going Live!', description: 'Join me for tonight\'s live stream! 🔴' }
     ];
 
-    for (const post of posts) {
+    for (let i = 0; i < posts.length; i++) {
+      const post = posts[i];
       await Video.create({
         userId: user.id,
         title: post.title,
         description: post.description,
         isPublished: true,
         views: Math.floor(Math.random() * 500),
-        filename: 'placeholder.jpg',
+        filename: DEMO_MEDIA_URLS[i % DEMO_MEDIA_URLS.length],
       });
     }
 
@@ -3103,6 +3104,51 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
+// Demo media URLs used when seed posts reference missing local files.
+const DEMO_MEDIA_URLS = [
+  'https://picsum.photos/seed/ikhwezi-sunset/800/1200',
+  'https://picsum.photos/seed/ikhwezi-mountain/800/1200',
+  'https://picsum.photos/seed/ikhwezi-city/800/1200',
+  'https://picsum.photos/seed/ikhwezi-coffee/800/1200',
+  'https://picsum.photos/seed/ikhwezi-live/800/1200',
+];
+
+function isRemoteMediaUrl(filename) {
+  return /^https?:\/\//i.test(filename || '');
+}
+
+function localUploadExists(filename) {
+  if (!filename || isRemoteMediaUrl(filename)) return !!filename;
+  const filePath = path.join(__dirname, 'storage/uploads', path.basename(filename));
+  return fs.existsSync(filePath);
+}
+
+async function ensureDemoMedia() {
+  try {
+    const videos = await Video.findAll({ where: { isPublished: true } });
+    let fixed = 0;
+    for (let i = 0; i < videos.length; i++) {
+      const video = videos[i];
+      const filename = video.filename || '';
+      const needsFix = !filename
+        || filename === 'placeholder.jpg'
+        || /^test[a-z0-9-]*\.jpg$/i.test(filename)
+        || !localUploadExists(filename);
+      if (!needsFix) continue;
+      await video.update({
+        filename: DEMO_MEDIA_URLS[i % DEMO_MEDIA_URLS.length],
+        thumbnail: null,
+      });
+      fixed++;
+    }
+    if (fixed > 0) {
+      console.log(`✓ Repaired ${fixed} feed posts with missing demo media`);
+    }
+  } catch (err) {
+    console.error('ensureDemoMedia error:', err.message);
+  }
+}
+
 const initialize = async () => {
   try {
     await sequelize.authenticate();
@@ -3120,6 +3166,8 @@ const initialize = async () => {
         fs.mkdirSync(fullPath, { recursive: true });
       }
     });
+
+    await ensureDemoMedia();
     
     // Create default live status
     const liveStatus = await LiveStatus.findOne();

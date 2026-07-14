@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
-import { resolveMediaUrl } from '../config/appConfig';
+import MediaPreview from '../components/MediaPreview';
 
 function UserResultRow({ result, onOpen }) {
   return (
@@ -45,8 +45,8 @@ function DiscoveryTile({ video, index, onClick }) {
       className="ik-tap-spring ultima-glass-supreme group relative aspect-square w-full overflow-hidden rounded-[20px]"
       style={{ animationDelay: `${(index % 12) * 40}ms` }}
     >
-      <video
-        src={resolveMediaUrl(video.filename)}
+      <MediaPreview
+        filename={video.filename}
         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
         muted
         playsInline

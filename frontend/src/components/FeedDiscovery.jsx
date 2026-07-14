@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Flame, Globe2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import GlassCard from './GlassCard';
-import { resolveMediaUrl } from '../config/appConfig';
+import MediaPreview from './MediaPreview';
 
 /**
  * Trending + Global Pulse carousels — collapsible so they never block the video.
@@ -75,7 +75,7 @@ function FeedDiscovery({ videos, currentIndex, onPickIndex, fashionTag = 'defaul
                       }`}
                       style={{ width: 56, height: 72 }}
                     >
-                      <video src={resolveMediaUrl(v.filename)} className="h-full w-full object-cover" muted playsInline />
+                      <MediaPreview filename={v.filename} className="h-full w-full object-cover" muted playsInline />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                       <span className="absolute bottom-1 left-1 right-1 truncate text-[9px] font-medium text-white/90">
                         @{v.creator?.username}
@@ -103,7 +103,7 @@ function FeedDiscovery({ videos, currentIndex, onPickIndex, fashionTag = 'defaul
                       }`}
                       style={{ width: 56, height: 72 }}
                     >
-                      <video src={resolveMediaUrl(v.filename)} className="h-full w-full object-cover" muted playsInline />
+                      <MediaPreview filename={v.filename} className="h-full w-full object-cover" muted playsInline />
                       <div className="absolute left-1 top-1 rounded-full bg-black/50 px-1.5 py-0.5 text-[8px] font-bold text-neon-cyan">
                         {(v.views || 0) > 999 ? `${((v.views || 0) / 1000).toFixed(1)}k` : v.views || 0} views
                       </div>

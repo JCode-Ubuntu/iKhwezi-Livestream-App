@@ -5,7 +5,7 @@ import UltimaField from '../ultima/UltimaField';
 import { UltimaCrown } from '../ultima/UltimaPrimitives';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
-import { resolveMediaUrl } from '../config/appConfig';
+import MediaPreview from '../components/MediaPreview';
 
 function formatCount(count) {
   if (!count) return '0';
@@ -22,8 +22,8 @@ function ReelTile({ video, index, onClick }) {
       className="ik-tap-spring ultima-glass-supreme group relative w-full overflow-hidden rounded-[20px]"
       style={{ aspectRatio: '9 / 16', animationDelay: `${(index % 12) * 40}ms` }}
     >
-      <video
-        src={resolveMediaUrl(video.filename)}
+      <MediaPreview
+        filename={video.filename}
         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
         muted
         playsInline

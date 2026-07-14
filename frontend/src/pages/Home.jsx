@@ -11,7 +11,7 @@ import AdTile from '../components/feed/AdTile';
 import CommunityContentGrid from '../components/CommunityContentGrid';
 import UltimaField from '../ultima/UltimaField';
 import { Play, Zap, Orbit, Eye, Sparkles, Send } from 'lucide-react';
-import { resolveMediaUrl } from '../config/appConfig';
+import MediaPreview from '../components/MediaPreview';
 import {
   filterAdsByPlacement,
   mixAdsIntoFeed,
@@ -38,9 +38,9 @@ function Spotlight({ videos, muted, onOpen }) {
   return (
     <section className="relative mx-4 mt-4 overflow-hidden rounded-[32px] ultima-spotlight-ring">
       <div className="relative aspect-[4/5] max-h-[58vh] w-full sm:aspect-video sm:max-h-[52vh]">
-        <video
+        <MediaPreview
           key={v.id}
-          src={resolveMediaUrl(v.filename)}
+          filename={v.filename}
           className="absolute inset-0 h-full w-full object-cover"
           autoPlay
           muted={muted}
@@ -118,8 +118,8 @@ function BentoTile({ video, tall, onClick, index }) {
       className="ultima-bento-card ultima-glass-supreme group relative w-full overflow-hidden rounded-[26px]"
       style={{ height: tall ? 280 : 220, animationDelay: `${index * 60}ms` }}
     >
-      <video
-        src={resolveMediaUrl(video.filename)}
+      <MediaPreview
+        filename={video.filename}
         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
         muted
         playsInline

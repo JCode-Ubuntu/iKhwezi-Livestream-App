@@ -125,8 +125,17 @@ async function seed() {
       { title: 'Going Live!', description: 'Join me for tonight live stream!' }
     ]
 
+    const demoUrls = [
+      'https://picsum.photos/seed/ikhwezi-sunset/800/1200',
+      'https://picsum.photos/seed/ikhwezi-mountain/800/1200',
+      'https://picsum.photos/seed/ikhwezi-city/800/1200',
+      'https://picsum.photos/seed/ikhwezi-coffee/800/1200',
+      'https://picsum.photos/seed/ikhwezi-live/800/1200',
+    ]
+
     let created = 0
-    for (const post of posts) {
+    for (let i = 0; i < posts.length; i++) {
+      const post = posts[i]
       const exists = await sequelize.query(
         'SELECT * FROM Videos WHERE description = ?',
         { replacements: [post.description], type: sequelize.QueryTypes.SELECT }
@@ -143,7 +152,7 @@ async function seed() {
               userId,
               post.title,
               post.description,
-              'test-' + post.title.toLowerCase().replace(/[^a-z0-9]/g, '') + '.jpg',
+              demoUrls[i % demoUrls.length],
               true,
               Math.floor(Math.random() * 1000),
               now,

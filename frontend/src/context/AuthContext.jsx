@@ -125,11 +125,20 @@ export function AuthProvider({ children }) {
   }, [showToast]);
 
   useEffect(() => {
+    // React StrictMode runs effect cleanup then re-runs the effect in dev.
+    // Without resetting this flag, the second run keeps mountedRef=false and
+    // every async finally skips setLoading(false) — app stuck on UltimaLoading.
+    mountedRef.current = true;
+
     if (token) {
       fetchMe();
     } else {
       createGuestSession();
     }
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const login = async (credentials) => {

@@ -6,6 +6,7 @@ import Comments from '../Comments';
 import FeedDiscovery from '../FeedDiscovery';
 import { useAuth } from '../../context/AuthContext';
 import { resolveMediaUrl } from '../../config/appConfig';
+import { isVideoFile } from '../MediaPreview';
 import { adSlideKey } from '../../utils/feedAds';
 
 export default function FullscreenFeed({
@@ -235,11 +236,19 @@ export default function FullscreenFeed({
               </>
             ) : (
               <>
-                <VideoPlayer
-                  src={isNearCurrent ? resolveMediaUrl(slide.data.filename) : ''}
-                  isActive={index === currentIndex}
-                  muted={muted}
-                />
+                {isVideoFile(slide.data.filename) ? (
+                  <VideoPlayer
+                    src={isNearCurrent ? resolveMediaUrl(slide.data.filename) : ''}
+                    isActive={index === currentIndex}
+                    muted={muted}
+                  />
+                ) : (
+                  <img
+                    src={isNearCurrent ? resolveMediaUrl(slide.data.filename) : ''}
+                    alt={slide.data.caption || slide.data.title || 'Post'}
+                    className="h-full w-full object-cover"
+                  />
+                )}
                 {burst?.index === index && (
                   <div
                     key={burst.key}
