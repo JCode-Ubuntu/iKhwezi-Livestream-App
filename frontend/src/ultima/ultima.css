@@ -171,6 +171,42 @@
   color: rgba(245, 197, 66, 0.75);
 }
 
+.ultima-home-logo-mark {
+  position: relative;
+  width: 132px;
+  aspect-ratio: 539 / 545;
+}
+.ultima-home-logo-mark::before,
+.ultima-home-logo-mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: url('../assets/branding/ikhwezi-mark.png');
+  mask-image: url('../assets/branding/ikhwezi-mark.png');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: left center;
+  mask-position: left center;
+}
+.ultima-home-logo-mark::before {
+  background: linear-gradient(135deg, #fde68a 0%, #f5c542 42%, #d4a012 72%, #fde68a 100%);
+  filter: drop-shadow(0 0 10px rgba(245, 197, 66, 0.45)) drop-shadow(0 0 26px rgba(245, 197, 66, 0.22));
+}
+.ultima-home-logo-mark::after {
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.9) 48%, rgba(255, 255, 255, 0.9) 54%, transparent 70%);
+  background-size: 260% 260%;
+  mix-blend-mode: overlay;
+  opacity: 0.85;
+  animation: splash-gloss-sweep 3.6s ease-in-out infinite;
+}
+@keyframes splash-gloss-sweep {
+  0% { background-position: -60% -60%; }
+  50% { background-position: 60% 60%; }
+  100% { background-position: -60% -60%; }
+}
+
 .ultima-serif {
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-style: italic;

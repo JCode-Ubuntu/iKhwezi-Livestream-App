@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings,
-  Coins, Gift, Crown, MessageCircle, Plus, Ban, Shield,
+  Coins, Gift, Crown, MessageCircle, Plus, Ban, Shield, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
@@ -525,6 +525,15 @@ function Profile() {
               <LogOut size={18} />
               Log Out
             </button>
+            <a
+              href="https://ikhwezi.site/account-deletion.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2.5 flex w-full items-center justify-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-[15px] font-semibold text-white/55 transition active:scale-[0.98]"
+            >
+              <Trash2 size={18} />
+              Delete Account &amp; Data
+            </a>
           </div>
         </div>
       )}

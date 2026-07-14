@@ -39,41 +39,46 @@
   from { opacity: 0; transform: translateY(14px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.splash-logo {
-  width: 88px;
-  height: 88px;
-  border-radius: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 28px;
-  color: #0A0A0A;
-  background: linear-gradient(135deg, var(--gold-300, #FDE68A), var(--gold-400, #F5C542) 45%, var(--pink-500, #E1306C) 110%);
-  box-shadow: var(--shadow-glow), 0 0 60px rgba(245, 197, 66, 0.3);
+.splash-logo-mark {
+  position: relative;
+  width: min(220px, 62vw);
+  aspect-ratio: 539 / 545;
+  margin: 0 auto;
 }
-.splash-eyebrow {
-  font-family: var(--font-display);
-  color: var(--gold-400, #F5C542);
-  letter-spacing: 0.2em;
-  font-size: 12px;
-  text-transform: uppercase;
-  font-weight: 700;
+.splash-logo-mark::before,
+.splash-logo-mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: url('../assets/branding/ikhwezi-mark.png');
+  mask-image: url('../assets/branding/ikhwezi-mark.png');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
-.splash-title {
-  font-family: var(--font-display);
-  font-size: 48px;
-  color: var(--text-primary, #fff);
-  letter-spacing: 0.06em;
-  margin: 0;
+.splash-logo-mark::before {
+  background: linear-gradient(135deg, var(--gold-300, #FDE68A) 0%, var(--gold-400, #F5C542) 42%, var(--gold-500, #D4A012) 72%, var(--gold-300, #FDE68A) 100%);
+  filter: drop-shadow(0 0 16px rgba(245, 197, 66, 0.5)) drop-shadow(0 0 44px rgba(245, 197, 66, 0.26));
+  animation: splash-logo-glow 3.2s ease-in-out infinite;
 }
-.splash-sub {
-  color: var(--text-secondary, #d1d1d1);
-  font-size: 14px;
-  margin-top: 4px;
-  font-family: var(--font-serif);
-  font-style: italic;
+.splash-logo-mark::after {
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.9) 48%, rgba(255, 255, 255, 0.9) 54%, transparent 70%);
+  background-size: 260% 260%;
+  mix-blend-mode: overlay;
+  opacity: 0.85;
+  animation: splash-gloss-sweep 3.6s ease-in-out infinite;
+}
+@keyframes splash-logo-glow {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(245, 197, 66, 0.42)) drop-shadow(0 0 38px rgba(245, 197, 66, 0.2)); }
+  50% { filter: drop-shadow(0 0 24px rgba(245, 197, 66, 0.68)) drop-shadow(0 0 60px rgba(245, 197, 66, 0.32)); }
+}
+@keyframes splash-gloss-sweep {
+  0% { background-position: -60% -60%; }
+  50% { background-position: 60% 60%; }
+  100% { background-position: -60% -60%; }
 }
 .splash-actions {
   display: flex;

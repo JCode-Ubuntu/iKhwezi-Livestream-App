@@ -295,13 +295,9 @@ function Home() {
       <UltimaField intensity={0.85} fixed />
       <div className="ultima-page ultima-scroll ultima-content">
       <header className="px-5 pb-3 pt-6">
-        <p className="ultima-eyebrow">Supreme · Ultima</p>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h1 className="ultima-text-supreme font-display text-3xl font-black tracking-tight sm:text-4xl">
-              iKHWEZI
-            </h1>
-            <p className="ultima-serif mt-1 text-base text-white/45">Shine the signal</p>
+            <div className="ultima-home-logo-mark" role="img" aria-label="iKHWEZI" />
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <div className="ultima-glass-supreme flex items-center gap-2 rounded-full px-3.5 py-2">
