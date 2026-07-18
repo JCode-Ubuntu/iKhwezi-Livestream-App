@@ -106,7 +106,10 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin, visible = 
       id: 'comment',
       icon: MessageCircle,
       count: video.commentCount,
-      onClick: () => onShowComments?.(),
+      onClick: () => {
+        if (requireAccount()) return;
+        onShowComments?.();
+      },
     },
     {
       id: 'share',

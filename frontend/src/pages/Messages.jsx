@@ -6,6 +6,7 @@ import { useSocket } from '../context/SocketContext';
 import { useCall } from '../context/CallContext';
 import UltimaField from '../ultima/UltimaField';
 import GuestPrompt from '../components/GuestPrompt';
+import { resolveMediaUrl } from '../config/appConfig';
 
 /* ── New Conversation Search Modal ── */
 function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
@@ -90,7 +91,7 @@ function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
             className="flex w-full items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/8 transition-colors border-b border-white/4 text-left"
           >
             <div className="avatar flex-shrink-0" style={{ width: 44, height: 44, fontSize: 16 }}>
-              {u.avatar ? <img src={u.avatar} alt="" className="w-full h-full object-cover rounded-full" /> : u.username?.charAt(0).toUpperCase()}
+              {u.avatar ? <img src={resolveMediaUrl(u.avatar)} alt="" className="w-full h-full object-cover rounded-full" /> : u.username?.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-sm text-white truncate">{u.displayName || u.username}</p>
@@ -157,7 +158,7 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
           >
             <div className="avatar flex-shrink-0" style={{ width: 48, height: 48, fontSize: 17 }}>
               {conv.user?.avatar
-                ? <img src={conv.user.avatar} alt="" className="w-full h-full object-cover rounded-full" />
+                ? <img src={resolveMediaUrl(conv.user.avatar)} alt="" className="w-full h-full object-cover rounded-full" />
                 : conv.user?.username?.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -313,7 +314,7 @@ function ChatThread({ otherUser, onBack }) {
           <ArrowLeft size={18} />
         </button>
         <div className="avatar" style={{ width: 36, height: 36, fontSize: 14 }}>
-          {otherUser.avatar ? <img src={otherUser.avatar} alt="" /> : otherUser.username?.charAt(0).toUpperCase()}
+          {otherUser.avatar ? <img src={resolveMediaUrl(otherUser.avatar)} alt="" /> : otherUser.username?.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-sm text-white truncate">{otherUser.displayName || otherUser.username}</p>

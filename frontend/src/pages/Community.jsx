@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Hash, Users, Plus, Crown, Radio, X, Check, PlaySquare } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { resolveMediaUrl } from '../config/appConfig';
 
 function ChallengeCard({ challenge }) {
   return (
@@ -24,7 +25,7 @@ function ChallengeCard({ challenge }) {
           style={{ background: challenge.creator?.avatar ? undefined : 'linear-gradient(135deg,#E1306C,#F5C542)' }}
         >
           {challenge.creator?.avatar ? (
-            <img src={challenge.creator.avatar} alt="" className="h-full w-full object-cover" />
+            <img src={resolveMediaUrl(challenge.creator.avatar)} alt="" className="h-full w-full object-cover" />
           ) : (
             (challenge.creator?.username || '?').charAt(0).toUpperCase()
           )}
@@ -48,7 +49,7 @@ function WatchPartyCard({ party, onJoin, joiningId }) {
           style={{ background: party.host?.avatar ? undefined : 'linear-gradient(135deg,#F5C542,#E1306C)' }}
         >
           {party.host?.avatar ? (
-            <img src={party.host.avatar} alt="" className="h-full w-full object-cover" />
+            <img src={resolveMediaUrl(party.host.avatar)} alt="" className="h-full w-full object-cover" />
           ) : (
             (party.host?.username || '?').charAt(0).toUpperCase()
           )}
@@ -224,7 +225,7 @@ function Community() {
       </header>
 
       <div className="flex flex-col gap-3 px-5 pb-28">
-        {!isAuthenticated ? (
+        {isGuest ? (
           <div className="py-16 text-center">
             <Crown size={32} className="mx-auto mb-3 text-gold-400/60" />
             <p className="text-sm text-white/45">Sign in to see and join the community</p>

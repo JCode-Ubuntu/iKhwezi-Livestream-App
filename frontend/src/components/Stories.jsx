@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Pause, Eye, Trash2, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Comments from './Comments';
+import GuestPrompt from './GuestPrompt';
+import { resolveMediaUrl } from '../config/appConfig';
 
 /* ─────────────────────────────────────────────────────────────────
    StoryTray  — horizontal row of user-story bubbles
@@ -142,7 +144,7 @@ function StoryAvatar({ user, size = 44 }) {
       }}
     >
       {user.avatar
-        ? <img src={user.avatar} alt="" className="h-full w-full object-cover" />
+        ? <img src={resolveMediaUrl(user.avatar)} alt="" className="h-full w-full object-cover" />
         : (user.username || '?').charAt(0).toUpperCase()}
     </div>
   );
@@ -152,6 +154,8 @@ function StoryAvatar({ user, size = 44 }) {
    StoryViewer  — immersive full-screen viewer
 ───────────────────────────────────────────────────────────────── */
 function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWithAuth, onDelete }) {
+  const { isGuest, trackGuestInteraction } = useAuth();
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [groupIdx, setGroupIdx] = useState(startGroupIndex);
   const [storyIdx, setStoryIdx] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -176,6 +180,15 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
 
   const currentGroup = groups[groupIdx];
   const currentStory = currentGroup?.stories?.[storyIdx];
+
+  const openComments = () => {
+    if (isGuest) {
+      trackGuestInteraction?.();
+      setShowGuestPrompt(true);
+      return;
+    }
+    setShowComments(true);
+  };
   const stories = currentGroup?.stories || [];
   const isOwn = currentGroup?.user?.id === currentUserId;
   const DURATION = 5000; // 5s per image story
@@ -353,7 +366,7 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
           <p className="mb-4 text-sm font-medium text-white drop-shadow">{currentStory.caption}</p>
           <button
             type="button"
-            onClick={() => setShowComments(true)}
+            onClick={openComments}
             className="flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm"
           >
             <MessageCircle size={15} />
@@ -364,7 +377,7 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
         <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/75 to-transparent px-5 pt-10 pb-safe">
           <button
             type="button"
-            onClick={() => setShowComments(true)}
+            onClick={openComments}
             className="flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm"
           >
             <MessageCircle size={15} />
@@ -406,7 +419,11 @@ function StoryViewer({ groups, startGroupIndex, currentUserId, onClose, fetchWit
         <Comments
           resourcePath={`/stories/${currentStory.id}/comments`}
           onClose={() => setShowComments(false)}
+          onGuestBlock={() => setShowGuestPrompt(true)}
         />
+      )}
+      {showGuestPrompt && (
+        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context="interaction" />
       )}
     </div>
   );

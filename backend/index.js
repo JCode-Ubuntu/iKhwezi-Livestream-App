@@ -292,6 +292,7 @@ const LiveStatus = sequelize.define('LiveStatus', {
   streamKey: { type: DataTypes.STRING, allowNull: false },
   isLive: { type: DataTypes.BOOLEAN, defaultValue: false },
   title: { type: DataTypes.STRING, allowNull: true },
+  hostUserId: { type: DataTypes.UUID, allowNull: true },
   viewerCount: { type: DataTypes.INTEGER, defaultValue: 0 },
   startedAt: { type: DataTypes.DATE, allowNull: true }
 });
@@ -567,6 +568,13 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
+/** Block guest sessions from mutations that need a real account. */
+const requireRegistered = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  if (req.user.isGuest) return res.status(403).json({ error: 'Sign in to continue' });
+  next();
+};
+
 const requireAdmin = (req, res, next) => {
   const adminKey = req.headers['x-admin-key'];
   // Constant-time comparison — a plain !== leaks how many leading characters
@@ -638,6 +646,22 @@ async function decrementViewerCount(liveStatus) {
   );
   await liveStatus.reload();
   return liveStatus.viewerCount;
+}
+
+async function resolveLiveHostUser() {
+  const liveStatus = await LiveStatus.findOne({ where: { isLive: true }, order: [['startedAt', 'DESC']] });
+  if (liveStatus?.hostUserId) {
+    const host = await User.findByPk(liveStatus.hostUserId);
+    if (host) return host;
+  }
+  return User.findOne({ where: { isAdmin: true }, order: [['createdAt', 'ASC']] });
+}
+
+async function assignLiveHost(liveStatus) {
+  if (liveStatus.hostUserId) return liveStatus;
+  const host = await User.findOne({ where: { isAdmin: true }, order: [['createdAt', 'ASC']] });
+  if (host) liveStatus.hostUserId = host.id;
+  return liveStatus;
 }
 
 // ── Batch video meta helper (eliminates N+1 queries) ──────────────
@@ -1015,7 +1039,7 @@ app.get('/api/videos/:id', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/videos', authenticate, requireAuth, upload.single('video'), async (req, res) => {
+app.post('/api/videos', authenticate, requireRegistered, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Video file required' });
@@ -1052,7 +1076,7 @@ app.post('/api/videos', authenticate, requireAuth, upload.single('video'), async
 
 // ==================== INTERACTION ROUTES ====================
 
-app.post('/api/videos/:id/like', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/videos/:id/like', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -1078,7 +1102,7 @@ app.post('/api/videos/:id/like', authenticate, requireAuth, interactionRateLimit
   }
 });
 
-app.post('/api/videos/:id/save', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/videos/:id/save', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -1100,7 +1124,7 @@ app.post('/api/videos/:id/save', authenticate, requireAuth, interactionRateLimit
   }
 });
 
-app.post('/api/videos/:id/repost', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/videos/:id/repost', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -1125,7 +1149,7 @@ app.post('/api/videos/:id/repost', authenticate, requireAuth, interactionRateLim
   }
 });
 
-app.post('/api/videos/:id/star', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/videos/:id/star', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -1184,7 +1208,7 @@ app.post('/api/videos/:id/star', authenticate, requireAuth, interactionRateLimit
   }
 });
 
-app.post('/api/users/:id/follow', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/users/:id/follow', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ error: 'Cannot follow yourself' });
@@ -1240,7 +1264,7 @@ app.get('/api/videos/:id/comments', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/videos/:id/comments', authenticate, requireAuth, commentRateLimit, async (req, res) => {
+app.post('/api/videos/:id/comments', authenticate, requireRegistered, commentRateLimit, async (req, res) => {
   try {
     const { content, parentId } = req.body;
     const normalizedContent = normalizeCommentContent(content);
@@ -1374,7 +1398,7 @@ app.get('/api/users/:id', authenticate, async (req, res) => {
 });
 
 // Update the current user's own profile — real photos only, no default avatars.
-app.patch('/api/users/me', authenticate, requireAuth, imageUpload.fields([
+app.patch('/api/users/me', authenticate, requireRegistered, imageUpload.fields([
   { name: 'avatar', maxCount: 1 },
   { name: 'cover', maxCount: 1 },
 ]), async (req, res) => {
@@ -1428,7 +1452,7 @@ app.get('/api/wallet/me', authenticate, requireAuth, async (req, res) => {
 // instantly so the gifting/subscription economy is fully testable. Once
 // STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET are set, this creates a real
 // Checkout session instead and coins are granted by the webhook above.
-app.post('/api/wallet/topup', authenticate, requireAuth, async (req, res) => {
+app.post('/api/wallet/topup', authenticate, requireRegistered, async (req, res) => {
   try {
     const coins = Math.min(10000, Math.max(1, parseInt(req.body.coins, 10) || 0));
     if (!coins) return res.status(400).json({ error: 'coins must be a positive number' });
@@ -1470,7 +1494,7 @@ app.post('/api/wallet/topup', authenticate, requireAuth, async (req, res) => {
 
 // Send a gift — spends coins, credits the recipient's creator points, and
 // broadcasts the moment in real-time (used by the Live chat + DM gift button).
-app.post('/api/wallet/gift', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/wallet/gift', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     const { toUserId, giftId, roomId } = req.body;
     const gift = GIFT_CATALOG[giftId];
@@ -1480,23 +1504,45 @@ app.post('/api/wallet/gift', authenticate, requireAuth, interactionRateLimit, as
     const recipient = await User.findByPk(toUserId);
     if (!recipient) return res.status(404).json({ error: 'Recipient not found' });
 
-    const wallet = await getOrCreateWallet(req.user.id);
-    if (wallet.coins < gift.coins) {
-      return res.status(402).json({ error: 'Not enough coins', coins: wallet.coins, required: gift.coins });
-    }
-    wallet.coins -= gift.coins;
-    await wallet.save();
+    await getOrCreateWallet(req.user.id);
 
-    let creatorPoints = await Points.findOne({ where: { creatorId: toUserId } });
-    if (!creatorPoints) {
-      creatorPoints = await Points.create({ creatorId: toUserId, totalPoints: gift.coins, lifetimePoints: gift.coins });
-    } else {
-      creatorPoints.totalPoints += gift.coins;
-      creatorPoints.lifetimePoints += gift.coins;
-      await creatorPoints.save();
+    const txResult = await sequelize.transaction(async (t) => {
+      const wallet = await Wallet.findOne({ where: { userId: req.user.id }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!wallet || wallet.coins < gift.coins) {
+        return { error: 'Not enough coins', status: 402, coins: wallet?.coins ?? 0, required: gift.coins };
+      }
+      wallet.coins -= gift.coins;
+      await wallet.save({ transaction: t });
+
+      let creatorPoints = await Points.findOne({ where: { creatorId: toUserId }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!creatorPoints) {
+        creatorPoints = await Points.create(
+          { creatorId: toUserId, totalPoints: gift.coins, lifetimePoints: gift.coins },
+          { transaction: t }
+        );
+      } else {
+        creatorPoints.totalPoints += gift.coins;
+        creatorPoints.lifetimePoints += gift.coins;
+        await creatorPoints.save({ transaction: t });
+      }
+
+      await GiftLog.create(
+        { fromUserId: req.user.id, toUserId, giftId, coins: gift.coins, roomId: roomId || null },
+        { transaction: t }
+      );
+
+      return { wallet };
+    });
+
+    if (txResult?.error) {
+      return res.status(txResult.status || 402).json({
+        error: txResult.error,
+        coins: txResult.coins,
+        required: txResult.required,
+      });
     }
 
-    await GiftLog.create({ fromUserId: req.user.id, toUserId, giftId, coins: gift.coins, roomId: roomId || null });
+    const { wallet } = txResult;
 
     const payload = {
       fromUserId: req.user.id,
@@ -1520,38 +1566,59 @@ app.post('/api/wallet/gift', authenticate, requireAuth, interactionRateLimit, as
 
 // Live gifts always target the current broadcasting admin — resolved
 // server-side so the client never has to (and can't spoof) the recipient.
-app.post('/api/live/gift', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/live/gift', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     const { giftId } = req.body;
     const gift = GIFT_CATALOG[giftId];
     if (!gift) return res.status(400).json({ error: 'Unknown gift' });
 
-    const admin = await User.findOne({ where: { isAdmin: true } });
+    const admin = await resolveLiveHostUser();
     if (!admin) return res.status(404).json({ error: 'No live host configured' });
     if (admin.id === req.user.id) return res.status(400).json({ error: 'Cannot gift yourself' });
 
-    const wallet = await getOrCreateWallet(req.user.id);
-    if (wallet.coins < gift.coins) {
-      return res.status(402).json({ error: 'Not enough coins', coins: wallet.coins, required: gift.coins });
+    await getOrCreateWallet(req.user.id);
+
+    const result = await sequelize.transaction(async (t) => {
+      const wallet = await Wallet.findOne({ where: { userId: req.user.id }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!wallet || wallet.coins < gift.coins) {
+        return { error: 'Not enough coins', status: 402, coins: wallet?.coins ?? 0, required: gift.coins };
+      }
+      wallet.coins -= gift.coins;
+      await wallet.save({ transaction: t });
+
+      let creatorPoints = await Points.findOne({ where: { creatorId: admin.id }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!creatorPoints) {
+        creatorPoints = await Points.create(
+          { creatorId: admin.id, totalPoints: gift.coins, lifetimePoints: gift.coins },
+          { transaction: t }
+        );
+      } else {
+        creatorPoints.totalPoints += gift.coins;
+        creatorPoints.lifetimePoints += gift.coins;
+        await creatorPoints.save({ transaction: t });
+      }
+
+      await GiftLog.create(
+        { fromUserId: req.user.id, toUserId: admin.id, giftId, coins: gift.coins, roomId: 'live-stream' },
+        { transaction: t }
+      );
+
+      return { wallet, admin };
+    });
+
+    if (result?.error) {
+      return res.status(result.status || 402).json({
+        error: result.error,
+        coins: result.coins,
+        required: result.required,
+      });
     }
-    wallet.coins -= gift.coins;
-    await wallet.save();
 
-    let creatorPoints = await Points.findOne({ where: { creatorId: admin.id } });
-    if (!creatorPoints) {
-      creatorPoints = await Points.create({ creatorId: admin.id, totalPoints: gift.coins, lifetimePoints: gift.coins });
-    } else {
-      creatorPoints.totalPoints += gift.coins;
-      creatorPoints.lifetimePoints += gift.coins;
-      await creatorPoints.save();
-    }
-
-    await GiftLog.create({ fromUserId: req.user.id, toUserId: admin.id, giftId, coins: gift.coins, roomId: 'live-stream' });
-
+    const { wallet, admin: host } = result;
     const payload = {
       fromUserId: req.user.id,
       fromUsername: req.user.username,
-      toUserId: admin.id,
+      toUserId: host.id,
       giftId,
       char: gift.char,
       label: gift.label,
@@ -1559,7 +1626,7 @@ app.post('/api/live/gift', authenticate, requireAuth, interactionRateLimit, asyn
       timestamp: new Date(),
     };
     io.to('live-stream').emit('gift-received', payload);
-    io.to(`user_${admin.id}`).emit('gift-received', payload);
+    io.to(`user_${host.id}`).emit('gift-received', payload);
 
     res.json({ sent: true, coinsRemaining: wallet.coins, ...payload });
   } catch (err) {
@@ -1580,7 +1647,7 @@ app.get('/api/users/:id/subscription', authenticate, requireAuth, async (req, re
   }
 });
 
-app.post('/api/users/:id/subscribe', authenticate, requireAuth, async (req, res) => {
+app.post('/api/users/:id/subscribe', authenticate, requireRegistered, async (req, res) => {
   try {
     const creatorId = req.params.id;
     if (creatorId === req.user.id) return res.status(400).json({ error: 'Cannot subscribe to yourself' });
@@ -1590,36 +1657,56 @@ app.post('/api/users/:id/subscribe', authenticate, requireAuth, async (req, res)
     const months = Math.max(1, parseInt(req.body.months) || 1);
     const cost = SUBSCRIPTION_COST_PER_MONTH * months;
 
-    const wallet = await getOrCreateWallet(req.user.id);
-    if (wallet.coins < cost) {
-      return res.status(402).json({ error: 'Not enough coins', coins: wallet.coins, required: cost });
-    }
-    wallet.coins -= cost;
-    await wallet.save();
+    const txResult = await sequelize.transaction(async (t) => {
+      await getOrCreateWallet(req.user.id);
+      const wallet = await Wallet.findOne({ where: { userId: req.user.id }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!wallet || wallet.coins < cost) {
+        return { error: 'Not enough coins', status: 402, coins: wallet?.coins ?? 0, required: cost };
+      }
+      wallet.coins -= cost;
+      await wallet.save({ transaction: t });
 
-    const existing = await Subscription.findOne({
-      where: { subscriberId: req.user.id, creatorId, expiresAt: { [Op.gt]: new Date() } },
+      const existing = await Subscription.findOne({
+        where: { subscriberId: req.user.id, creatorId, expiresAt: { [Op.gt]: new Date() } },
+        transaction: t,
+      });
+      const base = existing ? new Date(existing.expiresAt) : new Date();
+      const expiresAt = new Date(base);
+      expiresAt.setMonth(expiresAt.getMonth() + months);
+
+      let sub;
+      if (existing) {
+        existing.expiresAt = expiresAt;
+        await existing.save({ transaction: t });
+        sub = existing;
+      } else {
+        sub = await Subscription.create({ subscriberId: req.user.id, creatorId, expiresAt }, { transaction: t });
+      }
+
+      let creatorPoints = await Points.findOne({ where: { creatorId }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!creatorPoints) {
+        creatorPoints = await Points.create(
+          { creatorId, totalPoints: cost, lifetimePoints: cost },
+          { transaction: t }
+        );
+      } else {
+        creatorPoints.totalPoints += cost;
+        creatorPoints.lifetimePoints += cost;
+        await creatorPoints.save({ transaction: t });
+      }
+
+      return { sub, wallet };
     });
-    const base = existing ? new Date(existing.expiresAt) : new Date();
-    const expiresAt = new Date(base.setMonth(base.getMonth() + months));
 
-    let sub;
-    if (existing) {
-      existing.expiresAt = expiresAt;
-      await existing.save();
-      sub = existing;
-    } else {
-      sub = await Subscription.create({ subscriberId: req.user.id, creatorId, expiresAt });
+    if (txResult?.error) {
+      return res.status(txResult.status || 402).json({
+        error: txResult.error,
+        coins: txResult.coins,
+        required: txResult.required,
+      });
     }
 
-    let creatorPoints = await Points.findOne({ where: { creatorId } });
-    if (!creatorPoints) {
-      creatorPoints = await Points.create({ creatorId, totalPoints: cost, lifetimePoints: cost });
-    } else {
-      creatorPoints.totalPoints += cost;
-      creatorPoints.lifetimePoints += cost;
-      await creatorPoints.save();
-    }
+    const { sub, wallet } = txResult;
 
     io.to(`user_${creatorId}`).emit('new-subscriber', {
       subscriberId: req.user.id,
@@ -1642,8 +1729,9 @@ app.get('/api/users/:id/videos', authenticate, async (req, res) => {
       include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
       order: [['createdAt', 'DESC']]
     });
-    
-    res.json(videos);
+
+    const videosWithMeta = await attachVideoMeta(videos, req.user?.id || null);
+    res.json(videosWithMeta);
   } catch (err) {
     console.error('User videos error:', err);
     res.status(500).json({ error: 'Failed to load videos' });
@@ -1779,7 +1867,7 @@ app.get('/api/stories', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/stories', authenticate, requireAuth, storyUpload.single('story'), async (req, res) => {
+app.post('/api/stories', authenticate, requireRegistered, storyUpload.single('story'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Story file required' });
@@ -1859,7 +1947,7 @@ app.get('/api/stories/:id/comments', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/stories/:id/comments', authenticate, requireAuth, commentRateLimit, async (req, res) => {
+app.post('/api/stories/:id/comments', authenticate, requireRegistered, commentRateLimit, async (req, res) => {
   try {
     const { content, parentId } = req.body;
     const normalizedContent = normalizeCommentContent(content);
@@ -1917,7 +2005,7 @@ app.post('/api/stories/:id/comments', authenticate, requireAuth, commentRateLimi
   }
 });
 
-app.delete('/api/stories/:id', authenticate, requireAuth, async (req, res) => {
+app.delete('/api/stories/:id', authenticate, requireRegistered, async (req, res) => {
   try {
     const story = await Story.findByPk(req.params.id);
     if (!story) return res.status(404).json({ error: 'Story not found' });
@@ -1953,10 +2041,15 @@ app.get('/api/challenges', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/challenges', authenticate, requireAuth, async (req, res) => {
+app.post('/api/challenges', authenticate, requireRegistered, async (req, res) => {
   try {
-    const { title, description, hashtag } = req.body;
-    
+    const title = String(req.body.title || '').trim();
+    const description = String(req.body.description || '').trim();
+    const hashtag = String(req.body.hashtag || '').trim().replace(/^#/, '');
+    if (!title || !hashtag) {
+      return res.status(400).json({ error: 'Title and hashtag are required' });
+    }
+
     const challenge = await Challenge.create({
       title,
       description,
@@ -1990,7 +2083,7 @@ app.get('/api/watch-parties', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/watch-parties', authenticate, requireAuth, async (req, res) => {
+app.post('/api/watch-parties', authenticate, requireRegistered, async (req, res) => {
   try {
     const { name, streamUrl, maxParticipants } = req.body;
     
@@ -2008,7 +2101,7 @@ app.post('/api/watch-parties', authenticate, requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/watch-parties/:id/join', authenticate, requireAuth, async (req, res) => {
+app.post('/api/watch-parties/:id/join', authenticate, requireRegistered, async (req, res) => {
   try {
     const watchParty = await WatchParty.findByPk(req.params.id);
     if (!watchParty || !watchParty.isActive) {
@@ -2085,7 +2178,7 @@ app.post('/api/admin/stream-key/rotate', requireAdmin, async (req, res) => {
 // ==================== DIRECT MESSAGES ====================
 
 // Get all conversations for the current user
-app.get('/api/messages/conversations', authenticate, requireAuth, async (req, res) => {
+app.get('/api/messages/conversations', authenticate, requireRegistered, async (req, res) => {
   try {
     const userId = req.user.id;
     const msgs = await DirectMessage.findAll({
@@ -2113,7 +2206,7 @@ app.get('/api/messages/conversations', authenticate, requireAuth, async (req, re
 });
 
 // Get messages between current user and another user
-app.get('/api/messages/:userId', authenticate, requireAuth, async (req, res) => {
+app.get('/api/messages/:userId', authenticate, requireRegistered, async (req, res) => {
   try {
     const me = req.user.id;
     const other = req.params.userId;
@@ -2137,7 +2230,7 @@ app.get('/api/messages/:userId', authenticate, requireAuth, async (req, res) => 
 });
 
 // Send a message
-app.post('/api/messages/:userId', authenticate, requireAuth, async (req, res) => {
+app.post('/api/messages/:userId', authenticate, requireRegistered, async (req, res) => {
   try {
     const me = req.user.id;
     const other = req.params.userId;
@@ -2186,7 +2279,7 @@ app.get('/api/posts', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/posts/:id/like', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+app.post('/api/posts/:id/like', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
   try {
     const post = await TextPost.findByPk(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
@@ -2213,7 +2306,7 @@ app.post('/api/posts/:id/like', authenticate, requireAuth, interactionRateLimit,
   }
 });
 
-app.post('/api/posts', authenticate, requireAuth, async (req, res) => {
+app.post('/api/posts', authenticate, requireRegistered, async (req, res) => {
   try {
     const { content, backgroundColor, textColor, fontStyle } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
@@ -2234,7 +2327,7 @@ app.post('/api/posts', authenticate, requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/posts/:id', authenticate, requireAuth, async (req, res) => {
+app.delete('/api/posts/:id', authenticate, requireRegistered, async (req, res) => {
   try {
     const post = await TextPost.findByPk(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
@@ -2248,7 +2341,7 @@ app.delete('/api/posts/:id', authenticate, requireAuth, async (req, res) => {
 
 // ==================== VIDEO EDIT ====================
 
-app.put('/api/videos/:id', authenticate, requireAuth, async (req, res) => {
+app.put('/api/videos/:id', authenticate, requireRegistered, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -2269,7 +2362,7 @@ app.put('/api/videos/:id', authenticate, requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/videos/:id', authenticate, requireAuth, async (req, res) => {
+app.delete('/api/videos/:id', authenticate, requireRegistered, async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -2290,11 +2383,14 @@ app.post('/api/live/on-publish', async (req, res) => {
     let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
     if (!liveStatus) {
       liveStatus = await LiveStatus.create({ streamKey: uuidv4(), isLive: true, title: 'Live Stream', startedAt: new Date(), viewerCount: 0 });
+      await assignLiveHost(liveStatus);
+      await liveStatus.save();
     } else {
       liveStatus.isLive = true;
       liveStatus.startedAt = new Date();
       liveStatus.viewerCount = 0;
       if (!liveStatus.title) liveStatus.title = 'Live Stream';
+      await assignLiveHost(liveStatus);
       await liveStatus.save();
     }
     console.log('Stream started via on_publish');
@@ -2336,11 +2432,14 @@ app.post('/api/admin/live/start', requireAdmin, async (req, res) => {
         startedAt: new Date(),
         viewerCount: 0
       });
+      await assignLiveHost(liveStatus);
+      await liveStatus.save();
     } else {
       liveStatus.isLive = true;
       liveStatus.title = title || 'Live Stream';
       liveStatus.startedAt = new Date();
       liveStatus.viewerCount = 0;
+      await assignLiveHost(liveStatus);
       await liveStatus.save();
     }
     
@@ -2656,7 +2755,7 @@ app.get('/api/health', (req, res) => {
 // ==================== V3 INSTAGRAM ROUTES ====================
 
 // V3 POST/FEED ROUTES
-app.post('/api/v3/posts', authenticate, requireAuth, imageUpload.single('image'), async (req, res) => {
+app.post('/api/v3/posts', authenticate, requireRegistered, imageUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image file required' });
@@ -2873,11 +2972,14 @@ app.post('/api/v3/livestream/start', requireAdmin, async (req, res) => {
         viewerCount: 0,
         startedAt: new Date()
       });
+      await assignLiveHost(liveStatus);
+      await liveStatus.save();
     } else {
       liveStatus.isLive = true;
       liveStatus.title = title;
       liveStatus.startedAt = new Date();
       liveStatus.viewerCount = 0;
+      await assignLiveHost(liveStatus);
       await liveStatus.save();
     }
     
@@ -2986,12 +3088,31 @@ app.post('/api/v3/livestream/viewers/leave', authenticate, async (req, res) => {
 
 // ==================== SOCKET.IO REAL-TIME ====================
 
+io.use(async (socket, next) => {
+  const rawToken = socket.handshake.auth?.token
+    || socket.handshake.headers?.authorization?.split(' ')[1]
+    || null;
+  if (!rawToken) {
+    socket.user = null;
+    return next();
+  }
+  try {
+    const decoded = jwt.verify(rawToken, JWT_SECRET);
+    const user = await User.findByPk(decoded.id);
+    socket.user = user && !user.isBanned ? user : null;
+  } catch {
+    socket.user = null;
+  }
+  return next();
+});
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   // Join personal user room for DM notifications
   socket.on('join-user-room', (userId) => {
-    if (userId) socket.join(`user_${userId}`);
+    if (!socket.user?.id || String(socket.user.id) !== String(userId)) return;
+    socket.join(`user_${userId}`);
   });
 
   // Join a room for a specific video/stream
@@ -3008,27 +3129,26 @@ io.on('connection', (socket) => {
 
   // Handle live chat messages
   socket.on('chat-message', async (data) => {
-    const { roomId, message, userId, username } = data;
-    
-    // Broadcast to all users in the room
+    const { roomId, message } = data || {};
+    if (!socket.user || socket.user.isGuest || !roomId || !String(message || '').trim()) return;
+
     io.to(roomId).emit('chat-message', {
       id: uuidv4(),
-      message,
-      userId,
-      username,
+      message: String(message).trim(),
+      userId: socket.user.id,
+      username: socket.user.username || socket.user.displayName,
       timestamp: new Date()
     });
   });
 
-  // Handle reactions
   socket.on('reaction', (data) => {
-    const { roomId, reaction, userId, username } = data;
-    
-    // Broadcast reaction to room
+    const { roomId, reaction } = data || {};
+    if (!socket.user || socket.user.isGuest || !roomId || !reaction) return;
+
     io.to(roomId).emit('reaction', {
       reaction,
-      userId,
-      username,
+      userId: socket.user.id,
+      username: socket.user.username || socket.user.displayName,
       timestamp: new Date()
     });
   });
@@ -3062,8 +3182,17 @@ io.on('connection', (socket) => {
   // and we forward it verbatim to the target user's personal room.
   socket.on('call-signal', (data) => {
     const { toUserId } = data || {};
-    if (!toUserId) return;
-    io.to(`user_${toUserId}`).emit('call-signal', { ...data, timestamp: new Date() });
+    if (!socket.user || socket.user.isGuest || !toUserId) return;
+    io.to(`user_${toUserId}`).emit('call-signal', {
+      ...data,
+      from: {
+        id: socket.user.id,
+        username: socket.user.username,
+        displayName: socket.user.displayName,
+        avatar: socket.user.avatar,
+      },
+      timestamp: new Date(),
+    });
   });
 
   socket.on('disconnect', () => {
@@ -3072,6 +3201,15 @@ io.on('connection', (socket) => {
 });
 
 // ==================== INITIALIZE ====================
+
+const ensureLiveStatusColumns = async () => {
+  const [columns] = await sequelize.query('PRAGMA table_info(LiveStatuses)');
+  const existing = new Set((columns || []).map((col) => String(col.name || '').toLowerCase()));
+  if (!existing.has('hostuserid')) {
+    await sequelize.query('ALTER TABLE LiveStatuses ADD COLUMN hostUserId VARCHAR(255)');
+    console.log('Schema migration: added LiveStatuses.hostUserId');
+  }
+};
 
 const deduplicateUsernames = async () => {
   try {
@@ -3167,6 +3305,7 @@ const enforceInteractionUniqueness = async () => {
     { table: 'StoryViews', keys: ['storyId', 'viewerId'] },
     { table: 'VideoSaves', keys: ['userId', 'videoId'] },
     { table: 'VideoReposts', keys: ['userId', 'videoId'] },
+    { table: 'PostLikes', keys: ['userId', 'postId'] },
   ];
 
   for (const item of dedupeTables) {
@@ -3203,6 +3342,7 @@ const enforceInteractionUniqueness = async () => {
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_storyviews_story_viewer ON "StoryViews"("storyId", "viewerId")');
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_videosaves_user_video ON "VideoSaves"("userId", "videoId")');
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_videoreposts_user_video ON "VideoReposts"("userId", "videoId")');
+  await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_postlikes_user_post ON "PostLikes"("userId", "postId")');
 };
 
 // Serve the built frontend, if present — registered last, after every /api
@@ -3282,6 +3422,7 @@ const initialize = async () => {
     await sequelize.authenticate();
     await deduplicateUsernames();
     await ensureGuestColumn();
+    await ensureLiveStatusColumns();
     await sequelize.sync();
     await enforceInteractionUniqueness();
     console.log('Database synchronized');

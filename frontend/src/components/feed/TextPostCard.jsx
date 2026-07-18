@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Heart, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { resolveMediaUrl } from '../../config/appConfig';
 
 function TextPostCard({ post, onOpenAuthor, tall, onGuestBlock, compact = false }) {
   const { fetchWithAuth, isAuthenticated, isGuest, trackGuestInteraction } = useAuth();
@@ -67,7 +68,7 @@ function TextPostCard({ post, onOpenAuthor, tall, onGuestBlock, compact = false 
             style={{ background: post.author?.avatar ? undefined : 'linear-gradient(135deg,#E1306C,#F5C542)' }}
           >
             {post.author?.avatar ? (
-              <img src={post.author.avatar} alt="" className="h-full w-full object-cover" />
+              <img src={resolveMediaUrl(post.author.avatar)} alt="" className="h-full w-full object-cover" />
             ) : (
               (post.author?.username || '?').charAt(0).toUpperCase()
             )}

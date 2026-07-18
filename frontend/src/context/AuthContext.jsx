@@ -47,36 +47,6 @@ export function AuthProvider({ children }) {
     return response;
   }, [token]);
 
-  const fetchMe = useCallback(async () => {
-    if (!token) {
-      if (mountedRef.current) setLoading(false);
-      return;
-    }
-    
-    try {
-      const response = await fetchWithAuth('/auth/me');
-      if (!mountedRef.current) return;
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data);
-        setIsGuest(!!data.isGuest);
-      } else {
-        localStorage.removeItem('ikhwezi_token');
-        setToken(null);
-        setUser(null);
-        setIsGuest(false);
-      }
-    } catch (err) {
-      console.error('Auth check failed:', err);
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, [token, fetchWithAuth]);
-
-  // Generates a random guest identifier. Not cryptographically significant —
-  // this only needs to be unique enough to avoid a username collision on
-  // registration, which is why createGuestSession() below still retries with
-  // a fresh id rather than trusting uniqueness outright.
   const randomGuestSuffix = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID().replace(/-/g, '').slice(0, 10);
@@ -119,6 +89,34 @@ export function AuthProvider({ children }) {
       if (mountedRef.current) setLoading(false);
     }
   }, [showToast]);
+
+  const fetchMe = useCallback(async () => {
+    if (!token) {
+      if (mountedRef.current) setLoading(false);
+      return;
+    }
+    
+    try {
+      const response = await fetchWithAuth('/auth/me');
+      if (!mountedRef.current) return;
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data);
+        setIsGuest(!!data.isGuest);
+      } else {
+        localStorage.removeItem('ikhwezi_token');
+        setToken(null);
+        setUser(null);
+        setIsGuest(false);
+        await createGuestSession();
+        return;
+      }
+    } catch (err) {
+      console.error('Auth check failed:', err);
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [token, fetchWithAuth, createGuestSession]);
 
   useEffect(() => {
     // React StrictMode runs effect cleanup then re-runs the effect in dev.

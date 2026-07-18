@@ -184,18 +184,18 @@ function Live() {
       return;
     }
     if (chatInput.trim() && user) {
-      sendChatMessage('live-stream', chatInput.trim(), user.id, user.username || user.displayName);
+      sendChatMessage('live-stream', chatInput.trim());
       setChatInput('');
     }
   };
 
   const handleReaction = (reaction) => {
-    if (!user) {
+    if (isGuest || !user) {
       trackGuestInteraction();
       setShowUpgradePrompt(true);
       return;
     }
-    sendReaction('live-stream', reaction, user.id, user.username || user.displayName);
+    sendReaction('live-stream', reaction);
   };
 
   const handleSendGift = async (giftId, gift) => {

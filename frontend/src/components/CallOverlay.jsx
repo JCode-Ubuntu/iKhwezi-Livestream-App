@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, X } from 'lucide-react';
 import { useCall } from '../context/CallContext';
+import { resolveMediaUrl } from '../config/appConfig';
 
 function initials(name) {
   return (name || '?').charAt(0).toUpperCase();
@@ -19,7 +20,7 @@ function PeerAvatar({ peer, size = 96 }) {
       }}
     >
       {peer?.avatar ? (
-        <img src={peer.avatar} alt="" className="h-full w-full object-cover" />
+        <img src={resolveMediaUrl(peer.avatar)} alt="" className="h-full w-full object-cover" />
       ) : (
         initials(peer?.displayName || peer?.username)
       )}

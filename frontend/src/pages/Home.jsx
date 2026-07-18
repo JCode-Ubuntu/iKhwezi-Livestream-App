@@ -133,7 +133,7 @@ function pickRandomMediaCards(items, count = 3) {
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-function FeatureCardsRow({ items, onOpen }) {
+function FeatureCardsRow({ items, onOpen, onPrefetch }) {
   const mediaPool = useMemo(
     () => items.filter((i) => i.type === 'video' || i.type === 'ad'),
     [items]
@@ -150,9 +150,12 @@ function FeatureCardsRow({ items, onOpen }) {
 
   useEffect(() => {
     if (mediaPool.length <= 3) return undefined;
-    const timer = setInterval(() => setCards(pickBatch()), 28000);
+    const timer = setInterval(() => {
+      setCards(pickBatch());
+      onPrefetch?.();
+    }, 28000);
     return () => clearInterval(timer);
-  }, [mediaPool.length, pickBatch]);
+  }, [mediaPool.length, pickBatch, onPrefetch]);
 
   if (!cards.length) return null;
 
@@ -293,7 +296,6 @@ function Home() {
   const [guestPromptContext, setGuestPromptContext] = useState('default');
   const [muted, setMuted] = useState(true);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
-  const [textPreview, setTextPreview] = useState(null);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const loadingMore = useRef(false);
   const desktopSentinelRef = useRef(null);
@@ -417,6 +419,14 @@ function Home() {
     setFullscreenIndex(idx >= 0 ? idx : 0);
   };
 
+  const prefetchFeed = useCallback(() => {
+    if (hasMore && !loadingMore.current) {
+      const next = page + 1;
+      setPage(next);
+      loadVideos(next, true);
+    }
+  }, [hasMore, page, loadVideos]);
+
   if (loading && videos.length === 0) {
     return (
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -506,7 +516,7 @@ function Home() {
         </div>
 
         <div className="home-feature-cards-slot home-latest-slot sm:hidden">
-          <FeatureCardsRow items={feedItems} onOpen={openAt} />
+          <FeatureCardsRow items={feedItems} onOpen={openAt} onPrefetch={prefetchFeed} />
         </div>
 
         <div className="home-message-feed-slot home-community-teaser-slot sm:hidden">
@@ -624,32 +634,6 @@ function Home() {
 
       {showGuestPrompt && (
         <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
-      )}
-      {textPreview && (
-        <div
-          className="fixed inset-0 z-[220] flex items-end justify-center bg-black/75 backdrop-blur-md sm:items-center"
-          onClick={() => setTextPreview(null)}
-          role="dialog"
-          aria-modal
-        >
-          <div
-            className="w-full max-w-md rounded-t-[28px] p-4 sm:rounded-[28px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <TextPostCard
-              post={textPreview}
-              onOpenAuthor={(id) => {
-                setTextPreview(null);
-                if (id) navigate(`/profile/${id}`);
-              }}
-              onGuestBlock={() => {
-                setTextPreview(null);
-                setGuestPromptContext('interaction');
-                setShowGuestPrompt(true);
-              }}
-            />
-          </div>
-        </div>
       )}
       {showStoryCreator && (
         <StoryCreator onClose={() => setShowStoryCreator(false)} onPosted={() => setShowStoryCreator(false)} />

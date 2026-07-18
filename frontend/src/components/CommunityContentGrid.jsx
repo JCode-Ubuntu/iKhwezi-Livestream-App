@@ -5,6 +5,7 @@ import {
   pickCommunityBatch,
   preloadCommunityThumbnails,
 } from '../utils/communityPosts';
+import { resolveMediaUrl } from '../config/appConfig';
 
 const SWAP_MS = 520;
 const PREFETCH_LEAD_MS = 5000;
@@ -78,7 +79,7 @@ function CommunityMiniCard({ post, onClick, animPhase, index, compact = false })
             >
               {post.creator.avatar ? (
                 <img
-                  src={post.creator.avatar}
+                  src={resolveMediaUrl(post.creator.avatar)}
                   alt=""
                   className="h-full w-full object-cover"
                   loading="lazy"

@@ -394,7 +394,11 @@ export default function FullscreenFeed({
       </div>
 
       {showComments && currentVideo && (
-        <Comments videoId={currentVideo.id} onClose={() => setShowComments(false)} />
+        <Comments
+          videoId={currentVideo.id}
+          onClose={() => setShowComments(false)}
+          onGuestBlock={showGuestPrompt}
+        />
       )}
     </div>
   );

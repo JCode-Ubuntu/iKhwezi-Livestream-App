@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Reply, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { resolveMediaUrl } from '../config/appConfig';
 
 const MAX_LEN = 280;
 
@@ -26,8 +27,8 @@ function CommentSkeleton() {
   );
 }
 
-function Comments({ videoId, resourcePath, onClose }) {
-  const { fetchWithAuth, showToast, user } = useAuth();
+function Comments({ videoId, resourcePath, onClose, onGuestBlock }) {
+  const { fetchWithAuth, showToast, user, isGuest, trackGuestInteraction } = useAuth();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -77,6 +78,11 @@ function Comments({ videoId, resourcePath, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isGuest) {
+      trackGuestInteraction?.();
+      onGuestBlock?.();
+      return;
+    }
     if (!newComment.trim() || submitting) return;
     if (newComment.trim().length > MAX_LEN) {
       showToast(`Comment must be ${MAX_LEN} characters or less`, 'error');
@@ -195,7 +201,7 @@ function Comments({ videoId, resourcePath, onClose }) {
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div className="avatar" style={{ width: 36, height: 36, fontSize: 14, flexShrink: 0 }}>
                     {comment.author?.avatar ? (
-                      <img src={comment.author.avatar} alt="" />
+                      <img src={resolveMediaUrl(comment.author.avatar)} alt="" />
                     ) : (
                       comment.author?.username?.charAt(0).toUpperCase() || '?'
                     )}
@@ -251,7 +257,7 @@ function Comments({ videoId, resourcePath, onClose }) {
                               <div key={reply.id} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                                 <div className="avatar" style={{ width: 28, height: 28, fontSize: 12, flexShrink: 0 }}>
                                   {reply.author?.avatar ? (
-                                    <img src={reply.author.avatar} alt="" />
+                                    <img src={resolveMediaUrl(reply.author.avatar)} alt="" />
                                   ) : (
                                     reply.author?.username?.charAt(0).toUpperCase() || '?'
                                   )}
@@ -324,8 +330,16 @@ function Comments({ videoId, resourcePath, onClose }) {
               typingTimer.current = window.setTimeout(() => setTyping(false), 1200);
             }}
             onBlur={e => { setTyping(false); e.target.style.borderColor = 'rgba(255,255,255,0.15)'; }}
-            onFocus={e => (e.target.style.borderColor = '#E1306C')}
-            placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
+            onFocus={(e) => {
+              if (isGuest) {
+                trackGuestInteraction?.();
+                onGuestBlock?.();
+                e.target.blur();
+                return;
+              }
+              e.target.style.borderColor = '#E1306C';
+            }}
+            placeholder={isGuest ? 'Sign in to comment…' : replyingTo ? 'Write a reply...' : 'Add a comment...'}
             maxLength={MAX_LEN}
             style={{
               flex: 1,

@@ -2,14 +2,20 @@ import React, { useState, useRef } from 'react';
 import { X, Check, Camera, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImageEditor from './ImageEditor';
-import { getApiBase } from '../config/appConfig';
+import { getApiBase, resolveMediaUrl } from '../config/appConfig';
+
+function mediaPreview(path) {
+  if (!path) return null;
+  if (String(path).startsWith('blob:') || String(path).startsWith('data:')) return path;
+  return resolveMediaUrl(path);
+}
 
 function ProfileEditSheet({ profile, onClose, onSaved }) {
   const { token, showToast, refreshUser } = useAuth();
   const [displayName, setDisplayName] = useState(profile.displayName || '');
   const [bio, setBio] = useState(profile.bio || '');
-  const [avatarPreview, setAvatarPreview] = useState(profile.avatar || null);
-  const [coverPreview, setCoverPreview] = useState(profile.coverImage || null);
+  const [avatarPreview, setAvatarPreview] = useState(mediaPreview(profile.avatar));
+  const [coverPreview, setCoverPreview] = useState(mediaPreview(profile.coverImage));
   const [avatarBlob, setAvatarBlob] = useState(null);
   const [coverBlob, setCoverBlob] = useState(null);
   const [editorSrc, setEditorSrc] = useState(null); // { src, aspect, target: 'avatar'|'cover' }

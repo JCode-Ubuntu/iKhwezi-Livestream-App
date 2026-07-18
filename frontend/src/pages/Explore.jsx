@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, X, Play, Eye, TrendingUp, Hash, Radio, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
+import { resolveMediaUrl } from '../config/appConfig';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
 import MediaPreview from '../components/MediaPreview';
@@ -20,7 +21,7 @@ function UserResultRow({ result, onOpen }) {
         style={{ background: result.avatar ? undefined : 'linear-gradient(135deg,#E1306C,#F5C542)' }}
       >
         {result.avatar ? (
-          <img src={result.avatar} alt="" className="h-full w-full object-cover" />
+          <img src={resolveMediaUrl(result.avatar)} alt="" className="h-full w-full object-cover" />
         ) : (
           (result.username || '?').charAt(0).toUpperCase()
         )}
@@ -31,7 +32,7 @@ function UserResultRow({ result, onOpen }) {
       </div>
       {result.isCreator && (
         <span className="rounded-full border border-gold-400/30 bg-gold-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold-300">
-          Admin
+          Creator
         </span>
       )}
     </button>

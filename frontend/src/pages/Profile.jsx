@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings,
@@ -9,14 +9,16 @@ import GlassCard from '../components/GlassCard';
 import VideoEditModal from '../components/VideoEditModal';
 import ProfileEditSheet from '../components/ProfileEditSheet';
 import MediaPreview from '../components/MediaPreview';
+import FullscreenFeed from '../components/feed/FullscreenFeed';
 import { UI_MOTION_CREDIT } from '../config/credits';
+import { resolveMediaUrl } from '../config/appConfig';
 
 const GIFT_FALLBACK = { rose: { coins: 10, char: '🌹', label: 'Rose' }, gem: { coins: 50, char: '💎', label: 'Gem' }, crown: { coins: 200, char: '👑', label: 'Crown' }, star: { coins: 500, char: '🌟', label: 'Supernova' } };
 
 function Profile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, fetchWithAuth, logout, isAuthenticated, showToast } = useAuth();
+  const { user, fetchWithAuth, logout, isAuthenticated, isGuest, showToast } = useAuth();
   const [profile, setProfile] = useState(null);
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,8 @@ function Profile() {
   const [showTopUp, setShowTopUp] = useState(false);
   const [subBusy, setSubBusy] = useState(false);
   const [blockBusy, setBlockBusy] = useState(false);
+  const [fullscreenIndex, setFullscreenIndex] = useState(null);
+  const [muted, setMuted] = useState(true);
 
   const isAppAdmin = !!user?.isAdmin;
   // Profile is reused (not remounted) when navigating between users' profiles
@@ -57,6 +61,14 @@ function Profile() {
     return Math.max(1, Math.min(99, 100 - (seed % 99)));
   }, [engagementScore]);
 
+  const requireRegistered = () => {
+    if (!isAuthenticated || isGuest) {
+      navigate('/login');
+      return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
     activeIdRef.current = id;
     setLoading(true);
@@ -67,12 +79,12 @@ function Profile() {
   }, [id]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isGuest) return;
     fetchWithAuth('/wallet/me').then((r) => r.json()).then((data) => {
       setWallet(data.coins ?? 0);
       setGiftCatalog(data.giftCatalog || null);
     }).catch(() => {});
-  }, [isAuthenticated, fetchWithAuth]);
+  }, [isAuthenticated, isGuest, fetchWithAuth]);
 
   const loadProfile = async (requestedId) => {
     try {
@@ -104,11 +116,17 @@ function Profile() {
     }
   };
 
+  const updateVideo = useCallback((updated) => {
+    setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+  }, []);
+
+  const openVideo = (video) => {
+    const idx = videos.findIndex((v) => v.id === video.id);
+    setFullscreenIndex(idx >= 0 ? idx : 0);
+  };
+
   const handleFollow = async () => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
+    if (requireRegistered()) return;
 
     try {
       const res = await fetchWithAuth(`/users/${id}/follow`, { method: 'POST' });
@@ -155,6 +173,7 @@ function Profile() {
   };
 
   const handleSendGift = async (giftId, gift) => {
+    if (requireRegistered()) return;
     if (wallet !== null && wallet < gift.coins) {
       showToast(`Not enough coins — need ${gift.coins}, you have ${wallet}`, 'error');
       return;
@@ -179,6 +198,7 @@ function Profile() {
   };
 
   const handleSubscribe = async () => {
+    if (requireRegistered()) return;
     const cost = 500;
     if (wallet !== null && wallet < cost) {
       showToast(`Not enough coins — subscribing costs ${cost}/month`, 'error');
@@ -206,6 +226,7 @@ function Profile() {
   };
 
   const handleTopUp = async (coins) => {
+    if (requireRegistered()) return;
     try {
       const res = await fetchWithAuth('/wallet/topup', {
         method: 'POST',
@@ -247,7 +268,7 @@ function Profile() {
     <div className="ultima-page ultima-scroll relative flex min-h-0 flex-1 flex-col">
       <div
         className="relative h-40 bg-gradient-to-br from-void-950 via-[#1a0d16] to-void-950 bg-cover bg-center shadow-[inset_0_-1px_0_rgba(225,48,108,0.25)]"
-        style={profile.coverImage ? { backgroundImage: `url(${profile.coverImage})` } : undefined}
+        style={profile.coverImage ? { backgroundImage: `url(${resolveMediaUrl(profile.coverImage)})` } : undefined}
       >
         <div className="absolute inset-0 bg-gradient-to-t from-void-950/70 via-transparent to-black/20" />
         <button
@@ -291,7 +312,7 @@ function Profile() {
             <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-pink-500 via-gold-400 to-plasma-500 opacity-90 blur-md" />
             <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-hidden rounded-full border-4 border-void-950 bg-gradient-to-br from-pink-500 to-gold-500 text-3xl font-bold text-white shadow-[0_0_32px_rgba(225,48,108,0.45)]">
               {profile.avatar ? (
-                <img src={profile.avatar} alt="" className="h-full w-full rounded-full object-cover" />
+                <img src={resolveMediaUrl(profile.avatar)} alt="" className="h-full w-full rounded-full object-cover" />
               ) : (
                 profile.username?.charAt(0).toUpperCase()
               )}
@@ -407,7 +428,7 @@ function Profile() {
               <MessageCircle size={18} />
             </button>
             <button
-              onClick={() => setShowGiftSheet(true)}
+              onClick={() => { if (!requireRegistered()) setShowGiftSheet(true); }}
               aria-label="Send gift"
               className="ik-btn flex h-[52px] w-[52px] items-center justify-center !p-0 rounded-2xl border border-gold-400/30 bg-gold-500/12 text-gold-200"
             >
@@ -482,13 +503,16 @@ function Profile() {
               videos.map((video) => (
                 <div
                   key={video.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openVideo(video)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openVideo(video); }}
                   className="relative aspect-[9/16] cursor-pointer overflow-hidden rounded-lg bg-white/5"
                 >
                   <MediaPreview
                     filename={video.filename}
                     className="h-full w-full object-cover"
                     muted
-                    onClick={() => navigate('/')}
                   />
                   <div className="absolute inset-0 flex items-end justify-between bg-gradient-to-t from-black/60 to-transparent p-2">
                     <div className="flex items-center gap-1 text-xs text-white">
@@ -685,6 +709,18 @@ function Profile() {
             </div>
           </div>
         </div>
+      )}
+
+      {fullscreenIndex !== null && videos.length > 0 && (
+        <FullscreenFeed
+          videos={videos}
+          startIndex={fullscreenIndex}
+          onClose={() => setFullscreenIndex(null)}
+          muted={muted}
+          setMuted={setMuted}
+          onUpdate={updateVideo}
+          showGuestPrompt={() => navigate('/login')}
+        />
       )}
     </div>
   );
