@@ -130,7 +130,14 @@ function pickRandomMediaCards(items, count = 3) {
   const pool = items.filter((i) => i.type === 'video' || i.type === 'ad');
   if (!pool.length) return [];
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(count, shuffled.length));
+  const picked = [];
+  for (let i = 0; i < Math.min(count, pool.length); i += 1) {
+    picked.push(shuffled[i]);
+  }
+  while (picked.length < count) {
+    picked.push(shuffled[picked.length % shuffled.length]);
+  }
+  return picked;
 }
 
 function FeatureCardsRow({ items, onOpen, onPrefetch }) {
@@ -157,11 +164,18 @@ function FeatureCardsRow({ items, onOpen, onPrefetch }) {
     return () => clearInterval(timer);
   }, [mediaPool.length, pickBatch, onPrefetch]);
 
-  if (!cards.length) return null;
+  if (!mediaPool.length) return null;
+
+  const visibleCards = cards.length ? cards : pickBatch();
 
   return (
-    <div className="home-feature-cards-row h-full min-h-0 px-3">
-      {cards.map((item, index) => {
+    <div className="home-feature-cards-shell h-full min-h-0">
+      <div className="home-feature-cards-header">
+        <span className="home-feature-cards-eyebrow">Preview</span>
+        <span className="home-feature-cards-hint">Videos · pics · ads</span>
+      </div>
+      <div className="home-feature-cards-row flex-1 min-h-0 px-3">
+        {visibleCards.map((item, index) => {
         if (item.type === 'ad') {
           return (
             <div key={`a-${item.data.id}-${index}`} className="home-feature-card home-feature-card--media">
@@ -202,6 +216,7 @@ function FeatureCardsRow({ items, onOpen, onPrefetch }) {
           </button>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -404,6 +419,15 @@ function Home() {
     return mixAdsIntoFeed(sorted, feedAds, { interval: 4 });
   }, [videos, heroVideos, textPosts, feedAds]);
 
+  const featureCardItems = useMemo(() => {
+    const heroIds = new Set(heroVideos.map((v) => v.id));
+    const videoItems = videos.map((v) => ({ type: 'video', data: v }));
+    const adItems = feedAds.map((ad) => ({ type: 'ad', data: ad }));
+    const nonHero = videoItems.filter((item) => !heroIds.has(item.data.id));
+    const videoPool = nonHero.length >= 3 ? nonHero : videoItems;
+    return [...adItems, ...videoPool];
+  }, [videos, heroVideos, feedAds]);
+
   const fullscreenSlides = useMemo(() => {
     const videoSlides = videos.map((v) => ({ type: 'video', data: v }));
     return mixAdsIntoSlides(videoSlides, ads, { interval: 6 });
@@ -515,8 +539,8 @@ function Home() {
           />
         </div>
 
-        <div className="home-feature-cards-slot home-latest-slot sm:hidden">
-          <FeatureCardsRow items={feedItems} onOpen={openAt} onPrefetch={prefetchFeed} />
+        <div className={`home-feature-cards-slot home-latest-slot sm:hidden${featureCardItems.length ? '' : ' home-feature-cards-slot--empty'}`}>
+          <FeatureCardsRow items={featureCardItems} onOpen={openAt} onPrefetch={prefetchFeed} />
         </div>
 
         <div className="home-message-feed-slot home-community-teaser-slot sm:hidden">
