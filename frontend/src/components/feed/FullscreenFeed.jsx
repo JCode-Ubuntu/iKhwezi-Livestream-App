@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Volume2, VolumeX, X, ChevronUp, ChevronDown, Heart, Music2, Eye, Megaphone, ExternalLink } from 'lucide-react';
 import VideoPlayer from '../VideoPlayer';
 import VideoActions from '../VideoActions';
+import ReelTopOverlay from '../ReelTopOverlay';
 import Comments from '../Comments';
 import FeedDiscovery from '../FeedDiscovery';
 import { useAuth } from '../../context/AuthContext';
+import { useNavDock } from '../../context/NavVisibilityContext';
 import { resolveMediaUrl } from '../../config/appConfig';
 import { isVideoFile } from '../MediaPreview';
 import { adSlideKey } from '../../utils/feedAds';
@@ -19,8 +21,10 @@ export default function FullscreenFeed({
   onUpdate,
   showGuestPrompt,
   showTrackMeta = false,
+  embedded = false,
 }) {
   const { isAuthenticated, fetchWithAuth } = useAuth();
+  const { hideDock, showDock } = useNavDock();
   const slides = slidesProp?.length
     ? slidesProp
     : videos.map((v) => ({ type: 'video', data: v }));
@@ -29,7 +33,10 @@ export default function FullscreenFeed({
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [showComments, setShowComments] = useState(false);
   const [burst, setBurst] = useState(null);
+  const [reelChromeVisible, setReelChromeVisible] = useState(true);
   const touchStartY = useRef(0);
+  const isTouching = useRef(false);
+  const settleTimer = useRef(null);
   const lastTapRef = useRef({ time: 0, index: -1 });
   const viewedAds = useRef(new Set());
   const lastStartIndexRef = useRef(startIndex);
@@ -118,16 +125,46 @@ export default function FullscreenFeed({
     [handleDoubleTapLike]
   );
 
+  const markReelScrolling = useCallback(() => {
+    setReelChromeVisible(false);
+    hideDock();
+    clearTimeout(settleTimer.current);
+  }, [hideDock]);
+
+  const markReelSettled = useCallback((delayMs = 0) => {
+    clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => {
+      setReelChromeVisible(true);
+      showDock();
+    }, delayMs);
+  }, [showDock]);
+
   const go = useCallback(
     (dir) => {
+      markReelScrolling();
       setCurrentIndex((i) => {
         const next = i + dir;
-        if (next < 0 || next >= slides.length) return i;
+        if (next < 0 || next >= slides.length) {
+          markReelSettled(0);
+          return i;
+        }
         return next;
       });
     },
-    [slides.length]
+    [slides.length, markReelScrolling, markReelSettled],
   );
+
+  const indexAtMount = useRef(currentIndex);
+  useEffect(() => {
+    if (indexAtMount.current === currentIndex) return;
+    indexAtMount.current = currentIndex;
+    markReelSettled(420);
+  }, [currentIndex, markReelSettled]);
+
+  useEffect(() => () => {
+    clearTimeout(settleTimer.current);
+    showDock();
+  }, [showDock]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -141,21 +178,40 @@ export default function FullscreenFeed({
 
   return (
     <div
-      className="fixed inset-0 z-[250] overflow-hidden bg-void-950"
-      onTouchStart={(e) => { touchStartY.current = e.touches[0].clientY; }}
+      className={
+        embedded
+          ? 'relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950'
+          : 'fixed inset-0 z-[250] overflow-hidden bg-void-950'
+      }
+      onTouchStart={(e) => {
+        isTouching.current = true;
+        touchStartY.current = e.touches[0].clientY;
+      }}
+      onTouchMove={(e) => {
+        if (!isTouching.current) return;
+        const dy = Math.abs(touchStartY.current - e.touches[0].clientY);
+        if (dy > 6) markReelScrolling();
+      }}
       onTouchEnd={(e) => {
+        isTouching.current = false;
         const dy = touchStartY.current - e.changedTouches[0].clientY;
-        if (Math.abs(dy) > 50) go(dy > 0 ? 1 : -1);
+        if (Math.abs(dy) > 50) {
+          go(dy > 0 ? 1 : -1);
+        } else {
+          markReelSettled(0);
+        }
       }}
     >
-      <button
-        type="button"
-        onClick={onClose}
-        className="ultima-glass absolute left-4 z-20 flex h-11 w-11 items-center justify-center rounded-full text-white"
-        style={{ top: 'max(16px, env(safe-area-inset-top))' }}
-      >
-        <X size={20} />
-      </button>
+      {!embedded && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="ultima-glass absolute left-4 z-20 flex h-11 w-11 items-center justify-center rounded-full text-white"
+          style={{ top: 'max(16px, env(safe-area-inset-top))' }}
+        >
+          <X size={20} />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setMuted((m) => !m)}
@@ -166,7 +222,7 @@ export default function FullscreenFeed({
       </button>
 
       <div
-        className="h-full"
+        className={embedded ? 'h-full min-h-0 flex-1' : 'h-full'}
         style={{
           transform: `translateY(-${currentIndex * 100}%)`,
           transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
@@ -189,7 +245,7 @@ export default function FullscreenFeed({
           return (
           <div
             key={slide.type === 'ad' ? adSlideKey(slide.data) : slide.data.id}
-            className="relative h-screen w-full"
+            className={`relative w-full ${embedded ? 'h-full' : 'h-screen'}`}
             onClick={() => handleSlideTap(slide, index)}
           >
             {slide.type === 'ad' ? (
@@ -258,18 +314,26 @@ export default function FullscreenFeed({
                     <Heart size={116} className="text-pink-500" fill="#E1306C" strokeWidth={0} />
                   </div>
                 )}
+                <ReelTopOverlay
+                  video={slide.data}
+                  visible={reelChromeVisible && index === currentIndex}
+                  onUpdate={onUpdate}
+                  onShowLogin={showGuestPrompt}
+                />
                 <VideoActions
                   video={slide.data}
                   onUpdate={onUpdate}
                   onShowComments={() => setShowComments(true)}
                   onShowLogin={showGuestPrompt}
+                  visible={reelChromeVisible && index === currentIndex}
                 />
-                <div className="pointer-events-none absolute bottom-36 left-4 z-10 max-w-[calc(100%-5.5rem)]">
-                  <p className="font-display text-sm font-bold text-gold-300">
-                    @{slide.data.creator?.username || 'unknown'}
-                  </p>
+                <div
+                  className={`reel-overlay-chrome pointer-events-none absolute bottom-36 left-4 z-10 max-w-[calc(100%-5.5rem)] ${
+                    reelChromeVisible && index === currentIndex ? '' : 'reel-overlay-chrome--hidden'
+                  }`}
+                >
                   {slide.data.caption && (
-                    <p className="mt-2 line-clamp-3 text-sm text-white/85">{slide.data.caption}</p>
+                    <p className="line-clamp-3 text-sm text-white/85">{slide.data.caption}</p>
                   )}
                   {showTrackMeta && (
                     <div className="mt-2.5 flex items-center gap-3 text-[11px] font-medium text-white/60">
@@ -316,7 +380,15 @@ export default function FullscreenFeed({
         className="absolute right-3 z-[15]"
         style={{ top: 'max(4.75rem, calc(env(safe-area-inset-top, 0px) + 3.5rem))' }}
       >
-        <FeedDiscovery videos={discoveryVideos} currentIndex={currentIndex} onPickIndex={setCurrentIndex} />
+        <FeedDiscovery
+          videos={discoveryVideos}
+          currentIndex={currentIndex}
+          onPickIndex={(idx) => {
+            if (idx === currentIndex) return;
+            markReelScrolling();
+            setCurrentIndex(idx);
+          }}
+        />
       </div>
 
       {showComments && currentVideo && (

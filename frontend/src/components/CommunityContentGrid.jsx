@@ -17,7 +17,7 @@ function formatCount(n) {
   return String(v);
 }
 
-function CommunityMiniCard({ post, onClick, animPhase, index }) {
+function CommunityMiniCard({ post, onClick, animPhase, index, compact = false }) {
   const cover = post.carouselCover || post.thumbnailUrl || post.mediaUrl;
   const isVideo = post.type === 'video';
 
@@ -25,9 +25,11 @@ function CommunityMiniCard({ post, onClick, animPhase, index }) {
     <button
       type="button"
       onClick={() => onClick(post)}
-      className={`community-grid-card ultima-spotlight-ring group relative aspect-[3/4] w-full overflow-hidden rounded-[22px] bg-void-950 text-left ${
-        animPhase === 'enter' ? 'community-grid-card--enter' : ''
-      } ${animPhase === 'exit' ? 'community-grid-card--exit' : ''}`}
+      className={`community-grid-card ultima-spotlight-ring group relative w-full overflow-hidden rounded-[18px] bg-void-950 text-left ${
+        compact ? 'h-full min-h-0' : 'aspect-[3/4]'
+      } ${animPhase === 'enter' ? 'community-grid-card--enter' : ''} ${
+        animPhase === 'exit' ? 'community-grid-card--exit' : ''
+      }`}
       style={{ animationDelay: `${index * 70}ms` }}
     >
       {isVideo ? (
@@ -145,6 +147,7 @@ export default function CommunityContentGrid({
   layout = 'row',
   animation = 'fade-slide-scale',
   maxCards = 3,
+  compact = false,
   onPostClick,
   onRefresh,
   className = '',
@@ -256,15 +259,16 @@ export default function CommunityContentGrid({
   return (
     <>
       <section
-        className={`community-content-grid mx-4 mt-6 ${className}`}
+        className={`community-content-grid ${compact ? 'mx-3 mt-0 h-full' : 'mx-4 mt-6'} ${className}`}
         data-animation={animation}
         aria-label="Trending community posts"
       >
-        <div className={gridClass}>{visible.map((post, index) => (
+        <div className={`${gridClass} ${compact ? 'h-full min-h-0' : ''}`}>{visible.map((post, index) => (
           <CommunityMiniCard
             key={`${post.id}-${animPhase}-${index}`}
             post={post}
             index={index}
+            compact={compact}
             animPhase={animPhase}
             onClick={handleClick}
           />

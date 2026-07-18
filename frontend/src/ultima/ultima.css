@@ -100,6 +100,18 @@
   66% { transform: translate(-3%, 4%) scale(0.94) rotate(-1deg); }
 }
 
+/* Native WebView: keep aurora glow, drop canvas stars + heavy blur layers */
+.ultima-field--native-lite .ultima-aurora {
+  filter: blur(56px);
+  opacity: 0.38;
+  animation-duration: 32s;
+}
+.ultima-field--native-lite .ultima-vignette {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, transparent 35%, rgba(0, 0, 0, 0.45) 100%),
+    linear-gradient(180deg, rgba(10, 10, 10, 0.25) 0%, transparent 30%, transparent 70%, rgba(10, 10, 10, 0.5) 100%);
+}
+
 /* ── Supreme glass ── */
 .ultima-glass {
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.02) 50%, rgba(0, 0, 0, 0.15) 100%);
@@ -123,6 +135,13 @@
     0 20px 60px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(245, 197, 66, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+[data-native='true'] .ultima-glass,
+[data-native='true'] .ultima-glass-supreme,
+[data-native='true'] .ultima-glass-gold {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .ultima-glass-supreme::before {
@@ -171,40 +190,119 @@
   color: rgba(245, 197, 66, 0.75);
 }
 
-.ultima-home-logo-mark {
-  position: relative;
-  width: 132px;
-  aspect-ratio: 539 / 545;
+.ultima-home-logo-image {
+  width: min(148px, 42vw);
+  height: auto;
+  display: block;
 }
-.ultima-home-logo-mark::before,
-.ultima-home-logo-mark::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  -webkit-mask-image: url('../assets/branding/ikhwezi-mark.png');
-  mask-image: url('../assets/branding/ikhwezi-mark.png');
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: left center;
-  mask-position: left center;
+
+.home-top-bar {
+  padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
 }
-.ultima-home-logo-mark::before {
-  background: linear-gradient(135deg, #fde68a 0%, #f5c542 42%, #d4a012 72%, #fde68a 100%);
-  filter: drop-shadow(0 0 10px rgba(245, 197, 66, 0.45)) drop-shadow(0 0 26px rgba(245, 197, 66, 0.22));
+
+.home-join-community {
+  margin-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
-.ultima-home-logo-mark::after {
-  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.9) 48%, rgba(255, 255, 255, 0.9) 54%, transparent 70%);
-  background-size: 260% 260%;
-  mix-blend-mode: overlay;
-  opacity: 0.85;
-  animation: splash-gloss-sweep 3.6s ease-in-out infinite;
+
+/* ── Mobile Home: single viewport, no scroll ── */
+@media (max-width: 639px) {
+  .home-page-shell {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+    padding-bottom: 0;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .home-logo-compact {
+    width: 56px;
+    height: auto;
+  }
+
+  .home-stories-row {
+    padding-bottom: 0;
+  }
+
+  .home-stories-row .flex.gap-3 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .home-feed-shell {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-bottom: calc(var(--ultima-nav-offset) + 4px);
+    overflow: hidden;
+  }
+
+  .home-spotlight-slot {
+    flex: 42 1 0;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .home-spotlight-slot .home-spotlight-card {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .home-community-slot {
+    flex: 38 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .home-community-slot .community-content-grid {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .home-community-slot .community-content-grid > div {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .home-latest-slot {
+    flex: 20 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .home-latest-strip {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .home-latest-tile {
+    min-height: 0;
+  }
+
+  .home-latest-fade {
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(10, 10, 10, 0.55) 55%,
+      rgba(10, 10, 10, 0.95) 100%
+    );
+  }
 }
-@keyframes splash-gloss-sweep {
-  0% { background-position: -60% -60%; }
-  50% { background-position: 60% 60%; }
-  100% { background-position: -60% -60%; }
+
+@media (min-width: 640px) {
+  .home-logo-full {
+    width: min(148px, 42vw);
+  }
 }
 
 .ultima-serif {
@@ -223,6 +321,33 @@
     0 24px 64px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 0 40px rgba(245, 197, 66, 0.03);
+  transition:
+    transform 220ms ease-out,
+    opacity 220ms ease-out;
+  will-change: transform, opacity;
+}
+
+.ultima-dock--hidden {
+  transform: translate(-50%, calc(100% + 2rem));
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.ultima-nav-hidden {
+  --ultima-nav-offset: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.reel-overlay-chrome {
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+  will-change: opacity, transform;
+}
+
+.reel-overlay-chrome--hidden {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
 }
 
 .ultima-dock-create {

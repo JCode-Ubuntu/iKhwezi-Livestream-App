@@ -20,6 +20,7 @@ function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
 
   const validateForm = () => {
     const newErrors = {};
@@ -52,21 +53,24 @@ function Register() {
 
     if (!validateForm()) return;
 
+    setSubmitError('');
     setLoading(true);
 
     const userData = {
       username: formData.username,
       displayName: formData.displayName || formData.username,
       password: formData.password,
-      ...(mode === 'email' ? { email: formData.email } : { phone: formData.phone }),
+      ...(mode === 'email' ? { email: formData.email.trim() } : { phone: formData.phone.trim() }),
     };
 
     const result = await register(userData);
     setLoading(false);
 
     if (result.success) {
-      navigate('/');
+      navigate('/', { replace: true });
+      return;
     }
+    setSubmitError(result.error || 'Registration failed');
   };
 
   const requirements = [
@@ -234,6 +238,12 @@ function Register() {
           >
             {loading ? 'Creating account…' : 'Create account'}
           </button>
+
+          {submitError && (
+            <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-200">
+              {submitError}
+            </p>
+          )}
         </form>
 
         <p className="mt-8 text-center text-sm text-white/40">

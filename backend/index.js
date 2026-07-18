@@ -43,17 +43,37 @@ function requireSecretOrGenerate(envVarName, { minLength = 32 } = {}) {
   return generated;
 }
 
+// Capacitor Android/iOS WebViews call the API from https://localhost (or
+// capacitor://localhost), not from ikhwezi.site — without these origins CORS
+// blocks auth/feed fetches and the native app appears frozen or crash-loops.
+function isAllowedCorsOrigin(origin) {
+  if (!origin) return true;
+  const allowed = new Set([
+    'https://ikhwezi.site',
+    'http://ikhwezi.site',
+    'http://localhost:5173',
+    'http://localhost:4173',
+    'http://localhost:8080',
+    'http://localhost:3000',
+    'https://localhost',
+    'http://localhost',
+    'capacitor://localhost',
+    'https://app.ikhwezi.local',
+    'http://app.ikhwezi.local',
+  ]);
+  if (allowed.has(origin)) return true;
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return true;
+  return false;
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [
-      'https://ikhwezi.site',
-      'http://ikhwezi.site',
-      'http://localhost:5173',
-      'http://localhost:4173',
-      'http://localhost:8080',
-    ],
+    origin: (origin, callback) => {
+      callback(null, isAllowedCorsOrigin(origin));
+    },
     methods: ['GET', 'POST'],
     credentials: false,
   },
@@ -121,6 +141,18 @@ const Video = sequelize.define('Video', {
 });
 
 const Like = sequelize.define('Like', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false },
+  videoId: { type: DataTypes.UUID, allowNull: false }
+});
+
+const VideoSave = sequelize.define('VideoSave', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  userId: { type: DataTypes.UUID, allowNull: false },
+  videoId: { type: DataTypes.UUID, allowNull: false }
+});
+
+const VideoRepost = sequelize.define('VideoRepost', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   userId: { type: DataTypes.UUID, allowNull: false },
   videoId: { type: DataTypes.UUID, allowNull: false }
@@ -305,6 +337,16 @@ Like.belongsTo(User, { foreignKey: 'userId' });
 Video.hasMany(Like, { foreignKey: 'videoId' });
 Like.belongsTo(Video, { foreignKey: 'videoId' });
 
+User.hasMany(VideoSave, { foreignKey: 'userId' });
+VideoSave.belongsTo(User, { foreignKey: 'userId' });
+Video.hasMany(VideoSave, { foreignKey: 'videoId' });
+VideoSave.belongsTo(Video, { foreignKey: 'videoId' });
+
+User.hasMany(VideoRepost, { foreignKey: 'userId' });
+VideoRepost.belongsTo(User, { foreignKey: 'userId' });
+Video.hasMany(VideoRepost, { foreignKey: 'videoId' });
+VideoRepost.belongsTo(Video, { foreignKey: 'videoId' });
+
 User.hasMany(Comment, { foreignKey: 'userId' });
 Comment.belongsTo(User, { foreignKey: 'userId', as: 'author' });
 Video.hasMany(Comment, { foreignKey: 'videoId' });
@@ -380,13 +422,9 @@ function requireRtmpWebhook(req, res) {
 
 // Middleware
 app.use(cors({
-  origin: [
-    'https://ikhwezi.site',
-    'http://ikhwezi.site',
-    'http://localhost:5173',
-    'http://localhost:4173',
-    'http://localhost:8080',
-  ],
+  origin: (origin, callback) => {
+    callback(null, isAllowedCorsOrigin(origin));
+  },
   credentials: false,
 }));
 
@@ -607,7 +645,7 @@ async function attachVideoMeta(videos, userId) {
   if (!videos.length) return [];
   const ids = videos.map(v => (typeof v.toJSON === 'function' ? v.toJSON() : v).id);
 
-  const [likeCounts, commentCounts, starSums] = await Promise.all([
+  const [likeCounts, commentCounts, starSums, repostCounts] = await Promise.all([
     Like.findAll({
       where: { videoId: ids },
       attributes: ['videoId', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
@@ -626,29 +664,42 @@ async function attachVideoMeta(videos, userId) {
       group: ['videoId'],
       raw: true,
     }),
+    VideoRepost.findAll({
+      where: { videoId: ids },
+      attributes: ['videoId', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['videoId'],
+      raw: true,
+    }),
   ]);
 
   const likeMap = Object.fromEntries(likeCounts.map(r => [r.videoId, parseInt(r.count) || 0]));
   const commentMap = Object.fromEntries(commentCounts.map(r => [r.videoId, parseInt(r.count) || 0]));
   const starMap = Object.fromEntries(starSums.map(r => [r.videoId, parseInt(r.total) || 0]));
+  const repostMap = Object.fromEntries(repostCounts.map(r => [r.videoId, parseInt(r.count) || 0]));
 
   let likedIds = new Set();
   let followedCreatorIds = new Set();
   let starredIds = new Set();
+  let savedIds = new Set();
+  let repostedIds = new Set();
 
   if (userId) {
     const creatorIds = [...new Set(videos.map(v => {
       const plain = typeof v.toJSON === 'function' ? v.toJSON() : v;
       return plain.userId;
     }))];
-    const [userLikes, userFollows, userStars] = await Promise.all([
+    const [userLikes, userFollows, userStars, userSaves, userReposts] = await Promise.all([
       Like.findAll({ where: { userId, videoId: ids }, attributes: ['videoId'], raw: true }),
       Follow.findAll({ where: { followerId: userId, followingId: creatorIds }, attributes: ['followingId'], raw: true }),
       Star.findAll({ where: { userId, videoId: ids }, attributes: ['videoId'], raw: true }),
+      VideoSave.findAll({ where: { userId, videoId: ids }, attributes: ['videoId'], raw: true }),
+      VideoRepost.findAll({ where: { userId, videoId: ids }, attributes: ['videoId'], raw: true }),
     ]);
     likedIds = new Set(userLikes.map(l => l.videoId));
     followedCreatorIds = new Set(userFollows.map(f => f.followingId));
     starredIds = new Set(userStars.map(s => s.videoId));
+    savedIds = new Set(userSaves.map(s => s.videoId));
+    repostedIds = new Set(userReposts.map(r => r.videoId));
   }
 
   return videos.map(v => {
@@ -659,9 +710,12 @@ async function attachVideoMeta(videos, userId) {
       likeCount: likeMap[plain.id] || 0,
       commentCount: commentMap[plain.id] || 0,
       starCount: starMap[plain.id] || 0,
+      repostCount: repostMap[plain.id] || 0,
       isLiked: likedIds.has(plain.id),
       isFollowing: followedCreatorIds.has(plain.userId),
       hasStarred: starredIds.has(plain.id),
+      isSaved: savedIds.has(plain.id),
+      isReposted: repostedIds.has(plain.id),
     };
   });
 }
@@ -1016,6 +1070,53 @@ app.post('/api/videos/:id/like', authenticate, requireAuth, interactionRateLimit
     }
     console.error('Like error:', err);
     res.status(500).json({ error: 'Like failed' });
+  }
+});
+
+app.post('/api/videos/:id/save', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+  try {
+    const video = await Video.findByPk(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+
+    const existing = await VideoSave.findOne({ where: { userId: req.user.id, videoId: video.id } });
+    if (existing) {
+      await existing.destroy();
+      return res.json({ saved: false });
+    }
+
+    await VideoSave.create({ userId: req.user.id, videoId: video.id });
+    res.json({ saved: true });
+  } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      return res.json({ saved: true });
+    }
+    console.error('Save error:', err);
+    res.status(500).json({ error: 'Save failed' });
+  }
+});
+
+app.post('/api/videos/:id/repost', authenticate, requireAuth, interactionRateLimit, async (req, res) => {
+  try {
+    const video = await Video.findByPk(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+
+    const existing = await VideoRepost.findOne({ where: { userId: req.user.id, videoId: video.id } });
+    if (existing) {
+      await existing.destroy();
+      const repostCount = await VideoRepost.count({ where: { videoId: video.id } });
+      return res.json({ reposted: false, repostCount });
+    }
+
+    await VideoRepost.create({ userId: req.user.id, videoId: video.id });
+    const repostCount = await VideoRepost.count({ where: { videoId: video.id } });
+    res.json({ reposted: true, repostCount });
+  } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      const repostCount = await VideoRepost.count({ where: { videoId: req.params.id } });
+      return res.json({ reposted: true, repostCount });
+    }
+    console.error('Repost error:', err);
+    res.status(500).json({ error: 'Repost failed' });
   }
 });
 

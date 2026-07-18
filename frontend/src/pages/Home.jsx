@@ -10,8 +10,9 @@ import TextPostCard from '../components/feed/TextPostCard';
 import AdTile from '../components/feed/AdTile';
 import CommunityContentGrid from '../components/CommunityContentGrid';
 import UltimaField from '../ultima/UltimaField';
-import { Play, Zap, Orbit, Eye, Sparkles, Send } from 'lucide-react';
+import { Play, Orbit, Eye, Sparkles, Send, Users, ChevronRight } from 'lucide-react';
 import MediaPreview from '../components/MediaPreview';
+import { IKHWEZI_LOGO_URL } from '../config/brandAssets';
 import {
   filterAdsByPlacement,
   mixAdsIntoFeed,
@@ -25,7 +26,7 @@ function formatDuration(seconds) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function Spotlight({ videos, muted, onOpen }) {
+function Spotlight({ videos, muted, onOpen, compact = false }) {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
     if (videos.length < 2) return undefined;
@@ -36,8 +37,18 @@ function Spotlight({ videos, muted, onOpen }) {
   const v = videos[idx];
 
   return (
-    <section className="relative mx-4 mt-4 overflow-hidden rounded-[32px] ultima-spotlight-ring">
-      <div className="relative aspect-[4/5] max-h-[58vh] w-full sm:aspect-video sm:max-h-[52vh]">
+    <section
+      className={`home-spotlight-card relative overflow-hidden rounded-[28px] ultima-spotlight-ring ${
+        compact ? 'mx-3 h-full' : 'mx-4 mt-4'
+      }`}
+    >
+      <div
+        className={`relative w-full ${
+          compact
+            ? 'h-full min-h-0'
+            : 'aspect-[4/5] max-h-[58vh] sm:aspect-video sm:max-h-[52vh]'
+        }`}
+      >
         <MediaPreview
           key={v.id}
           filename={v.filename}
@@ -51,44 +62,46 @@ function Spotlight({ videos, muted, onOpen }) {
         <div className="absolute inset-0 bg-gradient-to-t from-void-950 via-void-950/40 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-r from-pink-700/25 via-transparent to-gold-900/20" />
 
-        <div className="absolute left-5 top-5 flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full border border-gold-400/30 bg-gold-500/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gold-200">
-            <Zap size={11} className="fill-gold-300 text-gold-300" />
-            Spotlight
-          </span>
-          {v.isLive && (
+        {v.isLive && (
+          <div className="absolute left-3 top-3 sm:left-5 sm:top-5">
             <span className="animate-pulse rounded-full bg-red-500/90 px-2.5 py-1 text-[10px] font-bold text-white">
               LIVE
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="absolute bottom-0 left-0 right-0 p-6">
-          <p className="font-display text-xs font-medium uppercase tracking-[0.25em] text-plasma-300/80">
+        <div className={`absolute bottom-0 left-0 right-0 ${compact ? 'p-3.5' : 'p-6'}`}>
+          <p className="font-display text-[10px] font-medium uppercase tracking-[0.2em] text-plasma-300/80 sm:text-xs">
             @{v.creator?.username || 'signal'}
           </p>
           {v.caption && (
-            <h2 className="ultima-text-glow mt-2 font-display text-2xl font-black leading-tight text-white sm:text-3xl">
+            <h2
+              className={`ultima-text-glow mt-1 font-display font-black leading-tight text-white ${
+                compact ? 'line-clamp-2 text-base' : 'mt-2 text-2xl sm:text-3xl'
+              }`}
+            >
               {v.caption}
             </h2>
           )}
-          <div className="mt-4 flex items-center justify-between gap-4">
-            <div className="flex gap-4 text-xs text-white/50">
+          <div className={`flex items-center justify-between gap-3 ${compact ? 'mt-2' : 'mt-4'}`}>
+            <div className="flex gap-3 text-[10px] text-white/50 sm:text-xs">
               <span>{v.likeCount || 0} stars</span>
               <span className="inline-flex items-center gap-1">
-                <Eye size={12} />
+                <Eye size={11} />
                 {v.views || 0}
               </span>
             </div>
             <button
               type="button"
               onClick={() => onOpen(idx)}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-gold-300 to-amber-500 text-void-950 shadow-xl shadow-gold-500/40 transition active:scale-95"
+              className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold-300 to-amber-500 text-void-950 shadow-xl shadow-gold-500/40 transition active:scale-95 ${
+                compact ? 'h-10 w-10' : 'h-14 w-14'
+              }`}
             >
-              <Play size={22} fill="currentColor" className="ml-0.5" />
+              <Play size={compact ? 16 : 22} fill="currentColor" className="ml-0.5" />
             </button>
           </div>
-          <div className="mt-4 flex justify-center gap-1.5">
+          <div className={`flex justify-center gap-1.5 ${compact ? 'mt-2' : 'mt-4'}`}>
             {videos.map((_, i) => (
               <button
                 key={i}
@@ -96,7 +109,7 @@ function Spotlight({ videos, muted, onOpen }) {
                 onClick={() => setIdx(i)}
                 className="h-1 rounded-full transition-all duration-300"
                 style={{
-                  width: i === idx ? 24 : 6,
+                  width: i === idx ? 20 : 5,
                   background: i === idx
                     ? 'linear-gradient(90deg, #F5C542, #E1306C)'
                     : 'rgba(255,255,255,0.25)',
@@ -107,6 +120,56 @@ function Spotlight({ videos, muted, onOpen }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function LatestSignalsStrip({ items, onOpen }) {
+  const preview = items.slice(0, 4);
+  if (!preview.length) return null;
+
+  return (
+    <div className="home-latest-strip relative h-full min-h-0 px-3">
+      <div className="flex h-full gap-2 overflow-hidden">
+        {preview.map((item, index) => {
+          const isVideo = item.type === 'video';
+          const isAd = item.type === 'ad';
+          const data = item.data;
+          const thumb = isVideo || isAd ? data.filename : null;
+          const label = data.creator?.username || data.title || 'signal';
+
+          return (
+            <button
+              key={`${item.type}-${data.id}-${index}`}
+              type="button"
+              onClick={() => onOpen(data, isAd ? 'ad' : isVideo ? 'video' : 'video')}
+              className="home-latest-tile ultima-glass-supreme group relative min-w-0 flex-1 overflow-hidden rounded-[14px]"
+              style={{ opacity: Math.max(0.45, 1 - index * 0.14) }}
+            >
+              {thumb ? (
+                <MediaPreview
+                  filename={thumb}
+                  className="absolute inset-0 h-full w-full object-cover opacity-70 transition group-hover:opacity-90"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-pink-900/40 to-gold-900/30 p-2">
+                  <p className="line-clamp-2 text-left text-[8px] leading-snug text-white/70">
+                    {data.content || data.caption || 'Signal'}
+                  </p>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-void-950 via-void-950/50 to-transparent" />
+              <p className="absolute bottom-1.5 left-2 right-2 truncate text-left text-[9px] font-semibold text-white/80">
+                @{label}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+      <div className="home-latest-fade pointer-events-none absolute inset-x-0 bottom-0 h-8" aria-hidden />
+    </div>
   );
 }
 
@@ -205,6 +268,9 @@ function Home() {
 
   useEffect(() => {
     if (!sentinelRef.current) return undefined;
+    const mq = window.matchMedia('(min-width: 640px)');
+    if (!mq.matches) return undefined;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading) {
@@ -322,16 +388,26 @@ function Home() {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <UltimaField intensity={0.85} fixed />
-      <div className="ultima-page ultima-scroll ultima-content">
-      <header className="px-5 pb-3 pt-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="ultima-home-logo-mark" role="img" aria-label="iKHWEZI" />
+      <div className="ultima-page ultima-scroll ultima-content home-page-shell">
+      <header className="home-top-bar shrink-0 px-4 pb-1 pt-3 sm:px-5 sm:pb-3 sm:pt-6">
+        <div className="flex items-center justify-between gap-2 sm:items-start sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:block">
+            <p className="ultima-eyebrow mb-0 hidden sm:mb-2 sm:block">Stream the night</p>
+            <img
+              src={IKHWEZI_LOGO_URL}
+              alt="iKhwezi"
+              className="ultima-home-logo-image home-logo-compact sm:home-logo-full"
+              width={148}
+              height={148}
+              decoding="async"
+            />
+            <p className="ultima-serif mt-0 hidden text-sm text-white/50 sm:mt-2 sm:block">Shine the signal</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="ultima-glass-supreme flex items-center gap-2 rounded-full px-3.5 py-2">
-              <Orbit size={14} className="text-pink-400" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-white/70">
+          <div className="flex shrink-0 items-center gap-2 sm:pt-1">
+            <div className="ultima-glass-supreme flex items-center gap-1.5 rounded-full px-2.5 py-1.5 sm:gap-2 sm:px-3.5 sm:py-2">
+              <Orbit size={13} className="text-pink-400 sm:hidden" />
+              <Orbit size={14} className="hidden text-pink-400 sm:block" />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-white/70 sm:text-[10px]">
                 {videos.length} signals
               </span>
             </div>
@@ -340,89 +416,151 @@ function Home() {
                 type="button"
                 onClick={() => navigate('/messages')}
                 aria-label="Messages"
-                className="ultima-icon-btn ik-tap-spring flex h-10 w-10 items-center justify-center rounded-full text-white/75"
+                className="ultima-icon-btn ik-tap-spring flex h-9 w-9 items-center justify-center rounded-full text-white/75 sm:h-10 sm:w-10"
               >
-                <Send size={17} strokeWidth={1.9} />
+                <Send size={16} strokeWidth={1.9} className="sm:hidden" />
+                <Send size={17} strokeWidth={1.9} className="hidden sm:block" />
               </button>
             )}
           </div>
         </div>
       </header>
 
-      <div className="border-b border-white/5">
-        <StoryTray onAddStory={() => setShowStoryCreator(true)} />
+      <div className="home-stories-row shrink-0 border-b border-white/5">
+        <StoryTray compact onAddStory={() => setShowStoryCreator(true)} />
       </div>
 
-      <Spotlight
-        videos={heroVideos}
-        muted={muted}
-        onOpen={(heroIdx) => {
-          const vid = heroVideos[heroIdx];
-          openAt(vid);
-        }}
-      />
-
-      <CommunityContentGrid
-        posts={communityPool}
-        refreshInterval={30000}
-        layout="row"
-        animation="fade-slide-scale"
-        maxCards={3}
-        onPostClick={(post) => {
-          if (post.isAd || post.adId) {
-            openAt(post.raw || post, 'ad');
-          } else {
-            openAt(post.raw || post, 'video');
-          }
-        }}
-        onRefresh={() => {
-          if (hasMore && !loadingMore.current) {
-            const next = page + 1;
-            setPage(next);
-            loadVideos(next, true);
-          }
-        }}
-      />
-
-      <div className="ultima-stagger grid grid-cols-2 gap-3 px-4 pt-6">
-        {feedItems.map((item, index) =>
-          item.type === 'video' ? (
-            <BentoTile
-              key={`v-${item.data.id}`}
-              video={item.data}
-              tall={index % 3 === 0}
-              index={index}
-              onClick={() => openAt(item.data, 'video')}
-            />
-          ) : item.type === 'ad' ? (
-            <AdTile
-              key={`a-${item.data.id}`}
-              ad={item.data}
-              tall={index % 3 === 0}
-              index={index}
-              onClick={() => openAt(item.data, 'ad')}
-            />
-          ) : (
-            <TextPostCard
-              key={`t-${item.data.id}`}
-              post={item.data}
-              tall={index % 3 === 0}
-              onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
-              onGuestBlock={() => {
-                setGuestPromptContext('interaction');
-                setShowGuestPrompt(true);
-              }}
-            />
-          )
-        )}
-      </div>
-
-      <div ref={sentinelRef} className="h-12" />
-      {loading && (
-        <div className="flex justify-center py-6">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold-400/30 border-t-gold-400" />
+      <div className="home-feed-shell">
+        <div className="home-spotlight-slot sm:hidden">
+          <Spotlight
+            compact
+            videos={heroVideos}
+            muted={muted}
+            onOpen={(heroIdx) => {
+              const vid = heroVideos[heroIdx];
+              openAt(vid);
+            }}
+          />
         </div>
-      )}
+
+        <div className="home-community-slot sm:hidden">
+          <CommunityContentGrid
+            compact
+            posts={communityPool}
+            refreshInterval={30000}
+            layout="row"
+            animation="fade-slide-scale"
+            maxCards={3}
+            className="home-community-grid"
+            onPostClick={(post) => {
+              if (post.isAd || post.adId) {
+                openAt(post.raw || post, 'ad');
+              } else {
+                openAt(post.raw || post, 'video');
+              }
+            }}
+            onRefresh={() => {
+              if (hasMore && !loadingMore.current) {
+                const next = page + 1;
+                setPage(next);
+                loadVideos(next, true);
+              }
+            }}
+          />
+        </div>
+
+        <div className="home-latest-slot sm:hidden">
+          <LatestSignalsStrip items={feedItems} onOpen={openAt} />
+        </div>
+
+        <div className="home-desktop-extras hidden sm:block">
+          <Spotlight
+            videos={heroVideos}
+            muted={muted}
+            onOpen={(heroIdx) => {
+              const vid = heroVideos[heroIdx];
+              openAt(vid);
+            }}
+          />
+
+          <CommunityContentGrid
+            posts={communityPool}
+            refreshInterval={30000}
+            layout="row"
+            animation="fade-slide-scale"
+            maxCards={3}
+            onPostClick={(post) => {
+              if (post.isAd || post.adId) {
+                openAt(post.raw || post, 'ad');
+              } else {
+                openAt(post.raw || post, 'video');
+              }
+            }}
+            onRefresh={() => {
+              if (hasMore && !loadingMore.current) {
+                const next = page + 1;
+                setPage(next);
+                loadVideos(next, true);
+              }
+            }}
+          />
+
+          <div className="ultima-stagger grid grid-cols-2 gap-3 px-4 pt-2">
+            {feedItems.map((item, index) =>
+              item.type === 'video' ? (
+                <BentoTile
+                  key={`v-${item.data.id}`}
+                  video={item.data}
+                  tall={index % 3 === 0}
+                  index={index}
+                  onClick={() => openAt(item.data, 'video')}
+                />
+              ) : item.type === 'ad' ? (
+                <AdTile
+                  key={`a-${item.data.id}`}
+                  ad={item.data}
+                  tall={index % 3 === 0}
+                  index={index}
+                  onClick={() => openAt(item.data, 'ad')}
+                />
+              ) : (
+                <TextPostCard
+                  key={`t-${item.data.id}`}
+                  post={item.data}
+                  tall={index % 3 === 0}
+                  onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
+                  onGuestBlock={() => {
+                    setGuestPromptContext('interaction');
+                    setShowGuestPrompt(true);
+                  }}
+                />
+              )
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/community')}
+            className="home-join-community ik-tap-spring ultima-glass-supreme mx-4 mt-8 mb-4 flex items-center gap-3 rounded-[22px] px-4 py-4 text-left"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-gold-500">
+              <Users size={20} className="text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-white">Join Community</p>
+              <p className="truncate text-xs text-white/45">Challenges, watch parties &amp; creators</p>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-gold-300/70" />
+          </button>
+
+          <div ref={sentinelRef} className="h-12" />
+          {loading && (
+            <div className="flex justify-center py-6">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold-400/30 border-t-gold-400" />
+            </div>
+          )}
+        </div>
+      </div>
 
       {fullscreenIndex !== null && (
         <FullscreenFeed

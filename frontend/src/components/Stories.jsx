@@ -7,7 +7,7 @@ import Comments from './Comments';
 /* ─────────────────────────────────────────────────────────────────
    StoryTray  — horizontal row of user-story bubbles
 ───────────────────────────────────────────────────────────────── */
-export function StoryTray({ onAddStory }) {
+export function StoryTray({ onAddStory, compact = false }) {
   const { fetchWithAuth, user, isAuthenticated, isGuest } = useAuth();
   const [groups, setGroups] = useState([]);
   const [viewerIndex, setViewerIndex] = useState(null);
@@ -27,11 +27,13 @@ export function StoryTray({ onAddStory }) {
   };
 
   const myGroupIndex = groups.findIndex(g => g.user?.id === user?.id);
+  const bubbleClass = compact ? 'h-[48px] w-[48px]' : 'h-[62px] w-[62px]';
+  const avatarSize = compact ? 40 : 52;
 
   return (
     <>
       <div
-        className="flex gap-3 overflow-x-auto px-4 py-3"
+      className={`flex gap-2.5 overflow-x-auto px-3 py-2 sm:gap-3 sm:px-4 sm:py-3 ${compact ? 'home-story-tray--compact' : ''}`}
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* Add-story / own story bubble */}
@@ -44,20 +46,20 @@ export function StoryTray({ onAddStory }) {
             <div className="relative">
               {myGroupIndex >= 0 ? (
                 <div
-                  className="h-[62px] w-[62px] rounded-full p-[2.5px]"
+                  className={`${bubbleClass} rounded-full p-[2.5px]`}
                   style={{ background: 'linear-gradient(135deg,#E1306C,#F5C542,#F0568F)' }}
                 >
                   <div className="h-full w-full rounded-full bg-[#0A0A0A] p-[2px]">
-                    <StoryAvatar user={groups[myGroupIndex]?.user} size={52} />
+                    <StoryAvatar user={groups[myGroupIndex]?.user} size={avatarSize} />
                   </div>
                 </div>
               ) : (
                 <>
                   <div
-                    className="flex h-[62px] w-[62px] items-center justify-center rounded-full border-2 border-dashed border-white/20"
+                    className={`flex ${bubbleClass} items-center justify-center rounded-full border-2 border-dashed border-white/20`}
                     style={{ background: 'rgba(225,48,108,0.1)' }}
                   >
-                    <StoryAvatar user={user} size={52} />
+                    <StoryAvatar user={user} size={avatarSize} />
                   </div>
                   <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-xs font-black text-white shadow-lg">
                     +
@@ -85,7 +87,7 @@ export function StoryTray({ onAddStory }) {
                 className="flex flex-shrink-0 flex-col items-center gap-1.5"
               >
                 <div
-                  className="h-[62px] w-[62px] rounded-full p-[2.5px]"
+                  className={`${bubbleClass} rounded-full p-[2.5px]`}
                   style={{
                     background: allViewed
                       ? 'rgba(255,255,255,0.2)'
@@ -93,7 +95,7 @@ export function StoryTray({ onAddStory }) {
                   }}
                 >
                   <div className="h-full w-full rounded-full bg-[#0A0A0A] p-[2px]">
-                    <StoryAvatar user={group.user} size={52} />
+                    <StoryAvatar user={group.user} size={avatarSize} />
                   </div>
                 </div>
                 <span className="max-w-[64px] truncate text-[10px] font-semibold text-white/60">

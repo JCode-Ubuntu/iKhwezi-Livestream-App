@@ -1,117 +1,86 @@
-.splash-root {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(ellipse 120% 80% at 50% -10%, #1a0a14 0%, #0d0f1a 45%, #0A0A0A 100%);
-  z-index: 9999;
-  overflow: hidden;
-}
-[data-theme='light'] .splash-root {
-  background: radial-gradient(ellipse 120% 80% at 50% -10%, #fdeef2 0%, #f4f3f6 45%, #FBFAF9 100%);
-}
-.splash-aurora {
-  position: absolute;
-  width: 80vw;
-  height: 80vw;
-  border-radius: 50%;
-  filter: blur(120px);
-  background: radial-gradient(circle, rgba(245, 197, 66, 0.2) 0%, rgba(225, 48, 108, 0.16) 40%, transparent 70%);
-  opacity: 0.9;
-  transform: scale(1.02);
-  animation: splash-breathe 5s ease-in-out infinite;
-}
-@keyframes splash-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.06); opacity: 1; }
-}
-.splash-content {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  animation: splash-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes splash-rise {
-  from { opacity: 0; transform: translateY(14px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-.splash-logo-mark {
-  position: relative;
-  width: min(220px, 62vw);
-  aspect-ratio: 539 / 545;
-  margin: 0 auto;
-}
-.splash-logo-mark::before,
-.splash-logo-mark::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  -webkit-mask-image: url('../assets/branding/ikhwezi-mark.png');
-  mask-image: url('../assets/branding/ikhwezi-mark.png');
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-}
-.splash-logo-mark::before {
-  background: linear-gradient(135deg, var(--gold-300, #FDE68A) 0%, var(--gold-400, #F5C542) 42%, var(--gold-500, #D4A012) 72%, var(--gold-300, #FDE68A) 100%);
-  filter: drop-shadow(0 0 16px rgba(245, 197, 66, 0.5)) drop-shadow(0 0 44px rgba(245, 197, 66, 0.26));
-  animation: splash-logo-glow 3.2s ease-in-out infinite;
-}
-.splash-logo-mark::after {
-  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.9) 48%, rgba(255, 255, 255, 0.9) 54%, transparent 70%);
-  background-size: 260% 260%;
-  mix-blend-mode: overlay;
-  opacity: 0.85;
-  animation: splash-gloss-sweep 3.6s ease-in-out infinite;
-}
-@keyframes splash-logo-glow {
-  0%, 100% { filter: drop-shadow(0 0 14px rgba(245, 197, 66, 0.42)) drop-shadow(0 0 38px rgba(245, 197, 66, 0.2)); }
-  50% { filter: drop-shadow(0 0 24px rgba(245, 197, 66, 0.68)) drop-shadow(0 0 60px rgba(245, 197, 66, 0.32)); }
-}
-@keyframes splash-gloss-sweep {
-  0% { background-position: -60% -60%; }
-  50% { background-position: 60% 60%; }
-  100% { background-position: -60% -60%; }
-}
-.splash-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  max-width: 300px;
-  margin-top: 16px;
-}
-.splash-btn {
-  width: 100%;
-  padding: 14px 0;
-  border-radius: var(--radius-md, 18px);
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  border: none;
-  transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s;
-  letter-spacing: 0.02em;
-  font-family: var(--font-sans);
-}
-.splash-btn:active { transform: scale(0.97); }
-.splash-btn--primary {
-  background: linear-gradient(135deg, var(--pink-500, #E1306C), var(--gold-500, #D4A012));
-  color: #fff;
-  box-shadow: 0 8px 24px rgba(225, 48, 108, 0.4);
-}
-.splash-btn--ghost {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-primary, #fff);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-[data-theme='light'] .splash-btn--ghost {
-  background: rgba(20, 20, 26, 0.05);
-  border-color: rgba(20, 20, 26, 0.12);
-}
+.splash-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  z-index: 9999;
+  overflow: hidden;
+}
+[data-theme='light'] .splash-root {
+  background: #000000;
+}
+.splash-logo-image {
+  width: min(300px, 72vw);
+  height: auto;
+  display: block;
+  animation: splash-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both, splash-logo-glow 3.2s ease-in-out infinite;
+}
+.splash-aurora {
+  position: absolute;
+  width: 80vw;
+  height: 80vw;
+  border-radius: 50%;
+  filter: blur(120px);
+  background: radial-gradient(circle, rgba(245, 197, 66, 0.2) 0%, rgba(225, 48, 108, 0.16) 40%, transparent 70%);
+  opacity: 0.9;
+  transform: scale(1.02);
+  animation: splash-breathe 5s ease-in-out infinite;
+}
+@keyframes splash-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+.splash-content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: splash-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes splash-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes splash-logo-glow {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(245, 197, 66, 0.42)) drop-shadow(0 0 38px rgba(245, 197, 66, 0.2)); }
+  50% { filter: drop-shadow(0 0 24px rgba(245, 197, 66, 0.68)) drop-shadow(0 0 60px rgba(245, 197, 66, 0.32)); }
+}
+.splash-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 300px;
+  margin-top: 16px;
+}
+.splash-btn {
+  width: 100%;
+  padding: 14px 0;
+  border-radius: var(--radius-md, 18px);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s;
+  letter-spacing: 0.02em;
+  font-family: var(--font-sans);
+}
+.splash-btn:active { transform: scale(0.97); }
+.splash-btn--primary {
+  background: linear-gradient(135deg, var(--pink-500, #E1306C), var(--gold-500, #D4A012));
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(225, 48, 108, 0.4);
+}
+.splash-btn--ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #fff);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+[data-theme='light'] .splash-btn--ghost {
+  background: rgba(20, 20, 26, 0.05);
+  border-color: rgba(20, 20, 26, 0.12);
+}

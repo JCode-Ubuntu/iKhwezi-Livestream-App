@@ -1,86 +1,40 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Heart, MessageCircle, Share2, Star, UserPlus, UserCheck, Eye } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Heart, MessageCircle, Share2, Repeat2, Bookmark,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
+/** Spec order: Like → Comment → Share → Repost → Save */
+function VideoActions({ video, onUpdate, onShowComments, onShowLogin, visible = true }) {
   const { isAuthenticated, fetchWithAuth, showToast } = useAuth();
   const [isAnimating, setIsAnimating] = useState(null);
   const animTimerRef = useRef(null);
 
   useEffect(() => () => clearTimeout(animTimerRef.current), []);
 
+  const pulse = (id) => {
+    setIsAnimating(id);
+    clearTimeout(animTimerRef.current);
+    animTimerRef.current = setTimeout(() => setIsAnimating(null), 300);
+  };
+
   const handleLike = async () => {
     if (!isAuthenticated) {
       onShowLogin?.();
       return;
     }
-
-    setIsAnimating('like');
-    clearTimeout(animTimerRef.current);
-    animTimerRef.current = setTimeout(() => setIsAnimating(null), 300);
-
+    pulse('like');
     try {
       const res = await fetchWithAuth(`/videos/${video.id}/like`, { method: 'POST' });
       const data = await res.json();
       onUpdate?.({ ...video, isLiked: data.liked, likeCount: data.likeCount });
-    } catch (err) {
+    } catch {
       showToast('Failed to like', 'error');
     }
   };
 
-  const handleStar = async () => {
-    if (!isAuthenticated) {
-      onShowLogin?.();
-      return;
-    }
-
-    if (video.hasStarred) {
-      showToast('Already starred this video', 'error');
-      return;
-    }
-
-    setIsAnimating('star');
-    clearTimeout(animTimerRef.current);
-    animTimerRef.current = setTimeout(() => setIsAnimating(null), 500);
-
-    try {
-      const res = await fetchWithAuth(`/videos/${video.id}/star`, {
-        method: 'POST',
-        body: JSON.stringify({ amount: 1 }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        onUpdate?.({ ...video, hasStarred: true, starCount: data.starCount });
-        showToast(`⭐ +10 points to creator!`, 'success');
-      } else {
-        showToast(data.error, 'error');
-      }
-    } catch (err) {
-      showToast('Failed to star', 'error');
-    }
-  };
-
-  const handleFollow = async () => {
-    if (!isAuthenticated) {
-      onShowLogin?.();
-      return;
-    }
-
-    setIsAnimating('follow');
-    clearTimeout(animTimerRef.current);
-    animTimerRef.current = setTimeout(() => setIsAnimating(null), 300);
-
-    try {
-      const res = await fetchWithAuth(`/users/${video.creator?.id}/follow`, { method: 'POST' });
-      const data = await res.json();
-      onUpdate?.({ ...video, isFollowing: data.following });
-      showToast(data.following ? 'Following!' : 'Unfollowed', 'success');
-    } catch (err) {
-      showToast('Failed to follow', 'error');
-    }
-  };
-
   const handleShare = async () => {
+    pulse('share');
     try {
       if (navigator.share) {
         await navigator.share({
@@ -93,9 +47,41 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
         showToast('Link copied!', 'success');
       }
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        showToast('Failed to share', 'error');
-      }
+      if (err.name !== 'AbortError') showToast('Failed to share', 'error');
+    }
+  };
+
+  const handleRepost = async () => {
+    if (!isAuthenticated) {
+      onShowLogin?.();
+      return;
+    }
+    pulse('repost');
+    try {
+      const res = await fetchWithAuth(`/videos/${video.id}/repost`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onUpdate?.({ ...video, isReposted: data.reposted, repostCount: data.repostCount });
+      showToast(data.reposted ? 'Reposted' : 'Repost removed', 'success');
+    } catch {
+      showToast('Failed to repost', 'error');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!isAuthenticated) {
+      onShowLogin?.();
+      return;
+    }
+    pulse('save');
+    try {
+      const res = await fetchWithAuth(`/videos/${video.id}/save`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onUpdate?.({ ...video, isSaved: data.saved });
+      showToast(data.saved ? 'Saved' : 'Removed from saved', 'success');
+    } catch {
+      showToast('Failed to save', 'error');
     }
   };
 
@@ -107,15 +93,6 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
   };
 
   const actions = [
-    {
-      id: 'star',
-      icon: Star,
-      count: video.starCount,
-      active: video.hasStarred,
-      onClick: handleStar,
-      activeColor: '#F5C542',
-      fill: video.hasStarred,
-    },
     {
       id: 'like',
       icon: Heart,
@@ -129,144 +106,80 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin }) {
       id: 'comment',
       icon: MessageCircle,
       count: video.commentCount,
-      onClick: () => {
-        // Viewing comments should always be allowed.
-        onShowComments?.();
-      },
+      onClick: () => onShowComments?.(),
     },
     {
       id: 'share',
       icon: Share2,
       onClick: handleShare,
     },
+    {
+      id: 'repost',
+      icon: Repeat2,
+      count: video.repostCount,
+      active: video.isReposted,
+      onClick: handleRepost,
+      activeColor: '#10B981',
+    },
+    {
+      id: 'save',
+      icon: Bookmark,
+      active: video.isSaved,
+      onClick: handleSave,
+      activeColor: '#F5C542',
+      fill: video.isSaved,
+    },
   ];
 
   return (
-    <div style={{
-      position: 'absolute',
-      right: 12,
-      bottom: 'calc(8.5rem + env(safe-area-inset-bottom, 0px))',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 20,
-      alignItems: 'center',
-      zIndex: 10,
-    }}>
-      <div 
-        onClick={handleFollow}
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 4,
-          cursor: 'pointer',
-        }}
-      >
-        <div style={{
-          width: 48,
-          height: 48,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #E1306C, #F5C542)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 18,
-          fontWeight: 700,
-          color: 'white',
-          boxShadow: '0 4px 20px rgba(225, 48, 108, 0.4)',
-          overflow: 'hidden',
-          position: 'relative',
-          transform: isAnimating === 'follow' ? 'scale(1.1)' : 'scale(1)',
-          transition: 'transform 0.2s ease',
-        }}>
-          {video.creator?.avatar ? (
-            <img src={video.creator.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            video.creator?.username?.charAt(0).toUpperCase() || '?'
-          )}
-        </div>
-        <div style={{
-          position: 'absolute',
-          top: 36,
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          background: video.isFollowing ? '#10B981' : '#E1306C',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '2px solid #0A0A0A',
-        }}>
-          {video.isFollowing ? (
-            <UserCheck size={10} color="white" />
-          ) : (
-            <UserPlus size={10} color="white" />
-          )}
-        </div>
-      </div>
-
+    <div
+      className={`reel-overlay-chrome absolute right-3 z-10 flex flex-col items-center gap-4 ${
+        visible ? '' : 'reel-overlay-chrome--hidden'
+      }`}
+      style={{ bottom: 'calc(8.5rem + env(safe-area-inset-bottom, 0px))' }}
+    >
       {actions.map((action) => {
         const Icon = action.icon;
         return (
           <button
             key={action.id}
-            onClick={action.onClick}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 4,
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              transform: isAnimating === action.id ? 'scale(1.2)' : 'scale(1)',
-              transition: 'transform 0.2s ease',
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              action.onClick();
             }}
+            className="flex flex-col items-center gap-1 border-none bg-transparent p-0 transition-transform duration-200"
+            style={{ transform: isAnimating === action.id ? 'scale(1.2)' : 'scale(1)' }}
+            aria-label={action.id}
           >
-            <div style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: action.active ? `0 0 20px ${action.activeColor}40` : 'none',
-            }}>
-              <Icon 
-                size={22} 
+            <div
+              className="flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-md"
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                boxShadow: action.active ? `0 0 20px ${action.activeColor}40` : 'none',
+              }}
+            >
+              <Icon
+                size={22}
                 color={action.active ? action.activeColor : '#E0E0E0'}
                 fill={action.fill ? action.activeColor : 'none'}
                 strokeWidth={2}
               />
             </div>
             {action.count !== undefined && (
-              <span style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: action.active ? action.activeColor : '#E0E0E0',
-                textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
-              }}>
+              <span
+                className="text-xs font-semibold"
+                style={{
+                  color: action.active ? action.activeColor : '#E0E0E0',
+                  textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+                }}
+              >
                 {formatCount(action.count)}
               </span>
             )}
           </button>
         );
       })}
-
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        color: '#A0A0A0',
-        fontSize: 12,
-        marginTop: 8,
-      }}>
-        <Eye size={14} />
-        <span>{formatCount(video.views)}</span>
-      </div>
     </div>
   );
 }

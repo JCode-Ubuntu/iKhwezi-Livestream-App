@@ -11,17 +11,23 @@ function Login() {
   const [formData, setFormData] = useState({ email: '', phone: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
     const credentials = {
       password: formData.password,
-      ...(mode === 'email' ? { email: formData.email } : { phone: formData.phone }),
+      ...(mode === 'email' ? { email: formData.email.trim() } : { phone: formData.phone.trim() }),
     };
     const result = await login(credentials);
     setLoading(false);
-    if (result.success) navigate('/');
+    if (result.success) {
+      navigate('/', { replace: true });
+      return;
+    }
+    setError(result.error || 'Login failed');
   };
 
   return (
@@ -117,6 +123,12 @@ function Login() {
           >
             {loading ? 'Transmitting…' : 'Enter iKHWEZI'}
           </button>
+
+          {error && (
+            <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-200">
+              {error}
+            </p>
+          )}
         </form>
 
         <p className="mt-8 text-center text-sm text-white/40">

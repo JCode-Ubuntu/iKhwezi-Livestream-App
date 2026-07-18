@@ -1,8 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+function emilCreditBanner() {
+  return {
+    name: 'emil-credit-banner',
+    configureServer() {
+      console.log('\n  UI motion · Emil Kowalski — https://emilkowal.ski/\n');
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), emilCreditBanner()],
   server: {
     port: 3000,
     proxy: {

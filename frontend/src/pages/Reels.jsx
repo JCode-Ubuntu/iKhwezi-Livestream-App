@@ -1,55 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Play, Eye, Clapperboard } from 'lucide-react';
+import { Clapperboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import UltimaField from '../ultima/UltimaField';
-import { UltimaCrown } from '../ultima/UltimaPrimitives';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
-import MediaPreview from '../components/MediaPreview';
-
-function formatCount(count) {
-  if (!count) return '0';
-  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-  return `${count}`;
-}
-
-function ReelTile({ video, index, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="ik-tap-spring ultima-glass-supreme group relative w-full overflow-hidden rounded-[20px]"
-      style={{ aspectRatio: '9 / 16', animationDelay: `${(index % 12) * 40}ms` }}
-    >
-      <MediaPreview
-        filename={video.filename}
-        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-        muted
-        playsInline
-        preload="metadata"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent" />
-      <div className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-        <Play size={16} className="fill-white text-white" />
-      </div>
-      <div className="absolute bottom-2 left-2 right-2">
-        <p className="truncate text-[11px] font-semibold text-white">@{video.creator?.username || 'unknown'}</p>
-        <div className="mt-0.5 flex items-center gap-1 text-[10px] text-white/70">
-          <Eye size={10} />
-          {formatCount(video.views)}
-        </div>
-      </div>
-    </button>
-  );
-}
 
 function Reels() {
   const { fetchWithAuth } = useAuth();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const [muted, setMuted] = useState(true);
 
   const loadReels = useCallback(async () => {
@@ -62,9 +21,6 @@ function Reels() {
       setVideos(Array.isArray(data.videos) ? data.videos : []);
     } catch (err) {
       console.error('Failed to load reels', err);
-      // Previously silent — an empty `videos` from a failed fetch rendered
-      // the same "No reels yet. Be the first to post one." message as a
-      // genuinely empty feed, with no way to tell the two apart or retry.
       setLoadError(true);
     } finally {
       setLoading(false);
@@ -77,59 +33,53 @@ function Reels() {
     setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
   }, []);
 
-  return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <UltimaField intensity={0.75} fixed />
-      <div className="ultima-page ultima-scroll ultima-content">
-        <header className="px-5 pb-3 pt-6">
-          <p className="ultima-eyebrow">Vertical · Cinema</p>
-          <div className="mt-1 flex items-center gap-2">
-            <Clapperboard size={22} className="text-pink-400" />
-            <h1 className="ultima-text-supreme font-display text-3xl font-black tracking-tight">
-              Reels
-            </h1>
-          </div>
-        </header>
-
-        <div className="mb-2 px-5">
-          <UltimaCrown label="For You" />
-        </div>
-
-        {loading ? (
+  if (loading) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
+        <div className="ultima-page ultima-content flex min-h-0 flex-1 flex-col justify-center px-5">
           <SkeletonStream rows={5} />
-        ) : loadError ? (
-          <div className="flex flex-col items-center gap-3 px-8 py-20 text-center">
-            <Clapperboard className="h-10 w-10 text-white/25" />
-            <p className="text-sm text-white/45">Couldn't load reels. Check your connection.</p>
-            <button type="button" onClick={loadReels} className="ik-btn ik-btn-secondary ik-btn-sm ik-btn-pill px-5">
-              Retry
-            </button>
-          </div>
-        ) : videos.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 px-8 py-20 text-center">
-            <Clapperboard className="h-10 w-10 text-white/25" />
-            <p className="text-sm text-white/45">No reels yet. Be the first to post one.</p>
-          </div>
-        ) : (
-          <div className="ultima-stagger grid grid-cols-3 gap-1.5 px-3 pb-24 pt-1">
-            {videos.map((video, index) => (
-              <ReelTile key={video.id} video={video} index={index} onClick={() => setFullscreenIndex(index)} />
-            ))}
-          </div>
-        )}
-
-        {fullscreenIndex !== null && (
-          <FullscreenFeed
-            videos={videos}
-            startIndex={fullscreenIndex}
-            onClose={() => setFullscreenIndex(null)}
-            muted={muted}
-            setMuted={setMuted}
-            onUpdate={updateVideo}
-            showTrackMeta
-          />
-        )}
+        </div>
       </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
+          <Clapperboard className="h-10 w-10 text-white/25" />
+          <p className="text-sm text-white/45">Couldn&apos;t load reels. Check your connection.</p>
+          <button type="button" onClick={loadReels} className="ik-btn ik-btn-secondary ik-btn-sm ik-btn-pill px-5">
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (videos.length === 0) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
+          <Clapperboard className="h-10 w-10 text-white/25" />
+          <p className="text-sm text-white/45">No reels yet. Be the first to post one.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
+      <FullscreenFeed
+        embedded
+        videos={videos}
+        startIndex={0}
+        onClose={() => {}}
+        muted={muted}
+        setMuted={setMuted}
+        onUpdate={updateVideo}
+        showTrackMeta
+      />
     </div>
   );
 }

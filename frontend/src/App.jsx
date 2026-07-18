@@ -1,8 +1,10 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { CallProvider } from './context/CallContext';
+import { NavVisibilityProvider } from './context/NavVisibilityContext';
 import UltimaNav from './ultima/UltimaNav';
 import Splash from './components/Splash';
 import './design-tokens.css';
@@ -26,6 +28,7 @@ const Reels = lazy(() => import('./pages/Reels'));
 const Community = lazy(() => import('./pages/Community'));
 
 function App() {
+  const isNative = Capacitor.isNativePlatform();
   const { loading, user } = useAuth();
   const location = useLocation();
   const [showCreateSheet, setShowCreateSheet] = useState(false);
@@ -33,12 +36,24 @@ function App() {
   const [showTextComposer, setShowTextComposer] = useState(false);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
 
-  const [showSplash, setShowSplash] = React.useState(true);
+  // Web gets the marketing splash; native keeps only the Capacitor splash
+  // until auth finishes — avoids logo flash / double-splash freeze on Android.
+  const [showSplash, setShowSplash] = useState(!isNative);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    if (isNative) return undefined;
     const t = setTimeout(() => setShowSplash(false), 1100);
     return () => clearTimeout(t);
-  }, []);
+  }, [isNative]);
+
+  useEffect(() => {
+    if (!isNative || loading || showSplash) return undefined;
+    let cancelled = false;
+    import('@capacitor/splash-screen').then(({ SplashScreen }) => {
+      if (!cancelled) SplashScreen.hide().catch(() => {});
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isNative, loading, showSplash]);
 
   if (loading) {
     return <UltimaLoading />;
@@ -49,6 +64,7 @@ function App() {
   return (
     <SocketProvider>
       <CallProvider>
+      <NavVisibilityProvider>
       <div className="page-container">
         <ErrorBoundary key={location.pathname}>
           <Suspense fallback={<UltimaLoading />}>
@@ -102,6 +118,7 @@ function App() {
 
         <CallOverlay />
       </div>
+      </NavVisibilityProvider>
       </CallProvider>
     </SocketProvider>
   );

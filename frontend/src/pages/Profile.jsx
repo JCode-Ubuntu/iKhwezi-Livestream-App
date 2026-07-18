@@ -9,6 +9,7 @@ import GlassCard from '../components/GlassCard';
 import VideoEditModal from '../components/VideoEditModal';
 import ProfileEditSheet from '../components/ProfileEditSheet';
 import MediaPreview from '../components/MediaPreview';
+import { UI_MOTION_CREDIT } from '../config/credits';
 
 const GIFT_FALLBACK = { rose: { coins: 10, char: '🌹', label: 'Rose' }, gem: { coins: 50, char: '💎', label: 'Gem' }, crown: { coins: 200, char: '👑', label: 'Crown' }, star: { coins: 500, char: '🌟', label: 'Supernova' } };
 
@@ -544,6 +545,17 @@ function Profile() {
               <Trash2 size={18} />
               Delete Account &amp; Data
             </a>
+            <p className="mt-5 text-center text-[10px] leading-relaxed text-white/30">
+              {UI_MOTION_CREDIT.label} ·{' '}
+              <a
+                href={UI_MOTION_CREDIT.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/45 underline decoration-white/20 underline-offset-2"
+              >
+                {UI_MOTION_CREDIT.name}
+              </a>
+            </p>
           </div>
         </div>
       )}

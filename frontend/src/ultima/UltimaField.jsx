@@ -1,9 +1,16 @@
 import React, { useEffect, useRef } from 'react';
+import { isNativeApp } from '../config/appConfig';
+
+/** Star count: full canvas on web, none on native (CSS aurora only). */
+const NATIVE_LITE = isNativeApp();
+const STAR_COUNT = NATIVE_LITE ? 0 : 200;
 
 function UltimaField({ intensity = 1, fixed = false }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
+    if (NATIVE_LITE || STAR_COUNT === 0) return undefined;
+
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     const ctx = canvas.getContext('2d');
@@ -11,7 +18,7 @@ function UltimaField({ intensity = 1, fixed = false }) {
     let w = 0;
     let h = 0;
 
-    const stars = Array.from({ length: 200 }, () => ({
+    const stars = Array.from({ length: STAR_COUNT }, () => ({
       x: Math.random(),
       y: Math.random(),
       r: Math.random() * 1.6 + 0.2,
@@ -59,15 +66,21 @@ function UltimaField({ intensity = 1, fixed = false }) {
   return (
     <div
       className={`ultima-field pointer-events-none overflow-hidden ${
-        fixed ? 'fixed inset-0 z-0' : 'absolute inset-0'
-      }`}
+        NATIVE_LITE ? 'ultima-field--native-lite' : ''
+      } ${fixed ? 'fixed inset-0 z-0' : 'absolute inset-0'}`}
       aria-hidden
     >
       <div className="ultima-aurora ultima-aurora-a" />
-      <div className="ultima-aurora ultima-aurora-b" />
-      <div className="ultima-aurora ultima-aurora-c" />
-      <div className="ultima-grain" />
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full opacity-90" />
+      {!NATIVE_LITE && (
+        <>
+          <div className="ultima-aurora ultima-aurora-b" />
+          <div className="ultima-aurora ultima-aurora-c" />
+        </>
+      )}
+      {!NATIVE_LITE && <div className="ultima-grain" />}
+      {!NATIVE_LITE && (
+        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full opacity-90" />
+      )}
       <div className="ultima-vignette absolute inset-0" />
     </div>
   );

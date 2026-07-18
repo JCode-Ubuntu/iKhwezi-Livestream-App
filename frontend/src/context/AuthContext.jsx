@@ -1,9 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { getApiBase } from '../config/appConfig';
+import { postJson } from '../utils/apiFetch';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const location = useLocation();
+  const isAuthScreen = ['/login', '/register'].includes(location.pathname);
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('ikhwezi_token'));
   const [loading, setLoading] = useState(true);
@@ -82,22 +87,16 @@ export function AuthProvider({ children }) {
   const createGuestSession = useCallback(async (attempt = 0) => {
     const guestUsername = `guest_${randomGuestSuffix()}`;
     try {
-      const response = await fetch(`${getApiBase()}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: guestUsername,
-          password: 'guest_password_' + Math.random(),
-          email: `${guestUsername}@guest.local`,
-          displayName: 'Guest User',
-          isGuest: true
-        }),
+      const { response, data } = await postJson('/auth/register', {
+        username: guestUsername,
+        password: 'guest_password_' + Math.random(),
+        email: `${guestUsername}@guest.local`,
+        displayName: 'Guest User',
       });
 
       if (!mountedRef.current) return;
 
       if (response.ok) {
-        const data = await response.json();
         localStorage.setItem('ikhwezi_token', data.token);
         setToken(data.token);
         setUser(data.user);
@@ -105,20 +104,17 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      // Username collisions are the one realistically retryable failure here
-      // (409/400 from the backend's unique constraint) — anything else
-      // (network down, 500, etc.) retrying immediately won't help.
       if (response.status === 409 || response.status === 400) {
         if (attempt < 2) {
           return createGuestSession(attempt + 1);
         }
       }
-      console.error('Guest session creation failed with status', response.status);
-      showToast("Couldn't start a session — check your connection and try reloading.", 'error');
+      console.error('Guest session creation failed with status', response.status, data);
+      showToast(data.error || "Couldn't start a session — check your connection and try reloading.", 'error');
     } catch (err) {
       if (!mountedRef.current) return;
       console.error('Guest session creation failed:', err);
-      showToast("Couldn't start a session — check your connection and try reloading.", 'error');
+      showToast(err.message || "Couldn't start a session — check your connection and try reloading.", 'error');
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -130,6 +126,13 @@ export function AuthProvider({ children }) {
     // every async finally skips setLoading(false) — app stuck on UltimaLoading.
     mountedRef.current = true;
 
+    let loadingTimeout;
+    if (Capacitor.isNativePlatform()) {
+      loadingTimeout = setTimeout(() => {
+        if (mountedRef.current) setLoading(false);
+      }, 12000);
+    }
+
     if (token) {
       fetchMe();
     } else {
@@ -138,23 +141,22 @@ export function AuthProvider({ children }) {
 
     return () => {
       mountedRef.current = false;
+      if (loadingTimeout) clearTimeout(loadingTimeout);
     };
   }, []);
 
   const login = async (credentials) => {
     try {
-      const response = await fetch(`${getApiBase()}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-      });
-      
-      const data = await response.json();
-      
+      const { response, data } = await postJson('/auth/login', credentials);
+
       if (!response.ok) {
         throw new Error(data.error || 'Login failed');
       }
-      
+
+      if (!data.token || !data.user) {
+        throw new Error('Login response missing token');
+      }
+
       localStorage.setItem('ikhwezi_token', data.token);
       setToken(data.token);
       setUser(data.user);
@@ -163,25 +165,28 @@ export function AuthProvider({ children }) {
       showToast('Welcome back!', 'success');
       return { success: true };
     } catch (err) {
-      showToast(err.message, 'error');
-      return { success: false, error: err.message };
+      const message =
+        err.message === 'Failed to fetch'
+          ? 'Cannot reach iKhwezi servers. Check your connection.'
+          : err.message;
+      console.error('[auth/login]', message, { api: getApiBase(), native: Capacitor.isNativePlatform() });
+      showToast(message, 'error');
+      return { success: false, error: message };
     }
   };
 
   const register = async (userData) => {
     try {
-      const response = await fetch(`${getApiBase()}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData),
-      });
-      
-      const data = await response.json();
-      
+      const { response, data } = await postJson('/auth/register', userData);
+
       if (!response.ok) {
         throw new Error(data.error || 'Registration failed');
       }
-      
+
+      if (!data.token || !data.user) {
+        throw new Error('Registration response missing token');
+      }
+
       localStorage.setItem('ikhwezi_token', data.token);
       setToken(data.token);
       setUser(data.user);
@@ -190,8 +195,13 @@ export function AuthProvider({ children }) {
       showToast('Welcome to iKHWEZI!', 'success');
       return { success: true };
     } catch (err) {
-      showToast(err.message, 'error');
-      return { success: false, error: err.message };
+      const message =
+        err.message === 'Failed to fetch'
+          ? 'Cannot reach iKhwezi servers. Check your connection.'
+          : err.message;
+      console.error('[auth/register]', message, { api: getApiBase(), native: Capacitor.isNativePlatform() });
+      showToast(message, 'error');
+      return { success: false, error: message };
     }
   };
 
@@ -233,7 +243,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={value}>
       {children}
       {toast && (
-        <div className={`toast toast-${toast.type}`}>
+        <div className={`toast toast-${toast.type}${isAuthScreen ? ' toast--auth' : ''}`}>
           {toast.message}
         </div>
       )}

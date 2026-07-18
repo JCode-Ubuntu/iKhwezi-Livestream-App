@@ -339,6 +339,10 @@ input, textarea {
   border-left: 4px solid var(--error);
 }
 
+.toast--auth {
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
 .page-container {
   flex: 1;
   display: flex;

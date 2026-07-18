@@ -1,6 +1,9 @@
 {
   "name": "ikhwezi-frontend",
-  "version": "3.0.1",
+  "version": "3.0.3",
+  "contributors": [
+    "Emil Kowalski (UI motion inspiration — https://emilkowal.ski/)"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,8 +13,11 @@
     "cap:sync": "npm run build:mobile && npx cap sync",
     "cap:android": "npm run cap:sync && npx cap open android",
     "cap:ios": "npm run cap:sync && npx cap open ios",
-    "android:bundle": "npm run cap:sync && cd android && gradlew.bat bundleRelease",
-    "store:assets": "node scripts/generate-store-assets.mjs"
+    "android:bundle": "npm run native:brand && npm run cap:sync && cd android && gradlew.bat bundleRelease",
+    "store:assets": "node scripts/generate-store-assets.mjs",
+    "native:splash": "node scripts/generate-native-splash.mjs",
+    "native:brand": "node scripts/generate-native-splash.mjs && node scripts/verify-native-branding.mjs",
+    "verify:brand": "node scripts/verify-native-branding.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

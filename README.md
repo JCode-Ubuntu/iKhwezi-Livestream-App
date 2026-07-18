@@ -96,3 +96,7 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 ---
 
 Built with 💜 for creators
+
+## Credits
+
+- UI motion & interaction inspiration: [Emil Kowalski](https://emilkowal.ski/)

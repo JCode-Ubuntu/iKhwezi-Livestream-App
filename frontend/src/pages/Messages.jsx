@@ -130,7 +130,7 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="ultima-nav-scroll flex-1 overflow-y-auto">
         {loading && (
           <div className="flex justify-center py-8">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-pink-400 border-t-transparent" />

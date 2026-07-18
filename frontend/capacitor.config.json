@@ -22,10 +22,13 @@
     "scrollEnabled": false
   },
   "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
     "SplashScreen": {
-      "launchShowDuration": 2000,
-      "launchAutoHide": true,
-      "backgroundColor": "#030014",
+      "launchShowDuration": 0,
+      "launchAutoHide": false,
+      "backgroundColor": "#000000",
       "androidSplashResourceName": "splash",
       "showSpinner": false
     },
