@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
@@ -31,6 +31,7 @@ function App() {
   const isNative = Capacitor.isNativePlatform();
   const { loading, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const [showTextComposer, setShowTextComposer] = useState(false);
@@ -91,9 +92,13 @@ function App() {
         {showCreateSheet && (
           <UltimaCreateSheet
             onClose={() => setShowCreateSheet(false)}
+            onSignal={() => { setShowCreateSheet(false); setShowTextComposer(true); }}
             onVideo={() => { setShowCreateSheet(false); setShowVideoRecorder(true); }}
+            onImage={() => { setShowCreateSheet(false); setShowStoryCreator(true); }}
             onStory={() => { setShowCreateSheet(false); setShowStoryCreator(true); }}
-            onText={() => { setShowCreateSheet(false); setShowTextComposer(true); }}
+            onGoLive={() => { setShowCreateSheet(false); navigate('/live'); }}
+            onNotifications={() => { setShowCreateSheet(false); navigate('/messages'); }}
+            onMessage={() => { setShowCreateSheet(false); navigate('/messages'); }}
           />
         )}
 

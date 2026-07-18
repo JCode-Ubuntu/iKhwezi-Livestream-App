@@ -148,6 +148,7 @@ export default function CommunityContentGrid({
   animation = 'fade-slide-scale',
   maxCards = 3,
   compact = false,
+  seamless = false,
   onPostClick,
   onRefresh,
   className = '',
@@ -252,27 +253,48 @@ export default function CommunityContentGrid({
   if (!pool.length) return null;
 
   const gridClass =
-    layout === 'row'
-      ? 'grid grid-cols-3 gap-2.5 sm:gap-3'
-      : 'grid grid-cols-1 gap-3';
+    layout === 'scroll'
+      ? 'flex gap-2 overflow-x-auto pb-0.5'
+      : layout === 'row'
+        ? `grid grid-cols-3 gap-2.5 sm:gap-3 ${compact ? 'h-full min-h-0' : ''}`
+        : 'grid grid-cols-1 gap-3';
+
+  const sectionClass = seamless
+    ? `community-content-grid community-content-grid--seamless ${className}`
+    : `community-content-grid ${compact ? 'mx-3 mt-0 h-full' : 'mx-4 mt-6'} ${className}`;
 
   return (
     <>
       <section
-        className={`community-content-grid ${compact ? 'mx-3 mt-0 h-full' : 'mx-4 mt-6'} ${className}`}
+        className={sectionClass}
         data-animation={animation}
-        aria-label="Trending community posts"
+        aria-label="Community feed"
       >
-        <div className={`${gridClass} ${compact ? 'h-full min-h-0' : ''}`}>{visible.map((post, index) => (
-          <CommunityMiniCard
-            key={`${post.id}-${animPhase}-${index}`}
-            post={post}
-            index={index}
-            compact={compact}
-            animPhase={animPhase}
-            onClick={handleClick}
-          />
-        ))}</div>
+        <div className={gridClass}>
+          {visible.map((post, index) => (
+            layout === 'scroll' ? (
+              <div key={`${post.id}-${animPhase}-${index}`} className="h-[96px] w-[72px] shrink-0">
+                <CommunityMiniCard
+                  post={post}
+                  index={index}
+                  compact
+                  animPhase={animPhase}
+                  onClick={handleClick}
+                />
+              </div>
+            ) : (
+              <CommunityMiniCard
+                key={`${post.id}-${animPhase}-${index}`}
+                post={post}
+                index={index}
+                compact={compact}
+                animPhase={animPhase}
+                onClick={handleClick}
+              />
+            )
+          ))}
+        </div>
+        {seamless && <div className="home-community-fade" aria-hidden />}
       </section>
 
       {imageViewer && (

@@ -10,7 +10,7 @@ import TextPostCard from '../components/feed/TextPostCard';
 import AdTile from '../components/feed/AdTile';
 import CommunityContentGrid from '../components/CommunityContentGrid';
 import UltimaField from '../ultima/UltimaField';
-import { Play, Orbit, Eye, Sparkles, Send, Users, ChevronRight } from 'lucide-react';
+import { Play, Orbit, Eye, Sparkles, Users, ChevronRight } from 'lucide-react';
 import MediaPreview from '../components/MediaPreview';
 import { IKHWEZI_LOGO_URL } from '../config/brandAssets';
 import {
@@ -70,38 +70,40 @@ function Spotlight({ videos, muted, onOpen, compact = false }) {
           </div>
         )}
 
-        <div className={`absolute bottom-0 left-0 right-0 ${compact ? 'p-3.5' : 'p-6'}`}>
-          <p className="font-display text-[10px] font-medium uppercase tracking-[0.2em] text-plasma-300/80 sm:text-xs">
+        <div className={`absolute bottom-0 left-0 right-0 ${compact ? 'p-2.5' : 'p-6'}`}>
+          <p className={`font-display font-medium uppercase tracking-[0.18em] text-plasma-300/75 ${
+            compact ? 'text-[9px]' : 'text-[10px] sm:text-xs'
+          }`}>
             @{v.creator?.username || 'signal'}
           </p>
           {v.caption && (
             <h2
-              className={`ultima-text-glow mt-1 font-display font-black leading-tight text-white ${
-                compact ? 'line-clamp-2 text-base' : 'mt-2 text-2xl sm:text-3xl'
+              className={`ultima-text-glow mt-0.5 font-display font-black leading-snug text-white ${
+                compact ? 'line-clamp-1 text-sm' : 'mt-2 text-2xl sm:text-3xl'
               }`}
             >
               {v.caption}
             </h2>
           )}
-          <div className={`flex items-center justify-between gap-3 ${compact ? 'mt-2' : 'mt-4'}`}>
-            <div className="flex gap-3 text-[10px] text-white/50 sm:text-xs">
-              <span>{v.likeCount || 0} stars</span>
-              <span className="inline-flex items-center gap-1">
-                <Eye size={11} />
+          <div className={`flex items-center justify-between gap-2 ${compact ? 'mt-1.5' : 'mt-4'}`}>
+            <div className={`flex gap-2 text-white/45 ${compact ? 'text-[9px]' : 'text-[10px] sm:text-xs'}`}>
+              <span>{v.likeCount || 0}</span>
+              <span className="inline-flex items-center gap-0.5">
+                <Eye size={10} />
                 {v.views || 0}
               </span>
             </div>
             <button
               type="button"
               onClick={() => onOpen(idx)}
-              className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold-300 to-amber-500 text-void-950 shadow-xl shadow-gold-500/40 transition active:scale-95 ${
-                compact ? 'h-10 w-10' : 'h-14 w-14'
+              className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold-300 to-amber-500 text-void-950 shadow-lg shadow-gold-500/35 transition active:scale-95 ${
+                compact ? 'h-9 w-9' : 'h-14 w-14'
               }`}
             >
-              <Play size={compact ? 16 : 22} fill="currentColor" className="ml-0.5" />
+              <Play size={compact ? 14 : 22} fill="currentColor" className="ml-0.5" />
             </button>
           </div>
-          <div className={`flex justify-center gap-1.5 ${compact ? 'mt-2' : 'mt-4'}`}>
+          <div className={`flex justify-center gap-1 ${compact ? 'mt-1.5' : 'mt-4'}`}>
             {videos.map((_, i) => (
               <button
                 key={i}
@@ -123,52 +125,68 @@ function Spotlight({ videos, muted, onOpen, compact = false }) {
   );
 }
 
-function LatestSignalsStrip({ items, onOpen }) {
-  const preview = items.slice(0, 4);
+function LatestSignalsMasonry({ items, onOpen, onOpenAuthor }) {
+  const preview = items.slice(0, 6);
   if (!preview.length) return null;
 
   return (
-    <div className="home-latest-strip relative h-full min-h-0 px-3">
-      <div className="flex h-full gap-2 overflow-hidden">
+    <div className="home-masonry px-3 pb-1">
+      <div className="home-masonry-grid">
         {preview.map((item, index) => {
-          const isVideo = item.type === 'video';
-          const isAd = item.type === 'ad';
-          const data = item.data;
-          const thumb = isVideo || isAd ? data.filename : null;
-          const label = data.creator?.username || data.title || 'signal';
-
+          const tall = index % 3 === 0;
+          if (item.type === 'text') {
+            return (
+              <TextPostCard
+                key={`t-${item.data.id}`}
+                post={item.data}
+                tall={tall}
+                compact
+                onOpenAuthor={onOpenAuthor}
+              />
+            );
+          }
+          if (item.type === 'ad') {
+            return (
+              <AdTile
+                key={`a-${item.data.id}`}
+                ad={item.data}
+                tall={!tall}
+                compact
+                index={index}
+                onClick={() => onOpen(item.data, 'ad')}
+              />
+            );
+          }
           return (
             <button
-              key={`${item.type}-${data.id}-${index}`}
+              key={`v-${item.data.id}`}
               type="button"
-              onClick={() => onOpen(data, isAd ? 'ad' : isVideo ? 'video' : 'video')}
-              className="home-latest-tile ultima-glass-supreme group relative min-w-0 flex-1 overflow-hidden rounded-[14px]"
-              style={{ opacity: Math.max(0.45, 1 - index * 0.14) }}
+              onClick={() => onOpen(item.data, 'video')}
+              className={`home-masonry-tile ultima-glass-supreme group relative w-full overflow-hidden rounded-[16px] ${
+                tall ? 'home-masonry-tile--tall' : 'home-masonry-tile--short'
+              }`}
             >
-              {thumb ? (
-                <MediaPreview
-                  filename={thumb}
-                  className="absolute inset-0 h-full w-full object-cover opacity-70 transition group-hover:opacity-90"
-                  muted
-                  playsInline
-                  preload="metadata"
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-pink-900/40 to-gold-900/30 p-2">
-                  <p className="line-clamp-2 text-left text-[8px] leading-snug text-white/70">
-                    {data.content || data.caption || 'Signal'}
-                  </p>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-void-950 via-void-950/50 to-transparent" />
-              <p className="absolute bottom-1.5 left-2 right-2 truncate text-left text-[9px] font-semibold text-white/80">
-                @{label}
-              </p>
+              <MediaPreview
+                filename={item.data.filename}
+                className="absolute inset-0 h-full w-full object-cover transition duration-500 group-active:scale-[1.03]"
+                muted
+                playsInline
+                preload="metadata"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-void-950/90 via-void-950/15 to-transparent" />
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1">
+                <span className="truncate text-[9px] font-semibold text-white/75">
+                  @{item.data.creator?.username || 'signal'}
+                </span>
+                <span className="inline-flex items-center gap-0.5 text-[8px] text-white/45">
+                  <Eye size={9} />
+                  {item.data.views || 0}
+                </span>
+              </div>
             </button>
           );
         })}
       </div>
-      <div className="home-latest-fade pointer-events-none absolute inset-x-0 bottom-0 h-8" aria-hidden />
     </div>
   );
 }
@@ -204,7 +222,7 @@ function BentoTile({ video, tall, onClick, index }) {
 
 function Home() {
   const navigate = useNavigate();
-  const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction, isAuthenticated } = useAuth();
+  const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction } = useAuth();
   const [videos, setVideos] = useState([]);
   const [ads, setAds] = useState([]);
   const [textPosts, setTextPosts] = useState([]);
@@ -389,45 +407,27 @@ function Home() {
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <UltimaField intensity={0.85} fixed />
       <div className="ultima-page ultima-scroll ultima-content home-page-shell">
-      <header className="home-top-bar shrink-0 px-4 pb-1 pt-3 sm:px-5 sm:pb-3 sm:pt-6">
-        <div className="flex items-center justify-between gap-2 sm:items-start sm:gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:block">
-            <p className="ultima-eyebrow mb-0 hidden sm:mb-2 sm:block">Stream the night</p>
-            <img
-              src={IKHWEZI_LOGO_URL}
-              alt="iKhwezi"
-              className="ultima-home-logo-image home-logo-compact sm:home-logo-full"
-              width={148}
-              height={148}
-              decoding="async"
-            />
-            <p className="ultima-serif mt-0 hidden text-sm text-white/50 sm:mt-2 sm:block">Shine the signal</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 sm:pt-1">
-            <div className="ultima-glass-supreme flex items-center gap-1.5 rounded-full px-2.5 py-1.5 sm:gap-2 sm:px-3.5 sm:py-2">
-              <Orbit size={13} className="text-pink-400 sm:hidden" />
-              <Orbit size={14} className="hidden text-pink-400 sm:block" />
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-white/70 sm:text-[10px]">
-                {videos.length} signals
-              </span>
-            </div>
-            {isAuthenticated && !isGuest && (
-              <button
-                type="button"
-                onClick={() => navigate('/messages')}
-                aria-label="Messages"
-                className="ultima-icon-btn ik-tap-spring flex h-9 w-9 items-center justify-center rounded-full text-white/75 sm:h-10 sm:w-10"
-              >
-                <Send size={16} strokeWidth={1.9} className="sm:hidden" />
-                <Send size={17} strokeWidth={1.9} className="hidden sm:block" />
-              </button>
-            )}
+      <header className="home-top-bar shrink-0 px-4 pb-0 pt-2.5 sm:px-5 sm:pb-3 sm:pt-6">
+        <div className="flex items-center justify-between gap-3">
+          <img
+            src={IKHWEZI_LOGO_URL}
+            alt="iKhwezi"
+            className="ultima-home-logo-image home-logo-compact sm:home-logo-full"
+            width={148}
+            height={148}
+            decoding="async"
+          />
+          <div className="ultima-glass-supreme flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5">
+            <Orbit size={13} className="text-pink-400" />
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-white/70 sm:text-[10px]">
+              {videos.length}
+            </span>
           </div>
         </div>
       </header>
 
-      <div className="home-stories-row shrink-0 border-b border-white/5">
-        <StoryTray compact onAddStory={() => setShowStoryCreator(true)} />
+      <div className="home-stories-row shrink-0">
+        <StoryTray compact hideLabels maxVisible={10} onAddStory={() => setShowStoryCreator(true)} />
       </div>
 
       <div className="home-feed-shell">
@@ -446,12 +446,13 @@ function Home() {
         <div className="home-community-slot sm:hidden">
           <CommunityContentGrid
             compact
+            seamless
             posts={communityPool}
             refreshInterval={30000}
-            layout="row"
+            layout="scroll"
             animation="fade-slide-scale"
-            maxCards={3}
-            className="home-community-grid"
+            maxCards={4}
+            className="home-community-grid h-full min-h-0 px-3"
             onPostClick={(post) => {
               if (post.isAd || post.adId) {
                 openAt(post.raw || post, 'ad');
@@ -470,7 +471,11 @@ function Home() {
         </div>
 
         <div className="home-latest-slot sm:hidden">
-          <LatestSignalsStrip items={feedItems} onOpen={openAt} />
+          <LatestSignalsMasonry
+            items={feedItems}
+            onOpen={openAt}
+            onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
+          />
         </div>
 
         <div className="home-desktop-extras hidden sm:block">

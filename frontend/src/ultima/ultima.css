@@ -216,7 +216,7 @@
   }
 
   .home-logo-compact {
-    width: 56px;
+    width: 48px;
     height: auto;
   }
 
@@ -224,9 +224,12 @@
     padding-bottom: 0;
   }
 
-  .home-stories-row .flex.gap-3 {
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
+  .home-story-tray {
+    scrollbar-width: none;
+  }
+
+  .home-story-tray::-webkit-scrollbar {
+    display: none;
   }
 
   .home-feed-shell {
@@ -234,13 +237,13 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding-bottom: calc(var(--ultima-nav-offset) + 4px);
+    gap: 6px;
+    padding-bottom: calc(var(--ultima-nav-offset) + 6px);
     overflow: hidden;
   }
 
   .home-spotlight-slot {
-    flex: 42 1 0;
+    flex: 26 1 0;
     min-height: 0;
     display: flex;
     overflow: hidden;
@@ -249,53 +252,74 @@
   .home-spotlight-slot .home-spotlight-card {
     flex: 1;
     min-height: 0;
+    border-radius: 22px;
   }
 
   .home-community-slot {
-    flex: 38 1 0;
+    flex: 28 1 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
 
-  .home-community-slot .community-content-grid {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .home-community-slot .community-content-grid > div {
-    flex: 1;
-    min-height: 0;
-    align-items: stretch;
-  }
-
-  .home-latest-slot {
-    flex: 20 1 0;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .home-latest-strip {
-    flex: 1;
+  .community-content-grid--seamless {
+    position: relative;
     min-height: 0;
   }
 
-  .home-latest-tile {
-    min-height: 0;
+  .community-content-grid--seamless > div {
+    scrollbar-width: none;
   }
 
-  .home-latest-fade {
+  .community-content-grid--seamless > div::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-community-fade {
+    pointer-events: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 28px;
     background: linear-gradient(
       180deg,
       transparent 0%,
-      rgba(10, 10, 10, 0.55) 55%,
+      rgba(10, 10, 10, 0.65) 55%,
       rgba(10, 10, 10, 0.95) 100%
     );
+  }
+
+  .home-latest-slot {
+    flex: 36 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .home-masonry {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .home-masonry-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    height: 100%;
+    min-height: 0;
+    align-content: start;
+  }
+
+  .home-masonry-tile--short {
+    height: 72px;
+  }
+
+  .home-masonry-tile--tall {
+    height: 88px;
   }
 }
 

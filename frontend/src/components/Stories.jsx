@@ -7,7 +7,7 @@ import Comments from './Comments';
 /* ─────────────────────────────────────────────────────────────────
    StoryTray  — horizontal row of user-story bubbles
 ───────────────────────────────────────────────────────────────── */
-export function StoryTray({ onAddStory, compact = false }) {
+export function StoryTray({ onAddStory, compact = false, hideLabels = false, maxVisible = 10 }) {
   const { fetchWithAuth, user, isAuthenticated, isGuest } = useAuth();
   const [groups, setGroups] = useState([]);
   const [viewerIndex, setViewerIndex] = useState(null);
@@ -27,13 +27,16 @@ export function StoryTray({ onAddStory, compact = false }) {
   };
 
   const myGroupIndex = groups.findIndex(g => g.user?.id === user?.id);
-  const bubbleClass = compact ? 'h-[48px] w-[48px]' : 'h-[62px] w-[62px]';
-  const avatarSize = compact ? 40 : 52;
+  const bubbleClass = compact ? 'h-[44px] w-[44px]' : 'h-[62px] w-[62px]';
+  const avatarSize = compact ? 36 : 52;
+  const otherGroups = groups
+    .filter(g => g.user?.id !== user?.id)
+    .slice(0, Math.max(0, maxVisible - (isAuthenticated && !isGuest ? 1 : 0)));
 
   return (
     <>
       <div
-      className={`flex gap-2.5 overflow-x-auto px-3 py-2 sm:gap-3 sm:px-4 sm:py-3 ${compact ? 'home-story-tray--compact' : ''}`}
+      className={`home-story-tray flex gap-2 overflow-x-auto px-3 py-1.5 sm:gap-3 sm:px-4 sm:py-3 ${compact ? 'home-story-tray--compact' : ''}`}
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* Add-story / own story bubble */}
@@ -41,12 +44,12 @@ export function StoryTray({ onAddStory, compact = false }) {
           <button
             type="button"
             onClick={myGroupIndex >= 0 ? () => setViewerIndex(myGroupIndex) : onAddStory}
-            className="flex flex-shrink-0 flex-col items-center gap-1.5"
+            className={`flex shrink-0 ${hideLabels ? '' : 'flex-col items-center gap-1.5'}`}
           >
             <div className="relative">
               {myGroupIndex >= 0 ? (
                 <div
-                  className={`${bubbleClass} rounded-full p-[2.5px]`}
+                  className={`${bubbleClass} rounded-full p-[2px] shadow-[0_4px_16px_rgba(225,48,108,0.25)]`}
                   style={{ background: 'linear-gradient(135deg,#E1306C,#F5C542,#F0568F)' }}
                 >
                   <div className="h-full w-full rounded-full bg-[#0A0A0A] p-[2px]">
@@ -56,27 +59,27 @@ export function StoryTray({ onAddStory, compact = false }) {
               ) : (
                 <>
                   <div
-                    className={`flex ${bubbleClass} items-center justify-center rounded-full border-2 border-dashed border-white/20`}
+                    className={`flex ${bubbleClass} items-center justify-center rounded-full border-2 border-dashed border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.35)]`}
                     style={{ background: 'rgba(225,48,108,0.1)' }}
                   >
                     <StoryAvatar user={user} size={avatarSize} />
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-xs font-black text-white shadow-lg">
+                  <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-pink-500 text-[10px] font-black text-white shadow-lg">
                     +
                   </div>
                 </>
               )}
             </div>
-            <span className="max-w-[64px] truncate text-[10px] font-semibold text-white/60">
-              {myGroupIndex >= 0 ? 'Your story' : 'Add story'}
-            </span>
+            {!hideLabels && (
+              <span className="max-w-[64px] truncate text-[10px] font-semibold text-white/60">
+                {myGroupIndex >= 0 ? 'Your story' : 'Add story'}
+              </span>
+            )}
           </button>
         )}
 
         {/* Other users */}
-        {groups
-          .filter(g => g.user?.id !== user?.id)
-          .map((group) => {
+        {otherGroups.map((group) => {
             const realIndex = groups.indexOf(group);
             const allViewed = !group.hasUnviewed;
             return (
@@ -84,10 +87,10 @@ export function StoryTray({ onAddStory, compact = false }) {
                 key={group.user?.id}
                 type="button"
                 onClick={() => setViewerIndex(realIndex)}
-                className="flex flex-shrink-0 flex-col items-center gap-1.5"
+                className={`flex shrink-0 ${hideLabels ? '' : 'flex-col items-center gap-1.5'}`}
               >
                 <div
-                  className={`${bubbleClass} rounded-full p-[2.5px]`}
+                  className={`${bubbleClass} rounded-full p-[2px] shadow-[0_4px_14px_rgba(0,0,0,0.3)]`}
                   style={{
                     background: allViewed
                       ? 'rgba(255,255,255,0.2)'
@@ -98,9 +101,11 @@ export function StoryTray({ onAddStory, compact = false }) {
                     <StoryAvatar user={group.user} size={avatarSize} />
                   </div>
                 </div>
-                <span className="max-w-[64px] truncate text-[10px] font-semibold text-white/60">
-                  {group.user?.username}
-                </span>
+                {!hideLabels && (
+                  <span className="max-w-[64px] truncate text-[10px] font-semibold text-white/60">
+                    {group.user?.username}
+                  </span>
+                )}
               </button>
             );
           })}

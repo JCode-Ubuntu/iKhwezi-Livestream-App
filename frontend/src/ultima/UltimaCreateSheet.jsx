@@ -1,82 +1,92 @@
 import React from 'react';
-import { X, Film, Sparkles, PenLine } from 'lucide-react';
+import {
+  X, Film, Image as ImageIcon, Sparkles, PenLine, Radio, Bell, Send,
+} from 'lucide-react';
 
-function UltimaCreateSheet({ onClose, onVideo, onStory, onText }) {
-  const options = [
-    {
-      id: 'video',
-      icon: Film,
-      label: 'Cinema',
-      sub: 'Upload a clip',
-      gradient: 'from-pink-500 via-pink-600 to-rose-800',
-      onClick: onVideo,
-    },
-    {
-      id: 'story',
-      icon: Sparkles,
-      label: 'Nova',
-      sub: '24h moment',
-      gradient: 'from-gold-400 via-amber-500 to-orange-600',
-      onClick: onStory,
-    },
-    {
-      id: 'text',
-      icon: PenLine,
-      label: 'Transmit',
-      sub: 'Share thoughts',
-      gradient: 'from-plasma-400 via-cyan-500 to-teal-600',
-      onClick: onText,
-    },
+function CreateMenuItem({ icon: Icon, label, sub, onClick, accent = 'from-pink-500/20 to-gold-500/10' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`ik-tap-spring flex items-center gap-3 rounded-2xl border border-white/10 bg-gradient-to-br ${accent} px-3.5 py-3 text-left transition active:scale-[0.98]`}
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/35 text-white shadow-inner">
+        <Icon size={18} strokeWidth={2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-white">{label}</p>
+        {sub && <p className="truncate text-[11px] text-white/45">{sub}</p>}
+      </div>
+    </button>
+  );
+}
+
+function UltimaCreateSheet({
+  onClose,
+  onSignal,
+  onVideo,
+  onImage,
+  onStory,
+  onGoLive,
+  onNotifications,
+  onMessage,
+}) {
+  const closeAnd = (fn) => () => {
+    onClose();
+    fn?.();
+  };
+
+  const createItems = [
+    { id: 'signal', icon: PenLine, label: 'Create Signal', sub: 'Text · poll · thought', onClick: closeAnd(onSignal) },
+    { id: 'video', icon: Film, label: 'Upload Video', sub: 'Cinema clip', onClick: closeAnd(onVideo) },
+    { id: 'image', icon: ImageIcon, label: 'Upload Image', sub: 'Photo signal', onClick: closeAnd(onImage) },
+    { id: 'story', icon: Sparkles, label: 'Upload Story', sub: '24-hour moment', onClick: closeAnd(onStory) },
+    { id: 'live', icon: Radio, label: 'Go Live', sub: 'Broadcast now', onClick: closeAnd(onGoLive) },
+  ];
+
+  const commItems = [
+    { id: 'notifications', icon: Bell, label: 'Notifications', sub: 'Alerts & activity', onClick: closeAnd(onNotifications) },
+    { id: 'message', icon: Send, label: 'Send Message', sub: 'Direct chat', onClick: closeAnd(onMessage) },
   ];
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-md"
+      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/75 backdrop-blur-md"
       onClick={onClose}
       role="dialog"
       aria-modal
-      aria-label="Create content"
+      aria-label="Create and connect"
     >
       <div
-        className="ultima-glass w-full max-w-lg rounded-t-[32px] px-5 pb-8 pt-4"
-        style={{ paddingBottom: 'max(32px, env(safe-area-inset-bottom))' }}
+        className="ultima-glass w-full max-w-lg rounded-t-[28px] px-4 pb-6 pt-3 shadow-[0_-24px_80px_rgba(245,197,66,0.12)]"
+        style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="font-display text-xs font-semibold uppercase tracking-[0.3em] text-gold-400/80">
-              Manifest
-            </p>
-            <h2 className="font-display text-xl font-bold text-white">Create signal</h2>
-          </div>
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
+        <div className="mb-4 flex items-center justify-between px-1">
+          <h2 className="font-display text-lg font-bold text-white">Create</h2>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition active:scale-95"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70"
             aria-label="Close"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          {options.map((opt) => {
-            const Icon = opt.icon;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => { onClose(); opt.onClick(); }}
-                className={`flex flex-col items-center gap-3 rounded-3xl bg-gradient-to-br ${opt.gradient} p-5 text-white shadow-xl transition-transform active:scale-95`}
-              >
-                <Icon size={28} strokeWidth={1.75} />
-                <div className="text-center">
-                  <p className="font-display text-sm font-bold">{opt.label}</p>
-                  <p className="text-[10px] text-white/75">{opt.sub}</p>
-                </div>
-              </button>
-            );
-          })}
+        <div className="flex flex-col gap-2">
+          {createItems.map((item) => (
+            <CreateMenuItem key={item.id} {...item} />
+          ))}
+        </div>
+
+        <div className="my-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+        <div className="grid grid-cols-2 gap-2">
+          {commItems.map((item) => (
+            <CreateMenuItem key={item.id} {...item} accent="from-white/5 to-white/[0.02]" />
+          ))}
         </div>
       </div>
     </div>

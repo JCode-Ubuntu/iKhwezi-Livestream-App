@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Play, Search, Bell, Radio } from 'lucide-react';
+import { Home, Play, Search, Radio } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavVisibility } from '../context/NavVisibilityContext';
 import GuestPrompt from '../components/GuestPrompt';
@@ -92,7 +92,6 @@ function UltimaNav({ onCreateClick }) {
     { id: 'reels', path: '/reels', icon: Play, label: 'Reels', filled: true, isActive: (p) => p === '/reels' || p === '/live' },
     { id: 'create', type: 'action', label: 'Create' },
     { id: 'search', path: '/explore', icon: Search, label: 'Search', isActive: (p) => p === '/explore' },
-    { id: 'alerts', path: '/messages', icon: Bell, label: 'Alerts', isActive: (p) => p === '/messages' },
     { id: 'profile', path: profilePath, label: 'Profile', isActive: (p) => p.startsWith('/profile') },
   ];
 
