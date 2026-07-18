@@ -173,32 +173,30 @@ function LatestSignalsRow({ items, onOpen }) {
   );
 }
 
-function CommunitySignalsTeaser({ posts, onOpen }) {
-  const lines = useMemo(() => {
-    const fromPosts = (posts || [])
-      .slice(0, 10)
-      .map((p) => {
-        if (p.isAd || p.adId) return p.caption || p.title || 'Sponsored signal on iKHWEZI';
-        return p.caption || p.title || p.description || `@${p.creator?.username || 'creator'} is live in the community`;
-      })
-      .filter(Boolean);
-    if (fromPosts.length >= 3) return fromPosts;
+function CommunitySignalsTeaser({ textPosts, onOpen }) {
+  const messages = useMemo(() => {
+    const fromPosts = (textPosts || [])
+      .slice(0, 12)
+      .map((p) => ({
+        id: p.id,
+        text: p.content || p.caption || p.title || '',
+        username: p.author?.username || 'signal',
+      }))
+      .filter((m) => m.text.trim());
+    if (fromPosts.length >= 2) return fromPosts;
     return [
-      'Creators are gathering in Community…',
-      'New challenges drop every week',
-      'Watch parties starting tonight',
-      'Follow your constellation',
-      'Tap to join Community Signals',
+      { id: 'demo-1', text: 'Argentina or Spain?', username: 'signal' },
+      { id: 'demo-2', text: 'Remember to attend the next meeting on Wednesday! 👀😊', username: 'signal' },
+      { id: 'demo-3', text: 'New challenges drop every week on Community', username: 'signal' },
+      { id: 'demo-4', text: 'Tap to join Community Signals', username: 'ikhwezi' },
     ];
-  }, [posts]);
+  }, [textPosts]);
 
-  const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    if (lines.length < 2) return undefined;
-    const t = setInterval(() => setActive((i) => (i + 1) % lines.length), 3200);
-    return () => clearInterval(t);
-  }, [lines.length]);
+  const visible = useMemo(() => messages.slice(0, 4), [messages]);
+  const loop = useMemo(
+    () => (messages.length > 4 ? [...messages, ...messages.slice(0, 2)] : visible),
+    [messages, visible]
+  );
 
   return (
     <button
@@ -207,90 +205,18 @@ function CommunitySignalsTeaser({ posts, onOpen }) {
       className="home-community-teaser"
       aria-label="Open Community Signals"
     >
-      <div className="home-community-teaser-inner">
-        {lines.map((line, i) => (
-          <p
-            key={`${i}-${line.slice(0, 12)}`}
-            className={`home-community-teaser-line ${i === active ? 'home-community-teaser-line--on' : ''}`}
-          >
-            {line}
-          </p>
+      <div
+        className={`home-community-feed ${messages.length > 4 ? 'home-community-feed--drift' : ''}`}
+        style={{ '--feed-count': String(messages.length) }}
+      >
+        {loop.map((msg, i) => (
+          <div key={`${msg.id}-${i}`} className="home-community-feed-item">
+            <p className="home-community-feed-text">{msg.text}</p>
+            <span className="home-community-feed-handle">@{msg.username}</span>
+          </div>
         ))}
       </div>
     </button>
-  );
-}
-
-function LatestSignalsMasonry({ items, onOpen, onOpenAuthor, onOpenText, onGuestBlock }) {
-  const preview = items.slice(0, 4);
-  if (!preview.length) return null;
-
-  return (
-    <div className="home-masonry px-3 pb-1">
-      <div className="home-masonry-grid">
-        {preview.map((item, index) => {
-          const tall = index % 3 === 0;
-          if (item.type === 'text') {
-            return (
-              <button
-                key={`t-${item.data.id}`}
-                type="button"
-                onClick={() => onOpenText?.(item.data)}
-                className={`home-masonry-tile w-full text-left ${tall ? 'home-masonry-tile--tall' : 'home-masonry-tile--short'}`}
-              >
-                <TextPostCard
-                  post={item.data}
-                  tall={tall}
-                  compact
-                  onOpenAuthor={onOpenAuthor}
-                  onGuestBlock={onGuestBlock}
-                />
-              </button>
-            );
-          }
-          if (item.type === 'ad') {
-            return (
-              <AdTile
-                key={`a-${item.data.id}`}
-                ad={item.data}
-                tall={!tall}
-                compact
-                index={index}
-                onClick={() => onOpen(item.data, 'ad')}
-              />
-            );
-          }
-          return (
-            <button
-              key={`v-${item.data.id}`}
-              type="button"
-              onClick={() => onOpen(item.data, 'video')}
-              className={`home-masonry-tile ultima-glass-supreme group relative w-full overflow-hidden rounded-[16px] ${
-                tall ? 'home-masonry-tile--tall' : 'home-masonry-tile--short'
-              }`}
-            >
-              <MediaPreview
-                filename={item.data.filename}
-                className="absolute inset-0 h-full w-full object-cover transition duration-500 group-active:scale-[1.03]"
-                muted
-                playsInline
-                preload="metadata"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-void-950/90 via-void-950/15 to-transparent" />
-              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1">
-                <span className="truncate text-[9px] font-semibold text-white/75">
-                  @{item.data.creator?.username || 'signal'}
-                </span>
-                <span className="inline-flex items-center gap-0.5 text-[8px] text-white/45">
-                  <Eye size={9} />
-                  {item.data.views || 0}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -555,7 +481,7 @@ function Home() {
 
         <div className="home-community-teaser-slot sm:hidden">
           <CommunitySignalsTeaser
-            posts={communityPool}
+            textPosts={textPosts}
             onOpen={() => navigate('/community')}
           />
         </div>
