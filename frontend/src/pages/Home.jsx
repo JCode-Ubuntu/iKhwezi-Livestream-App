@@ -103,7 +103,7 @@ function Spotlight({ videos, muted, onOpen, compact = false }) {
               <Play size={compact ? 14 : 22} fill="currentColor" className="ml-0.5" />
             </button>
           </div>
-          <div className={`flex justify-center gap-1 ${compact ? 'mt-1.5' : 'mt-4'}`}>
+          <div className={`flex justify-center gap-1 ${compact ? 'mt-1 hidden' : 'mt-4'}`}>
             {videos.map((_, i) => (
               <button
                 key={i}
@@ -122,6 +122,102 @@ function Spotlight({ videos, muted, onOpen, compact = false }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function LatestSignalsRow({ items, onOpen }) {
+  const preview = items
+    .filter((item) => item.type === 'video' || item.type === 'ad')
+    .slice(0, 3);
+  if (!preview.length) return null;
+
+  return (
+    <div className="home-latest-row h-full min-h-0 px-3">
+      <div className="home-latest-grid">
+        {preview.map((item, index) => {
+          if (item.type === 'ad') {
+            return (
+              <AdTile
+                key={`a-${item.data.id}`}
+                ad={item.data}
+                tall={false}
+                compact
+                index={index}
+                onClick={() => onOpen(item.data, 'ad')}
+              />
+            );
+          }
+          return (
+            <button
+              key={`v-${item.data.id}`}
+              type="button"
+              onClick={() => onOpen(item.data, 'video')}
+              className="home-latest-tile ultima-glass-supreme group relative overflow-hidden rounded-[14px]"
+            >
+              <MediaPreview
+                filename={item.data.filename}
+                className="absolute inset-0 h-full w-full object-cover transition duration-500 group-active:scale-[1.03]"
+                muted
+                playsInline
+                preload="metadata"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-void-950/85 via-transparent to-transparent" />
+              <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate text-[8px] font-semibold text-white/80">
+                @{item.data.creator?.username || 'signal'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CommunitySignalsTeaser({ posts, onOpen }) {
+  const lines = useMemo(() => {
+    const fromPosts = (posts || [])
+      .slice(0, 10)
+      .map((p) => {
+        if (p.isAd || p.adId) return p.caption || p.title || 'Sponsored signal on iKHWEZI';
+        return p.caption || p.title || p.description || `@${p.creator?.username || 'creator'} is live in the community`;
+      })
+      .filter(Boolean);
+    if (fromPosts.length >= 3) return fromPosts;
+    return [
+      'Creators are gathering in Community…',
+      'New challenges drop every week',
+      'Watch parties starting tonight',
+      'Follow your constellation',
+      'Tap to join Community Signals',
+    ];
+  }, [posts]);
+
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (lines.length < 2) return undefined;
+    const t = setInterval(() => setActive((i) => (i + 1) % lines.length), 3200);
+    return () => clearInterval(t);
+  }, [lines.length]);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="home-community-teaser"
+      aria-label="Open Community Signals"
+    >
+      <div className="home-community-teaser-inner">
+        {lines.map((line, i) => (
+          <p
+            key={`${i}-${line.slice(0, 12)}`}
+            className={`home-community-teaser-line ${i === active ? 'home-community-teaser-line--on' : ''}`}
+          >
+            {line}
+          </p>
+        ))}
+      </div>
+    </button>
   );
 }
 
@@ -244,7 +340,6 @@ function Home() {
   const [textPreview, setTextPreview] = useState(null);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const loadingMore = useRef(false);
-  const mobileSentinelRef = useRef(null);
   const desktopSentinelRef = useRef(null);
 
   useEffect(() => {
@@ -298,12 +393,11 @@ function Home() {
   }, [fetchWithAuth]);
 
   useEffect(() => {
-    const nodes = [mobileSentinelRef.current, desktopSentinelRef.current].filter(Boolean);
-    if (!nodes.length) return undefined;
+    if (!desktopSentinelRef.current) return undefined;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting) && hasMore && !loading) {
+        if (entries[0].isIntersecting && hasMore && !loading) {
           const next = page + 1;
           setPage(next);
           loadVideos(next, true);
@@ -311,7 +405,7 @@ function Home() {
       },
       { rootMargin: '240px' }
     );
-    nodes.forEach((node) => observer.observe(node));
+    observer.observe(desktopSentinelRef.current);
     return () => observer.disconnect();
   }, [hasMore, loading, page, loadVideos]);
 
@@ -418,8 +512,8 @@ function Home() {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <UltimaField intensity={0.85} fixed />
-      <div className="ultima-page ultima-scroll ultima-content home-page-shell">
-      <header className="home-top-bar shrink-0 px-4 pb-0 pt-2.5 sm:px-5 sm:pb-3 sm:pt-6">
+      <div className="ultima-page ultima-content home-page-shell home-page-shell--locked">
+      <header className="home-top-bar shrink-0 px-4 pb-0 pt-0 sm:px-5 sm:pb-3 sm:pt-6">
         <div className="flex items-center justify-between gap-3">
           <img
             src={IKHWEZI_LOGO_URL}
@@ -446,7 +540,7 @@ function Home() {
         <div className="home-spotlight-slot sm:hidden">
           <Spotlight
             compact
-            videos={heroVideos}
+            videos={heroVideos.slice(0, 5)}
             muted={muted}
             onOpen={(heroIdx) => {
               const vid = heroVideos[heroIdx];
@@ -455,45 +549,15 @@ function Home() {
           />
         </div>
 
-        <div className="home-community-slot sm:hidden">
-          <CommunityContentGrid
-            compact
-            seamless
-            posts={communityPool}
-            refreshInterval={30000}
-            layout="scroll"
-            animation="fade-slide-scale"
-            maxCards={4}
-            className="home-community-grid h-full min-h-0 px-3"
-            onPostClick={(post) => {
-              if (post.isAd || post.adId) {
-                openAt(post.raw || post, 'ad');
-              } else {
-                openAt(post.raw || post, 'video');
-              }
-            }}
-            onRefresh={() => {
-              if (hasMore && !loadingMore.current) {
-                const next = page + 1;
-                setPage(next);
-                loadVideos(next, true);
-              }
-            }}
-          />
+        <div className="home-latest-slot sm:hidden">
+          <LatestSignalsRow items={feedItems} onOpen={openAt} />
         </div>
 
-        <div className="home-latest-slot sm:hidden">
-          <LatestSignalsMasonry
-            items={feedItems}
-            onOpen={openAt}
-            onOpenText={setTextPreview}
-            onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
-            onGuestBlock={() => {
-              setGuestPromptContext('interaction');
-              setShowGuestPrompt(true);
-            }}
+        <div className="home-community-teaser-slot sm:hidden">
+          <CommunitySignalsTeaser
+            posts={communityPool}
+            onOpen={() => navigate('/community')}
           />
-          <div ref={mobileSentinelRef} className="h-1 w-full shrink-0" aria-hidden />
         </div>
 
         <div className="home-desktop-extras hidden sm:block">

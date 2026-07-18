@@ -206,6 +206,11 @@
 
 /* ── Mobile Home: single viewport, no scroll ── */
 @media (max-width: 639px) {
+  .home-page-shell.home-page-shell--locked.ultima-page {
+    overflow-y: hidden !important;
+    padding-bottom: 0;
+  }
+
   .home-page-shell {
     display: flex;
     flex-direction: column;
@@ -216,12 +221,17 @@
   }
 
   .home-logo-compact {
-    width: 48px;
+    width: 44px;
     height: auto;
+  }
+
+  .home-top-bar {
+    padding-top: max(0.45rem, env(safe-area-inset-top, 0px));
   }
 
   .home-stories-row {
     padding-bottom: 0;
+    margin-bottom: 2px;
   }
 
   .home-story-tray {
@@ -237,13 +247,14 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding-bottom: calc(var(--ultima-nav-offset) + 6px);
+    gap: 4px;
+    padding-bottom: calc(var(--ultima-nav-offset) + 4px);
     overflow: hidden;
   }
 
+  /* 50% — Spotlight Streams */
   .home-spotlight-slot {
-    flex: 26 1 0;
+    flex: 50 1 0;
     min-height: 0;
     display: flex;
     overflow: hidden;
@@ -252,58 +263,110 @@
   .home-spotlight-slot .home-spotlight-card {
     flex: 1;
     min-height: 0;
-    border-radius: 22px;
+    border-radius: 18px;
   }
 
-  .home-community-slot {
-    flex: 28 1 0;
+  /* 35% — Latest Signals (3-up row) */
+  .home-latest-slot {
+    flex: 35 1 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
 
-  .community-content-grid--seamless {
-    position: relative;
+  .home-latest-row {
+    flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
-  .community-content-grid--seamless > div {
-    scrollbar-width: none;
+  .home-latest-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
   }
 
-  .community-content-grid--seamless > div::-webkit-scrollbar {
-    display: none;
+  .home-latest-tile {
+    min-height: 0;
+    height: 100%;
   }
 
-  .home-community-fade {
-    pointer-events: none;
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 28px;
-    background: linear-gradient(
+  /* 15% — Community Signals text teaser */
+  .home-community-teaser-slot {
+    flex: 15 1 0;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    padding: 0 0.75rem;
+  }
+
+  .home-community-teaser {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    flex: 1;
+    align-items: flex-end;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    padding: 0 0.25rem 0.15rem;
+    text-align: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    mask-image: linear-gradient(
       180deg,
       transparent 0%,
-      rgba(10, 10, 10, 0.65) 55%,
-      rgba(10, 10, 10, 0.95) 100%
+      rgba(0, 0, 0, 0.35) 18%,
+      #000 42%,
+      #000 72%,
+      transparent 100%
     );
   }
 
-  .home-latest-slot {
-    flex: 36 1 0;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+  .home-community-teaser-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 2.5rem;
     overflow: hidden;
+  }
+
+  .home-community-teaser-line {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    color: rgba(255, 255, 255, 0.38);
+    opacity: 0;
+    transform: translateY(6px);
+    transition:
+      opacity 520ms ease,
+      transform 520ms ease,
+      color 520ms ease;
+  }
+
+  .home-community-teaser-line--on {
+    opacity: 1;
+    transform: translateY(0);
+    color: rgba(245, 197, 66, 0.72);
   }
 
   .home-masonry {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
   }
 
   .home-masonry-grid {
