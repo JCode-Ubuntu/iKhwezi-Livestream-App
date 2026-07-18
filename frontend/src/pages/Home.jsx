@@ -19,6 +19,7 @@ import {
   mixAdsIntoSlides,
   findSlideIndex,
 } from '../utils/feedAds';
+import { isImagePost } from '../utils/communityPosts';
 
 function formatDuration(seconds) {
   if (!seconds || Number.isNaN(Number(seconds))) return '0:00';
@@ -125,50 +126,142 @@ function Spotlight({ videos, muted, onOpen, compact = false }) {
   );
 }
 
-function LatestSignalsRow({ items, onOpen }) {
-  const preview = items
-    .filter((item) => item.type === 'video' || item.type === 'ad')
-    .slice(0, 3);
-  if (!preview.length) return null;
+function pickFeatureCards(items) {
+  const pool = items.filter((i) => i.type === 'video' || i.type === 'ad' || i.type === 'text');
+  if (!pool.length) return [];
+
+  const picked = [];
+  const used = new Set();
+  const take = (item) => {
+    const id = item?.data?.id;
+    if (!item || id == null || used.has(id)) return;
+    picked.push(item);
+    used.add(id);
+  };
+
+  const videos = pool.filter((i) => i.type === 'video');
+  const texts = pool.filter((i) => i.type === 'text');
+  const ads = pool.filter((i) => i.type === 'ad');
+  const images = videos.filter((i) => isImagePost(i.data));
+
+  take(images[0] || videos[0]);
+  take(texts[0]);
+  take(ads[0]);
+
+  const profileSource =
+    videos.find((v) => v.data?.creator?.username) ||
+    texts.find((t) => t.data?.author?.username);
+  if (profileSource && picked.length < 3) {
+    const person = profileSource.data.creator || profileSource.data.author;
+    picked.push({ type: 'profile', data: person, id: `profile-${person.id || person.username}` });
+  }
+
+  for (const item of pool) {
+    if (picked.length >= 3) break;
+    take(item);
+  }
+
+  return picked.slice(0, 3);
+}
+
+function FeatureCardsRow({ items, onOpen, onOpenText, onOpenAuthor }) {
+  const cards = useMemo(() => pickFeatureCards(items), [items]);
+  if (!cards.length) return null;
 
   return (
-    <div className="home-latest-row h-full min-h-0 px-3">
-      <div className="home-latest-grid">
-        {preview.map((item, index) => {
-          if (item.type === 'ad') {
-            return (
+    <div className="home-feature-cards-row h-full min-h-0 px-3">
+      {cards.map((item, index) => {
+        if (item.type === 'profile') {
+          const person = item.data;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onOpenAuthor?.(person.id)}
+              className="home-feature-card home-feature-card--profile ultima-glass-supreme"
+            >
+              <div
+                className="home-feature-card-avatar"
+                style={{
+                  background: person.avatar
+                    ? undefined
+                    : 'linear-gradient(135deg,#E1306C,#F5C542)',
+                }}
+              >
+                {person.avatar ? (
+                  <img src={person.avatar} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  (person.username || '?').charAt(0).toUpperCase()
+                )}
+              </div>
+              <span className="home-feature-card-label">@{person.username || 'signal'}</span>
+            </button>
+          );
+        }
+
+        if (item.type === 'text') {
+          const post = item.data;
+          return (
+            <button
+              key={`t-${post.id}`}
+              type="button"
+              onClick={() => onOpenText?.(post)}
+              className="home-feature-card home-feature-card--text ultima-glass-supreme"
+              style={{
+                background: `linear-gradient(155deg, ${post.backgroundColor || '#1a1a2e'} 0%, rgba(10,10,10,0.94) 100%)`,
+              }}
+            >
+              <p
+                className="home-feature-card-text-preview line-clamp-4"
+                style={{ color: post.textColor || '#ffffff' }}
+              >
+                {post.content}
+              </p>
+              <span className="home-feature-card-label">@{post.author?.username || 'signal'}</span>
+            </button>
+          );
+        }
+
+        if (item.type === 'ad') {
+          return (
+            <div key={`a-${item.data.id}`} className="home-feature-card home-feature-card--media">
               <AdTile
-                key={`a-${item.data.id}`}
                 ad={item.data}
                 tall={false}
                 compact
                 index={index}
                 onClick={() => onOpen(item.data, 'ad')}
               />
-            );
-          }
-          return (
-            <button
-              key={`v-${item.data.id}`}
-              type="button"
-              onClick={() => onOpen(item.data, 'video')}
-              className="home-latest-tile ultima-glass-supreme group relative overflow-hidden rounded-[14px]"
-            >
-              <MediaPreview
-                filename={item.data.filename}
-                className="absolute inset-0 h-full w-full object-cover transition duration-500 group-active:scale-[1.03]"
-                muted
-                playsInline
-                preload="metadata"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-void-950/85 via-transparent to-transparent" />
-              <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate text-[8px] font-semibold text-white/80">
-                @{item.data.creator?.username || 'signal'}
-              </span>
-            </button>
+            </div>
           );
-        })}
-      </div>
+        }
+
+        const video = item.data;
+        const image = isImagePost(video);
+        return (
+          <button
+            key={`v-${video.id}`}
+            type="button"
+            onClick={() => onOpen(video, 'video')}
+            className="home-feature-card home-feature-card--media ultima-glass-supreme group"
+          >
+            <MediaPreview
+              filename={video.filename}
+              className="absolute inset-0 h-full w-full object-cover transition duration-500 group-active:scale-[1.03]"
+              muted
+              playsInline
+              preload="metadata"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-void-950/85 via-transparent to-transparent" />
+            {!image && (
+              <span className="home-feature-card-play">
+                <Play size={12} fill="currentColor" className="ml-0.5 text-white" />
+              </span>
+            )}
+            <span className="home-feature-card-label">@{video.creator?.username || 'signal'}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -475,11 +568,16 @@ function Home() {
           />
         </div>
 
-        <div className="home-latest-slot sm:hidden">
-          <LatestSignalsRow items={feedItems} onOpen={openAt} />
+        <div className="home-feature-cards-slot home-latest-slot sm:hidden">
+          <FeatureCardsRow
+            items={feedItems}
+            onOpen={openAt}
+            onOpenText={setTextPreview}
+            onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
+          />
         </div>
 
-        <div className="home-community-teaser-slot sm:hidden">
+        <div className="home-message-feed-slot home-community-teaser-slot sm:hidden">
           <CommunitySignalsTeaser
             textPosts={textPosts}
             onOpen={() => navigate('/community')}

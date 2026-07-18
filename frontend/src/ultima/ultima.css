@@ -266,7 +266,8 @@
     border-radius: 18px;
   }
 
-  /* 35% — Latest Signals (3-up row) */
+  /* 35% — Horizontal feature cards (3-up row under hero) */
+  .home-feature-cards-slot,
   .home-latest-slot {
     flex: 35 1 0;
     min-height: 0;
@@ -275,28 +276,128 @@
     overflow: hidden;
   }
 
-  .home-latest-row {
+  .home-feature-cards-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 6px;
     flex: 1;
     min-height: 0;
+    height: 100%;
+    width: 100%;
+  }
+
+  .home-feature-card {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    border: none;
+    border-radius: 18px;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .home-feature-card--media .ultima-bento-card,
+  .home-feature-card--media > button {
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+    border-radius: 18px;
+  }
+
+  .home-feature-card--media .home-masonry-tile--short,
+  .home-feature-card--media .home-masonry-tile--tall {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .home-feature-card--profile {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.35rem;
+    background: linear-gradient(160deg, rgba(26, 26, 46, 0.72) 0%, rgba(8, 8, 12, 0.92) 100%);
   }
 
-  .home-latest-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 5px;
+  .home-feature-card-avatar {
+    display: flex;
+    height: 2.25rem;
+    width: 2.25rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(245, 197, 66, 0.35);
+  }
+
+  .home-feature-card--text {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .home-feature-card-text-preview {
+    margin: 0;
     flex: 1;
-    min-height: 0;
-    height: 100%;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    line-height: 1.35;
   }
 
-  .home-latest-tile {
-    min-height: 0;
-    height: 100%;
+  .home-feature-card-label {
+    position: absolute;
+    right: 0.45rem;
+    bottom: 0.4rem;
+    left: 0.45rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.5rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.78);
   }
 
-  /* 15% — Community Signals text teaser */
+  .home-feature-card--profile .home-feature-card-label {
+    position: static;
+    font-size: 0.5625rem;
+    text-align: center;
+  }
+
+  .home-feature-card--text .home-feature-card-label {
+    position: static;
+    margin-top: 0.2rem;
+  }
+
+  .home-feature-card-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: flex;
+    height: 1.75rem;
+    width: 1.75rem;
+    transform: translate(-50%, -50%);
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(4px);
+  }
+
+  /* 15% — Unified vertical message feed */
+  .home-message-feed-slot,
   .home-community-teaser-slot {
     flex: 15 1 0;
     min-height: 0;
@@ -320,24 +421,25 @@
     -webkit-tap-highlight-color: transparent;
     overflow: hidden;
     mask-image: linear-gradient(
-      180deg,
-      #000 0%,
-      #000 28%,
-      rgba(0, 0, 0, 0.72) 58%,
-      rgba(0, 0, 0, 0.28) 82%,
-      transparent 100%
+      to bottom,
+      rgba(0, 0, 0, 1) 0%,
+      rgba(0, 0, 0, 1) 32%,
+      rgba(0, 0, 0, 0.62) 62%,
+      rgba(0, 0, 0, 0.22) 84%,
+      rgba(0, 0, 0, 0) 100%
     );
     -webkit-mask-image: linear-gradient(
-      180deg,
-      #000 0%,
-      #000 28%,
-      rgba(0, 0, 0, 0.72) 58%,
-      rgba(0, 0, 0, 0.28) 82%,
-      transparent 100%
+      to bottom,
+      rgba(0, 0, 0, 1) 0%,
+      rgba(0, 0, 0, 1) 32%,
+      rgba(0, 0, 0, 0.62) 62%,
+      rgba(0, 0, 0, 0.22) 84%,
+      rgba(0, 0, 0, 0) 100%
     );
   }
 
-  .home-community-feed {
+  .home-community-feed,
+  .home-message-feed {
     display: flex;
     width: 100%;
     min-height: 0;
