@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { resolveMediaUrl } from '../config/appConfig';
 
 function ReelTopOverlay({ video, visible = true, onUpdate, onShowLogin, hasActiveStory = false }) {
-  const { isAuthenticated, fetchWithAuth, showToast } = useAuth();
+  const { isAuthenticated, isGuest, fetchWithAuth, showToast } = useAuth();
   const [followBusy, setFollowBusy] = useState(false);
 
   if (!video) return null;
@@ -15,7 +15,7 @@ function ReelTopOverlay({ video, visible = true, onUpdate, onShowLogin, hasActiv
 
   const handleFollow = async (e) => {
     e.stopPropagation();
-    if (!isAuthenticated) {
+    if (!isAuthenticated || isGuest) {
       onShowLogin?.();
       return;
     }

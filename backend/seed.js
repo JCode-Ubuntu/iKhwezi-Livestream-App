@@ -95,7 +95,7 @@ async function seed() {
       // (confirmed: this previously errored with "Validation error" against
       // the actual seeded database in this repo before this fix).
       await sequelize.query(
-        'INSERT INTO Users (id, username, email, password, displayName, avatar, isCreator, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO Users (id, username, email, password, displayName, avatar, isCreator, isAdmin, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         {
           replacements: [
             userId,
@@ -105,15 +105,20 @@ async function seed() {
             'Creator Vibes',
             'https://api.dicebear.com/7.x/avataaars/svg?seed=creator',
             true,
+            true,
             now,
             now,
           ]
         }
       )
-      console.log('✓ Created test user (username: creator, password: Password123!)')
+      console.log('✓ Created test user (username: creator, password: Password123!, admin: yes)')
     } else {
       userId = existingUser[0].id
-      console.log('✓ User already exists')
+      await sequelize.query(
+        'UPDATE Users SET isAdmin = 1, isCreator = 1 WHERE username = ?',
+        { replacements: ['creator'] }
+      )
+      console.log('✓ User already exists (admin rights ensured)')
     }
 
     // Create test posts using raw SQL

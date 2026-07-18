@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  X, Film, Image as ImageIcon, Sparkles, PenLine, Radio, Bell, Send,
+  X, Film, Image as ImageIcon, Sparkles, PenLine, Radio, Send,
 } from 'lucide-react';
 
 function CreateMenuItem({ icon: Icon, label, sub, onClick, accent = 'from-pink-500/20 to-gold-500/10' }) {
@@ -28,7 +28,6 @@ function UltimaCreateSheet({
   onImage,
   onStory,
   onGoLive,
-  onNotifications,
   onMessage,
 }) {
   const closeAnd = (fn) => () => {
@@ -45,7 +44,6 @@ function UltimaCreateSheet({
   ];
 
   const commItems = [
-    { id: 'notifications', icon: Bell, label: 'Notifications', sub: 'Alerts & activity', onClick: closeAnd(onNotifications) },
     { id: 'message', icon: Send, label: 'Send Message', sub: 'Direct chat', onClick: closeAnd(onMessage) },
   ];
 
@@ -83,7 +81,7 @@ function UltimaCreateSheet({
 
         <div className="my-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-2">
           {commItems.map((item) => (
             <CreateMenuItem key={item.id} {...item} accent="from-white/5 to-white/[0.02]" />
           ))}

@@ -860,20 +860,25 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
 });
 
 app.get('/api/auth/me', authenticate, requireAuth, async (req, res) => {
-  const points = await Points.findOne({ where: { creatorId: req.user.id } });
-  res.json({
-    id: req.user.id,
-    email: req.user.email,
-    phone: req.user.phone,
-    username: req.user.username,
-    displayName: req.user.displayName,
-    avatar: req.user.avatar,
-    bio: req.user.bio,
-    isCreator: req.user.isCreator,
-    isAdmin: req.user.isAdmin,
-    isGuest: req.user.isGuest,
-    points: points?.totalPoints || 0
-  });
+  try {
+    const points = await Points.findOne({ where: { creatorId: req.user.id } });
+    res.json({
+      id: req.user.id,
+      email: req.user.email,
+      phone: req.user.phone,
+      username: req.user.username,
+      displayName: req.user.displayName,
+      avatar: req.user.avatar,
+      bio: req.user.bio,
+      isCreator: req.user.isCreator,
+      isAdmin: req.user.isAdmin,
+      isGuest: req.user.isGuest,
+      points: points?.totalPoints || 0
+    });
+  } catch (err) {
+    console.error('Auth me error:', err);
+    res.status(500).json({ error: 'Failed to load profile' });
+  }
 });
 
 // ==================== VIDEO ROUTES ====================
@@ -2041,7 +2046,11 @@ app.post('/api/watch-parties/:id/join', authenticate, requireAuth, async (req, r
 // ==================== ADMIN ROUTES ====================
 
 app.post('/api/admin/verify', requireAdmin, async (req, res) => {
-  await logAudit('ADMIN_LOGIN', { success: true }, req.ip);
+  try {
+    await logAudit('ADMIN_LOGIN', { success: true }, req.ip);
+  } catch (err) {
+    console.error('Admin audit log failed:', err);
+  }
   res.json({ valid: true });
 });
 
@@ -2245,10 +2254,14 @@ app.put('/api/videos/:id', authenticate, requireAuth, async (req, res) => {
     if (!video) return res.status(404).json({ error: 'Video not found' });
     if (video.userId !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
     const { title, description, caption } = req.body;
+    const nextDescription = caption !== undefined
+      ? String(caption).trim()
+      : description !== undefined
+        ? String(description).trim()
+        : undefined;
     await video.update({
       ...(title !== undefined && { title: title.trim() }),
-      ...(description !== undefined && { description: description.trim() }),
-      ...(caption !== undefined && { caption: caption.trim() }),
+      ...(nextDescription !== undefined && { description: nextDescription }),
     });
     res.json(video);
   } catch (err) {
@@ -2729,6 +2742,9 @@ app.post('/api/v3/auth/register', authRateLimit, async (req, res) => {
       isBanned: false,
     });
 
+    await Points.create({ creatorId: user.id, totalPoints: 0, lifetimePoints: 0 });
+    await Wallet.create({ userId: user.id, coins: 500 });
+
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
     res.status(201).json({
       token,
@@ -2809,7 +2825,7 @@ app.get('/api/v3/debug/seed', async (req, res) => {
 
 app.get('/api/v3/feed', authenticate, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = 10;
     const offset = (page - 1) * limit;
     
@@ -3149,6 +3165,8 @@ const enforceInteractionUniqueness = async () => {
     { table: 'Follows', keys: ['followerId', 'followingId'] },
     { table: 'Stars', keys: ['userId', 'videoId'] },
     { table: 'StoryViews', keys: ['storyId', 'viewerId'] },
+    { table: 'VideoSaves', keys: ['userId', 'videoId'] },
+    { table: 'VideoReposts', keys: ['userId', 'videoId'] },
   ];
 
   for (const item of dedupeTables) {
@@ -3183,6 +3201,8 @@ const enforceInteractionUniqueness = async () => {
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_follows_pair ON "Follows"("followerId", "followingId")');
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_stars_user_video ON "Stars"("userId", "videoId")');
   await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_storyviews_story_viewer ON "StoryViews"("storyId", "viewerId")');
+  await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_videosaves_user_video ON "VideoSaves"("userId", "videoId")');
+  await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_videoreposts_user_video ON "VideoReposts"("userId", "videoId")');
 };
 
 // Serve the built frontend, if present — registered last, after every /api
@@ -3192,6 +3212,13 @@ const enforceInteractionUniqueness = async () => {
 // index.html instead of JSON — broken feeds, live status, profiles, wallet,
 // everything. Moving it here (and still guarding /api + /storage) fixes that
 // for good, in both local dev and production.
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError || /invalid|only image|file type/i.test(err?.message || '')) {
+    return res.status(400).json({ error: err.message || 'Invalid upload' });
+  }
+  next(err);
+});
+
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
@@ -3271,7 +3298,7 @@ const initialize = async () => {
     await ensureDemoMedia();
     
     // Create default live status
-    const liveStatus = await LiveStatus.findOne();
+    const liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
     if (!liveStatus) {
       await LiveStatus.create({ streamKey: uuidv4(), isLive: false, viewerCount: 0 });
     }

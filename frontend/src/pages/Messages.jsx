@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useCall } from '../context/CallContext';
 import UltimaField from '../ultima/UltimaField';
+import GuestPrompt from '../components/GuestPrompt';
 
 /* ── New Conversation Search Modal ── */
 function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
@@ -437,25 +438,26 @@ function ChatThread({ otherUser, onBack }) {
 function Messages() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { fetchWithAuth, user } = useAuth();
+  const { fetchWithAuth, user, isGuest } = useAuth();
   const { socket, joinUserRoom } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeUser, setActiveUser] = useState(location.state?.openUser || null);
   const [showNewMsg, setShowNewMsg] = useState(false);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
   // Join personal socket room — re-join immediately and also whenever socket reconnects
   useEffect(() => {
-    if (!socket || !user?.id) return;
+    if (isGuest || !socket || !user?.id) return;
     const rejoin = () => joinUserRoom(user.id);
     rejoin();
     socket.on('connect', rejoin);
     return () => socket.off('connect', rejoin);
-  }, [socket, user?.id, joinUserRoom]);
+  }, [isGuest, socket, user?.id, joinUserRoom]);
 
   // Listen for incoming DMs — refresh conversation list to show latest message + unread
   useEffect(() => {
-    if (!socket) return;
+    if (isGuest || !socket) return;
     const handler = () => {
       fetchWithAuth('/messages/conversations')
         .then(r => r.json())
@@ -464,15 +466,42 @@ function Messages() {
     };
     socket.on('new-dm', handler);
     return () => socket.off('new-dm', handler);
-  }, [socket, fetchWithAuth]);
+  }, [isGuest, socket, fetchWithAuth]);
 
   useEffect(() => {
+    if (isGuest) {
+      setLoading(false);
+      return;
+    }
     fetchWithAuth('/messages/conversations')
       .then(r => r.json())
       .then(data => { setConversations(Array.isArray(data) ? data : []); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [fetchWithAuth]);
+  }, [isGuest, fetchWithAuth]);
+
+  if (isGuest) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
+        <div className="ultima-page ultima-content flex min-h-0 flex-1 flex-col">
+          {showGuestPrompt ? (
+            <GuestPrompt onClose={() => navigate('/')} context="interaction" />
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
+              <p className="text-sm text-white/50">Sign in to send and receive direct messages.</p>
+              <button
+                type="button"
+                onClick={() => setShowGuestPrompt(true)}
+                className="ik-btn ik-btn-primary ik-btn-pill px-6 py-2.5 text-sm font-bold"
+              >
+                Create free account
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">

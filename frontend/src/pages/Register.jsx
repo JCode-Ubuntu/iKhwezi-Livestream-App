@@ -27,8 +27,7 @@ function Register() {
 
     if (!formData.username || formData.username.length < 3) {
       newErrors.username = 'Username must be at least 3 characters';
-    }
-    if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
       newErrors.username = 'Username can only contain letters, numbers, and underscores';
     }
     if (formData.password.length < 6) {

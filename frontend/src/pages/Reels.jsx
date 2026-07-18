@@ -3,13 +3,15 @@ import { Clapperboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
+import GuestPrompt from '../components/GuestPrompt';
 
 function Reels() {
-  const { fetchWithAuth } = useAuth();
+  const { fetchWithAuth, trackGuestInteraction } = useAuth();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [muted, setMuted] = useState(true);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
   const loadReels = useCallback(async () => {
     setLoading(true);
@@ -79,7 +81,14 @@ function Reels() {
         setMuted={setMuted}
         onUpdate={updateVideo}
         showTrackMeta
+        showGuestPrompt={() => {
+          trackGuestInteraction();
+          setShowGuestPrompt(true);
+        }}
       />
+      {showGuestPrompt && (
+        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context="interaction" />
+      )}
     </div>
   );
 }

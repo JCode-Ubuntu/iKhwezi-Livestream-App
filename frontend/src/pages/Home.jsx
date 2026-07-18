@@ -125,8 +125,8 @@ function Spotlight({ videos, muted, onOpen, compact = false }) {
   );
 }
 
-function LatestSignalsMasonry({ items, onOpen, onOpenAuthor }) {
-  const preview = items.slice(0, 6);
+function LatestSignalsMasonry({ items, onOpen, onOpenAuthor, onOpenText, onGuestBlock }) {
+  const preview = items.slice(0, 4);
   if (!preview.length) return null;
 
   return (
@@ -136,13 +136,20 @@ function LatestSignalsMasonry({ items, onOpen, onOpenAuthor }) {
           const tall = index % 3 === 0;
           if (item.type === 'text') {
             return (
-              <TextPostCard
+              <button
                 key={`t-${item.data.id}`}
-                post={item.data}
-                tall={tall}
-                compact
-                onOpenAuthor={onOpenAuthor}
-              />
+                type="button"
+                onClick={() => onOpenText?.(item.data)}
+                className={`home-masonry-tile w-full text-left ${tall ? 'home-masonry-tile--tall' : 'home-masonry-tile--short'}`}
+              >
+                <TextPostCard
+                  post={item.data}
+                  tall={tall}
+                  compact
+                  onOpenAuthor={onOpenAuthor}
+                  onGuestBlock={onGuestBlock}
+                />
+              </button>
             );
           }
           if (item.type === 'ad') {
@@ -234,9 +241,11 @@ function Home() {
   const [guestPromptContext, setGuestPromptContext] = useState('default');
   const [muted, setMuted] = useState(true);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
+  const [textPreview, setTextPreview] = useState(null);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const loadingMore = useRef(false);
-  const sentinelRef = useRef(null);
+  const mobileSentinelRef = useRef(null);
+  const desktopSentinelRef = useRef(null);
 
   useEffect(() => {
     if (isGuest && guestInteractions >= 3 && !showGuestPrompt) {
@@ -279,19 +288,22 @@ function Home() {
 
   useEffect(() => {
     fetchWithAuth('/posts?page=1&limit=20')
-      .then((r) => r.json())
-      .then((data) => setTextPosts(Array.isArray(data) ? data : []))
-      .catch(() => {});
+      .then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
+      })
+      .then((data) => setTextPosts(data))
+      .catch(() => setTextPosts([]));
   }, [fetchWithAuth]);
 
   useEffect(() => {
-    if (!sentinelRef.current) return undefined;
-    const mq = window.matchMedia('(min-width: 640px)');
-    if (!mq.matches) return undefined;
+    const nodes = [mobileSentinelRef.current, desktopSentinelRef.current].filter(Boolean);
+    if (!nodes.length) return undefined;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading) {
+        if (entries.some((entry) => entry.isIntersecting) && hasMore && !loading) {
           const next = page + 1;
           setPage(next);
           loadVideos(next, true);
@@ -299,7 +311,7 @@ function Home() {
       },
       { rootMargin: '240px' }
     );
-    observer.observe(sentinelRef.current);
+    nodes.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
   }, [hasMore, loading, page, loadVideos]);
 
@@ -474,8 +486,14 @@ function Home() {
           <LatestSignalsMasonry
             items={feedItems}
             onOpen={openAt}
+            onOpenText={setTextPreview}
             onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
+            onGuestBlock={() => {
+              setGuestPromptContext('interaction');
+              setShowGuestPrompt(true);
+            }}
           />
+          <div ref={mobileSentinelRef} className="h-1 w-full shrink-0" aria-hidden />
         </div>
 
         <div className="home-desktop-extras hidden sm:block">
@@ -558,7 +576,7 @@ function Home() {
             <ChevronRight size={18} className="shrink-0 text-gold-300/70" />
           </button>
 
-          <div ref={sentinelRef} className="h-12" />
+          <div ref={desktopSentinelRef} className="h-12" />
           {loading && (
             <div className="flex justify-center py-6">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold-400/30 border-t-gold-400" />
@@ -586,6 +604,32 @@ function Home() {
 
       {showGuestPrompt && (
         <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
+      )}
+      {textPreview && (
+        <div
+          className="fixed inset-0 z-[220] flex items-end justify-center bg-black/75 backdrop-blur-md sm:items-center"
+          onClick={() => setTextPreview(null)}
+          role="dialog"
+          aria-modal
+        >
+          <div
+            className="w-full max-w-md rounded-t-[28px] p-4 sm:rounded-[28px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <TextPostCard
+              post={textPreview}
+              onOpenAuthor={(id) => {
+                setTextPreview(null);
+                if (id) navigate(`/profile/${id}`);
+              }}
+              onGuestBlock={() => {
+                setTextPreview(null);
+                setGuestPromptContext('interaction');
+                setShowGuestPrompt(true);
+              }}
+            />
+          </div>
+        </div>
       )}
       {showStoryCreator && (
         <StoryCreator onClose={() => setShowStoryCreator(false)} onPosted={() => setShowStoryCreator(false)} />

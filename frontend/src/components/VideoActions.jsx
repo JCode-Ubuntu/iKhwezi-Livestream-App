@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 /** Spec order: Like → Comment → Share → Repost → Save */
 function VideoActions({ video, onUpdate, onShowComments, onShowLogin, visible = true }) {
-  const { isAuthenticated, fetchWithAuth, showToast } = useAuth();
+  const { isAuthenticated, isGuest, fetchWithAuth, showToast } = useAuth();
   const [isAnimating, setIsAnimating] = useState(null);
   const animTimerRef = useRef(null);
 
@@ -18,15 +18,21 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin, visible = 
     animTimerRef.current = setTimeout(() => setIsAnimating(null), 300);
   };
 
-  const handleLike = async () => {
-    if (!isAuthenticated) {
+  const requireAccount = () => {
+    if (!isAuthenticated || isGuest) {
       onShowLogin?.();
-      return;
+      return true;
     }
+    return false;
+  };
+
+  const handleLike = async () => {
+    if (requireAccount()) return;
     pulse('like');
     try {
       const res = await fetchWithAuth(`/videos/${video.id}/like`, { method: 'POST' });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
       onUpdate?.({ ...video, isLiked: data.liked, likeCount: data.likeCount });
     } catch {
       showToast('Failed to like', 'error');
@@ -52,10 +58,7 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin, visible = 
   };
 
   const handleRepost = async () => {
-    if (!isAuthenticated) {
-      onShowLogin?.();
-      return;
-    }
+    if (requireAccount()) return;
     pulse('repost');
     try {
       const res = await fetchWithAuth(`/videos/${video.id}/repost`, { method: 'POST' });
@@ -69,10 +72,7 @@ function VideoActions({ video, onUpdate, onShowComments, onShowLogin, visible = 
   };
 
   const handleSave = async () => {
-    if (!isAuthenticated) {
-      onShowLogin?.();
-      return;
-    }
+    if (requireAccount()) return;
     pulse('save');
     try {
       const res = await fetchWithAuth(`/videos/${video.id}/save`, { method: 'POST' });

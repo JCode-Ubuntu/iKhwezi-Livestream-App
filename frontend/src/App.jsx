@@ -13,6 +13,7 @@ import UltimaCreateSheet from './ultima/UltimaCreateSheet';
 import VideoRecorder from './components/VideoRecorder';
 import TextComposer from './components/TextComposer';
 import StoryCreator from './components/StoryCreator';
+import ImagePostCreator from './components/ImagePostCreator';
 import CallOverlay from './components/CallOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -36,6 +37,7 @@ function App() {
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const [showTextComposer, setShowTextComposer] = useState(false);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
+  const [showImagePostCreator, setShowImagePostCreator] = useState(false);
 
   // Web gets the marketing splash; native keeps only the Capacitor splash
   // until auth finishes — avoids logo flash / double-splash freeze on Android.
@@ -94,10 +96,13 @@ function App() {
             onClose={() => setShowCreateSheet(false)}
             onSignal={() => { setShowCreateSheet(false); setShowTextComposer(true); }}
             onVideo={() => { setShowCreateSheet(false); setShowVideoRecorder(true); }}
-            onImage={() => { setShowCreateSheet(false); setShowStoryCreator(true); }}
+            onImage={() => { setShowCreateSheet(false); setShowImagePostCreator(true); }}
             onStory={() => { setShowCreateSheet(false); setShowStoryCreator(true); }}
-            onGoLive={() => { setShowCreateSheet(false); navigate('/live'); }}
-            onNotifications={() => { setShowCreateSheet(false); navigate('/messages'); }}
+            onGoLive={() => {
+              setShowCreateSheet(false);
+              if (user?.isAdmin) navigate('/admin', { state: { tab: 'streaming' } });
+              else navigate('/live');
+            }}
             onMessage={() => { setShowCreateSheet(false); navigate('/messages'); }}
           />
         )}
@@ -112,6 +117,12 @@ function App() {
           <TextComposer
             onClose={() => setShowTextComposer(false)}
             onPosted={() => setShowTextComposer(false)}
+          />
+        )}
+        {showImagePostCreator && (
+          <ImagePostCreator
+            onClose={() => setShowImagePostCreator(false)}
+            onPosted={() => setShowImagePostCreator(false)}
           />
         )}
         {showStoryCreator && (

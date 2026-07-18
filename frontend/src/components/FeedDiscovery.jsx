@@ -2,12 +2,18 @@ import React, { useMemo, useState } from 'react';
 import { Flame, Globe2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import GlassCard from './GlassCard';
 import MediaPreview from './MediaPreview';
+import { findSlideIndex } from '../utils/feedAds';
 
 /**
  * Trending + Global Pulse carousels — collapsible so they never block the video.
  */
-function FeedDiscovery({ videos, currentIndex, onPickIndex, fashionTag = 'default' }) {
+function FeedDiscovery({ videos, slides, currentIndex, onPickIndex, fashionTag = 'default' }) {
   const [expanded, setExpanded] = useState(false);
+
+  const resolveIndex = (video) => {
+    if (slides?.length) return findSlideIndex(slides, video, 'video');
+    return videos.findIndex((x) => x.id === video.id);
+  };
 
   const trending = useMemo(
     () =>
@@ -63,7 +69,7 @@ function FeedDiscovery({ videos, currentIndex, onPickIndex, fashionTag = 'defaul
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {(trending.length ? trending : videos.slice(0, 8)).map((v) => {
-                  const idx = videos.findIndex((x) => x.id === v.id);
+                  const idx = resolveIndex(v);
                   const active = idx === currentIndex;
                   return (
                     <button
@@ -91,7 +97,7 @@ function FeedDiscovery({ videos, currentIndex, onPickIndex, fashionTag = 'defaul
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {globalPulse.map((v) => {
-                  const idx = videos.findIndex((x) => x.id === v.id);
+                  const idx = resolveIndex(v);
                   const active = idx === currentIndex;
                   return (
                     <button

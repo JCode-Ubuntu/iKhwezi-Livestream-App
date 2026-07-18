@@ -23,7 +23,7 @@ export default function FullscreenFeed({
   showTrackMeta = false,
   embedded = false,
 }) {
-  const { isAuthenticated, fetchWithAuth } = useAuth();
+  const { isAuthenticated, isGuest, fetchWithAuth } = useAuth();
   const { hideDock, showDock } = useNavDock();
   const slides = slidesProp?.length
     ? slidesProp
@@ -94,7 +94,7 @@ export default function FullscreenFeed({
   const handleDoubleTapLike = useCallback(
     async (video, index) => {
       setBurst({ index, key: Date.now() });
-      if (!isAuthenticated) {
+      if (!isAuthenticated || isGuest) {
         showGuestPrompt?.();
         return;
       }
@@ -102,12 +102,13 @@ export default function FullscreenFeed({
       try {
         const res = await fetchWithAuth(`/videos/${video.id}/like`, { method: 'POST' });
         const data = await res.json();
+        if (!res.ok) return;
         onUpdate?.({ ...video, isLiked: data.liked, likeCount: data.likeCount });
       } catch {
         /* silent */
       }
     },
-    [isAuthenticated, fetchWithAuth, onUpdate, showGuestPrompt]
+    [isAuthenticated, isGuest, fetchWithAuth, onUpdate, showGuestPrompt]
   );
 
   const handleSlideTap = useCallback(
@@ -382,6 +383,7 @@ export default function FullscreenFeed({
       >
         <FeedDiscovery
           videos={discoveryVideos}
+          slides={slides.length !== discoveryVideos.length ? slides : undefined}
           currentIndex={currentIndex}
           onPickIndex={(idx) => {
             if (idx === currentIndex) return;

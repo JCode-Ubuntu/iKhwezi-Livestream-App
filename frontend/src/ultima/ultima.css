@@ -302,7 +302,8 @@
   .home-masonry {
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .home-masonry-grid {
@@ -315,11 +316,11 @@
   }
 
   .home-masonry-tile--short {
-    height: 72px;
+    height: 80px;
   }
 
   .home-masonry-tile--tall {
-    height: 88px;
+    height: 96px;
   }
 }
 

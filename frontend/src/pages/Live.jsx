@@ -178,6 +178,11 @@ function Live() {
   };
 
   const handleSendChat = () => {
+    if (isGuest || !user) {
+      trackGuestInteraction();
+      setShowUpgradePrompt(true);
+      return;
+    }
     if (chatInput.trim() && user) {
       sendChatMessage('live-stream', chatInput.trim(), user.id, user.username || user.displayName);
       setChatInput('');
@@ -558,7 +563,7 @@ function Live() {
             </div>
           ))}
         </div>
-        {user && (
+        {user && !isGuest && (
           <div
             className="flex gap-2 border-t border-white/10 p-3"
             style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}

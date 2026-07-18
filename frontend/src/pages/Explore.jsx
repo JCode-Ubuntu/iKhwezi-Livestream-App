@@ -6,6 +6,7 @@ import UltimaField from '../ultima/UltimaField';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
 import MediaPreview from '../components/MediaPreview';
+import GuestPrompt from '../components/GuestPrompt';
 
 function UserResultRow({ result, onOpen }) {
   return (
@@ -68,7 +69,7 @@ function DiscoveryTile({ video, index, onClick }) {
 
 function Explore() {
   const navigate = useNavigate();
-  const { fetchWithAuth } = useAuth();
+  const { fetchWithAuth, trackGuestInteraction } = useAuth();
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -77,6 +78,7 @@ function Explore() {
   const [loadError, setLoadError] = useState(false);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const [muted, setMuted] = useState(true);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const debounceRef = useRef(null);
   // Debounce only stops a *pending* (not-yet-fired) search from starting —
   // once the 300ms timeout fires and the fetch is in flight, typing again
@@ -222,7 +224,14 @@ function Explore() {
             muted={muted}
             setMuted={setMuted}
             onUpdate={updateVideo}
+            showGuestPrompt={() => {
+              trackGuestInteraction();
+              setShowGuestPrompt(true);
+            }}
           />
+        )}
+        {showGuestPrompt && (
+          <GuestPrompt onClose={() => setShowGuestPrompt(false)} context="interaction" />
         )}
       </div>
     </div>
