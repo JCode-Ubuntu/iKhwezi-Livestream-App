@@ -126,105 +126,42 @@ function Spotlight({ videos, muted, onOpen, compact = false }) {
   );
 }
 
-function pickFeatureCards(items) {
-  const pool = items.filter((i) => i.type === 'video' || i.type === 'ad' || i.type === 'text');
+function pickRandomMediaCards(items, count = 3) {
+  const pool = items.filter((i) => i.type === 'video' || i.type === 'ad');
   if (!pool.length) return [];
-
-  const picked = [];
-  const used = new Set();
-  const take = (item) => {
-    const id = item?.data?.id;
-    if (!item || id == null || used.has(id)) return;
-    picked.push(item);
-    used.add(id);
-  };
-
-  const videos = pool.filter((i) => i.type === 'video');
-  const texts = pool.filter((i) => i.type === 'text');
-  const ads = pool.filter((i) => i.type === 'ad');
-  const images = videos.filter((i) => isImagePost(i.data));
-
-  take(images[0] || videos[0]);
-  take(texts[0]);
-  take(ads[0]);
-
-  const profileSource =
-    videos.find((v) => v.data?.creator?.username) ||
-    texts.find((t) => t.data?.author?.username);
-  if (profileSource && picked.length < 3) {
-    const person = profileSource.data.creator || profileSource.data.author;
-    picked.push({ type: 'profile', data: person, id: `profile-${person.id || person.username}` });
-  }
-
-  for (const item of pool) {
-    if (picked.length >= 3) break;
-    take(item);
-  }
-
-  return picked.slice(0, 3);
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-function FeatureCardsRow({ items, onOpen, onOpenText, onOpenAuthor }) {
-  const cards = useMemo(() => pickFeatureCards(items), [items]);
+function FeatureCardsRow({ items, onOpen }) {
+  const mediaPool = useMemo(
+    () => items.filter((i) => i.type === 'video' || i.type === 'ad'),
+    [items]
+  );
+  const pickBatch = useCallback(
+    () => pickRandomMediaCards(mediaPool, 3),
+    [mediaPool]
+  );
+  const [cards, setCards] = useState([]);
+
+  useEffect(() => {
+    setCards(pickBatch());
+  }, [pickBatch]);
+
+  useEffect(() => {
+    if (mediaPool.length <= 3) return undefined;
+    const timer = setInterval(() => setCards(pickBatch()), 28000);
+    return () => clearInterval(timer);
+  }, [mediaPool.length, pickBatch]);
+
   if (!cards.length) return null;
 
   return (
     <div className="home-feature-cards-row h-full min-h-0 px-3">
       {cards.map((item, index) => {
-        if (item.type === 'profile') {
-          const person = item.data;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onOpenAuthor?.(person.id)}
-              className="home-feature-card home-feature-card--profile ultima-glass-supreme"
-            >
-              <div
-                className="home-feature-card-avatar"
-                style={{
-                  background: person.avatar
-                    ? undefined
-                    : 'linear-gradient(135deg,#E1306C,#F5C542)',
-                }}
-              >
-                {person.avatar ? (
-                  <img src={person.avatar} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  (person.username || '?').charAt(0).toUpperCase()
-                )}
-              </div>
-              <span className="home-feature-card-label">@{person.username || 'signal'}</span>
-            </button>
-          );
-        }
-
-        if (item.type === 'text') {
-          const post = item.data;
-          return (
-            <button
-              key={`t-${post.id}`}
-              type="button"
-              onClick={() => onOpenText?.(post)}
-              className="home-feature-card home-feature-card--text ultima-glass-supreme"
-              style={{
-                background: `linear-gradient(155deg, ${post.backgroundColor || '#1a1a2e'} 0%, rgba(10,10,10,0.94) 100%)`,
-              }}
-            >
-              <p
-                className="home-feature-card-text-preview line-clamp-4"
-                style={{ color: post.textColor || '#ffffff' }}
-              >
-                {post.content}
-              </p>
-              <span className="home-feature-card-label">@{post.author?.username || 'signal'}</span>
-            </button>
-          );
-        }
-
         if (item.type === 'ad') {
           return (
-            <div key={`a-${item.data.id}`} className="home-feature-card home-feature-card--media">
+            <div key={`a-${item.data.id}-${index}`} className="home-feature-card home-feature-card--media">
               <AdTile
                 ad={item.data}
                 tall={false}
@@ -240,7 +177,7 @@ function FeatureCardsRow({ items, onOpen, onOpenText, onOpenAuthor }) {
         const image = isImagePost(video);
         return (
           <button
-            key={`v-${video.id}`}
+            key={`v-${video.id}-${index}`}
             type="button"
             onClick={() => onOpen(video, 'video')}
             className="home-feature-card home-feature-card--media ultima-glass-supreme group"
@@ -569,12 +506,7 @@ function Home() {
         </div>
 
         <div className="home-feature-cards-slot home-latest-slot sm:hidden">
-          <FeatureCardsRow
-            items={feedItems}
-            onOpen={openAt}
-            onOpenText={setTextPreview}
-            onOpenAuthor={(id) => id && navigate(`/profile/${id}`)}
-          />
+          <FeatureCardsRow items={feedItems} onOpen={openAt} />
         </div>
 
         <div className="home-message-feed-slot home-community-teaser-slot sm:hidden">

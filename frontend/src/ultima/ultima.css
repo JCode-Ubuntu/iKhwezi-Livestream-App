@@ -316,46 +316,6 @@
     min-height: 0;
   }
 
-  .home-feature-card--profile {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-    padding: 0.35rem;
-    background: linear-gradient(160deg, rgba(26, 26, 46, 0.72) 0%, rgba(8, 8, 12, 0.92) 100%);
-  }
-
-  .home-feature-card-avatar {
-    display: flex;
-    height: 2.25rem;
-    width: 2.25rem;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 800;
-    color: #fff;
-    box-shadow: 0 0 0 2px rgba(245, 197, 66, 0.35);
-  }
-
-  .home-feature-card--text {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 0.45rem 0.5rem;
-  }
-
-  .home-feature-card-text-preview {
-    margin: 0;
-    flex: 1;
-    font-size: 0.5625rem;
-    font-weight: 700;
-    line-height: 1.35;
-  }
-
   .home-feature-card-label {
     position: absolute;
     right: 0.45rem;
@@ -367,17 +327,6 @@
     font-size: 0.5rem;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.78);
-  }
-
-  .home-feature-card--profile .home-feature-card-label {
-    position: static;
-    font-size: 0.5625rem;
-    text-align: center;
-  }
-
-  .home-feature-card--text .home-feature-card-label {
-    position: static;
-    margin-top: 0.2rem;
   }
 
   .home-feature-card-play {
