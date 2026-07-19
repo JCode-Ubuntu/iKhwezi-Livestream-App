@@ -1157,46 +1157,93 @@ app.post('/api/videos/:id/star', authenticate, requireRegistered, interactionRat
     if (video.userId === req.user.id) {
       return res.status(400).json({ error: 'Cannot star your own video' });
     }
-    
-    // Check if already starred this video
-    const existing = await Star.findOne({ where: { userId: req.user.id, videoId: video.id } });
-    if (existing) {
-      return res.status(400).json({ error: 'Already starred this video' });
-    }
-    
+
     const amount = Math.max(1, Math.min(100, parseInt(req.body.amount, 10) || 1));
-    
-    // Create star record
-    await Star.create({
-      userId: req.user.id,
-      creatorId: video.userId,
-      videoId: video.id,
-      amount
-    });
-    
-    // Update creator points (1 star = 10 points)
-    const pointsToAdd = amount * 10;
-    let creatorPoints = await Points.findOne({ where: { creatorId: video.userId } });
-    
-    if (!creatorPoints) {
-      creatorPoints = await Points.create({
-        creatorId: video.userId,
-        totalPoints: pointsToAdd,
-        lifetimePoints: pointsToAdd
+    const coinCost = amount * STAR_COINS_PER_UNIT;
+
+    await getOrCreateWallet(req.user.id);
+
+    const txResult = await sequelize.transaction(async (t) => {
+      const existing = await Star.findOne({
+        where: { userId: req.user.id, videoId: video.id },
+        transaction: t,
       });
-    } else {
-      creatorPoints.totalPoints += pointsToAdd;
-      creatorPoints.lifetimePoints += pointsToAdd;
-      await creatorPoints.save();
+      if (existing) {
+        return { error: 'Already starred this video', status: 400 };
+      }
+
+      const wallet = await Wallet.findOne({
+        where: { userId: req.user.id },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!wallet || wallet.coins < coinCost) {
+        return {
+          error: 'Not enough coins',
+          status: 402,
+          coins: wallet?.coins ?? 0,
+          required: coinCost,
+        };
+      }
+
+      wallet.coins -= coinCost;
+      await wallet.save({ transaction: t });
+
+      await Star.create(
+        {
+          userId: req.user.id,
+          creatorId: video.userId,
+          videoId: video.id,
+          amount,
+        },
+        { transaction: t }
+      );
+
+      let creatorPoints = await Points.findOne({
+        where: { creatorId: video.userId },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!creatorPoints) {
+        creatorPoints = await Points.create(
+          {
+            creatorId: video.userId,
+            totalPoints: coinCost,
+            lifetimePoints: coinCost,
+          },
+          { transaction: t }
+        );
+      } else {
+        creatorPoints.totalPoints += coinCost;
+        creatorPoints.lifetimePoints += coinCost;
+        await creatorPoints.save({ transaction: t });
+      }
+
+      const starCount = (await Star.sum('amount', { where: { videoId: video.id }, transaction: t })) || 0;
+      return { starCount, creatorPoints, coinsRemaining: wallet.coins };
+    });
+
+    if (txResult?.error) {
+      if (txResult.status === 400) {
+        const starCount = await Star.sum('amount', { where: { videoId: video.id } }) || 0;
+        return res.status(400).json({ error: txResult.error, starCount });
+      }
+      return res.status(txResult.status || 402).json({
+        error: txResult.error,
+        coins: txResult.coins,
+        required: txResult.required,
+      });
     }
-    
-    const starCount = await Star.sum('amount', { where: { videoId: video.id } }) || 0;
-    
+
+    const { starCount, creatorPoints, coinsRemaining } = txResult;
+
     res.json({
       starred: true,
       starCount,
-      pointsAwarded: pointsToAdd,
-      creatorTotalPoints: creatorPoints.totalPoints
+      coinsSpent: coinCost,
+      coinsRemaining,
+      pointsAwarded: coinCost,
+      creatorTotalPoints: creatorPoints.totalPoints,
     });
   } catch (err) {
     if (err?.name === 'SequelizeUniqueConstraintError') {
@@ -1433,6 +1480,8 @@ const GIFT_CATALOG = {
   star: { coins: 500, char: '🌟', label: 'Supernova' },
 };
 const SUBSCRIPTION_COST_PER_MONTH = 500;
+// Each star unit costs coins and awards the same amount to creator points (was free — exploit).
+const STAR_COINS_PER_UNIT = 10;
 
 async function getOrCreateWallet(userId) {
   const [wallet] = await Wallet.findOrCreate({ where: { userId }, defaults: { userId, coins: 500 } });
@@ -3106,6 +3155,13 @@ io.use(async (socket, next) => {
   return next();
 });
 
+const isValidSocketRoomId = (roomId) => {
+  if (roomId == null || typeof roomId !== 'string') return false;
+  const id = roomId.trim();
+  if (!id || id.length > 64) return false;
+  return /^[a-zA-Z0-9_-]+$/.test(id);
+};
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -3115,24 +3171,25 @@ io.on('connection', (socket) => {
     socket.join(`user_${userId}`);
   });
 
-  // Join a room for a specific video/stream
+  // Join a room for a specific video/stream — requires authenticated JWT (guests may listen).
   socket.on('join-room', (roomId) => {
-    socket.join(roomId);
-    console.log(`User ${socket.id} joined room ${roomId}`);
+    if (!socket.user || socket.user.isBanned || !isValidSocketRoomId(roomId)) return;
+    socket.join(String(roomId).trim());
+    console.log(`User ${socket.user.id} joined room ${roomId}`);
   });
 
   // Leave a room
   socket.on('leave-room', (roomId) => {
-    socket.leave(roomId);
-    console.log(`User ${socket.id} left room ${roomId}`);
+    if (!socket.user || !isValidSocketRoomId(roomId)) return;
+    socket.leave(String(roomId).trim());
   });
 
   // Handle live chat messages
   socket.on('chat-message', async (data) => {
     const { roomId, message } = data || {};
-    if (!socket.user || socket.user.isGuest || !roomId || !String(message || '').trim()) return;
+    if (!socket.user || socket.user.isGuest || !isValidSocketRoomId(roomId) || !String(message || '').trim()) return;
 
-    io.to(roomId).emit('chat-message', {
+    io.to(String(roomId).trim()).emit('chat-message', {
       id: uuidv4(),
       message: String(message).trim(),
       userId: socket.user.id,
@@ -3143,9 +3200,9 @@ io.on('connection', (socket) => {
 
   socket.on('reaction', (data) => {
     const { roomId, reaction } = data || {};
-    if (!socket.user || socket.user.isGuest || !roomId || !reaction) return;
+    if (!socket.user || socket.user.isGuest || !isValidSocketRoomId(roomId) || !reaction) return;
 
-    io.to(roomId).emit('reaction', {
+    io.to(String(roomId).trim()).emit('reaction', {
       reaction,
       userId: socket.user.id,
       username: socket.user.username || socket.user.displayName,
@@ -3153,27 +3210,27 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Handle duet requests
+  // Handle duet requests (legacy UI — still require auth to prevent spam)
   socket.on('duet-request', (data) => {
-    const { roomId, userId, username } = data;
-    
-    // Notify host/moderators
-    io.to(roomId).emit('duet-request', {
-      userId,
-      username,
-      timestamp: new Date()
+    const { roomId } = data || {};
+    if (!socket.user || socket.user.isGuest || !isValidSocketRoomId(roomId)) return;
+
+    io.to(String(roomId).trim()).emit('duet-request', {
+      userId: socket.user.id,
+      username: socket.user.username || socket.user.displayName,
+      timestamp: new Date(),
     });
   });
 
   // Handle co-host invites
   socket.on('co-host-invite', (data) => {
-    const { roomId, userId, username } = data;
-    
-    // Send invite to specific user
-    io.to(roomId).emit('co-host-invite', {
-      userId,
-      username,
-      timestamp: new Date()
+    const { roomId } = data || {};
+    if (!socket.user || socket.user.isGuest || !isValidSocketRoomId(roomId)) return;
+
+    io.to(String(roomId).trim()).emit('co-host-invite', {
+      userId: socket.user.id,
+      username: socket.user.username || socket.user.displayName,
+      timestamp: new Date(),
     });
   });
 
