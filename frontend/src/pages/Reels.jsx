@@ -71,7 +71,7 @@ function Reels() {
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
+    <div className="ultima-shell--above-dock relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
       <FullscreenFeed
         embedded
         videos={videos}

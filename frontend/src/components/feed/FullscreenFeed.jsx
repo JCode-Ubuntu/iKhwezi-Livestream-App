@@ -6,7 +6,6 @@ import ReelTopOverlay from '../ReelTopOverlay';
 import Comments from '../Comments';
 import FeedDiscovery from '../FeedDiscovery';
 import { useAuth } from '../../context/AuthContext';
-import { useNavDock } from '../../context/NavVisibilityContext';
 import { resolveMediaUrl } from '../../config/appConfig';
 import { isVideoFile } from '../MediaPreview';
 import { adSlideKey } from '../../utils/feedAds';
@@ -24,7 +23,6 @@ export default function FullscreenFeed({
   embedded = false,
 }) {
   const { isAuthenticated, isGuest, fetchWithAuth } = useAuth();
-  const { hideDock, showDock } = useNavDock();
   const slides = slidesProp?.length
     ? slidesProp
     : videos.map((v) => ({ type: 'video', data: v }));
@@ -128,17 +126,15 @@ export default function FullscreenFeed({
 
   const markReelScrolling = useCallback(() => {
     setReelChromeVisible(false);
-    hideDock();
     clearTimeout(settleTimer.current);
-  }, [hideDock]);
+  }, []);
 
   const markReelSettled = useCallback((delayMs = 0) => {
     clearTimeout(settleTimer.current);
     settleTimer.current = setTimeout(() => {
       setReelChromeVisible(true);
-      showDock();
     }, delayMs);
-  }, [showDock]);
+  }, []);
 
   const go = useCallback(
     (dir) => {
@@ -164,8 +160,7 @@ export default function FullscreenFeed({
 
   useEffect(() => () => {
     clearTimeout(settleTimer.current);
-    showDock();
-  }, [showDock]);
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -182,8 +177,9 @@ export default function FullscreenFeed({
       className={
         embedded
           ? 'relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950'
-          : 'fixed inset-0 z-[250] overflow-hidden bg-void-950'
+          : 'fixed inset-x-0 top-0 z-[250] overflow-hidden bg-void-950'
       }
+      style={embedded ? undefined : { bottom: 'var(--ultima-nav-offset)' }}
       onTouchStart={(e) => {
         isTouching.current = true;
         touchStartY.current = e.touches[0].clientY;
@@ -246,7 +242,7 @@ export default function FullscreenFeed({
           return (
           <div
             key={slide.type === 'ad' ? adSlideKey(slide.data) : slide.data.id}
-            className={`relative w-full ${embedded ? 'h-full' : 'h-screen'}`}
+            className={`relative w-full ${embedded ? 'h-full' : 'h-full min-h-full'}`}
             onClick={() => handleSlideTap(slide, index)}
           >
             {slide.type === 'ad' ? (

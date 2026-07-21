@@ -14,7 +14,7 @@ function NavIcon({ item, active, profileAvatar, profileInitial }) {
         <img
           src={profileAvatar}
           alt=""
-          className={`relative z-10 h-[22px] w-[22px] rounded-full object-cover ring-2 ${
+          className={`relative z-10 h-[21px] w-[21px] rounded-full object-cover ring-2 ${
             active ? 'ring-pink-400/60' : 'ring-white/20'
           }`}
         />
@@ -22,7 +22,7 @@ function NavIcon({ item, active, profileAvatar, profileInitial }) {
     }
     return (
       <div
-        className={`relative z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[10px] font-bold text-white ${
+        className={`relative z-10 flex h-[21px] w-[21px] items-center justify-center rounded-full text-[10px] font-bold text-white ${
           active ? 'ring-2 ring-pink-400/60' : ''
         }`}
         style={{ background: 'linear-gradient(135deg,#E1306C,#F5C542)' }}
@@ -35,7 +35,7 @@ function NavIcon({ item, active, profileAvatar, profileInitial }) {
   const Icon = item.icon;
   return (
     <Icon
-      size={22}
+      size={21}
       strokeWidth={active ? 2.5 : 2}
       className={`relative z-10 ${item.filled ? 'fill-current' : ''}`}
     />
@@ -44,7 +44,7 @@ function NavIcon({ item, active, profileAvatar, profileInitial }) {
 
 function UltimaNav({ onCreateClick }) {
   const { isAuthenticated, user, isGuest, trackGuestInteraction } = useAuth();
-  const { navVisible, isHomeRoute } = useNavVisibility();
+  const { navVisible } = useNavVisibility();
   const location = useLocation();
   const navigate = useNavigate();
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
@@ -69,11 +69,6 @@ function UltimaNav({ onCreateClick }) {
 
   if (['/admin', '/login', '/register'].includes(location.pathname)) return null;
 
-  const dockHidden = !navVisible && !isHomeRoute;
-  const fabMotion = dockHidden
-    ? 'translate-y-[120%] opacity-0 pointer-events-none'
-    : 'translate-y-0 opacity-100';
-
   const handleCreate = () => {
     if (isGuest) {
       trackGuestInteraction();
@@ -96,11 +91,14 @@ function UltimaNav({ onCreateClick }) {
   ];
 
   const navItemClass = (active) =>
-    `relative flex flex-col items-center gap-0.5 rounded-2xl px-3 py-2 transition-all duration-300 active:scale-90 sm:px-4 ${
+    `relative flex flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 transition-all duration-300 active:scale-90 sm:px-3.5 ${
       active ? 'text-pink-300' : 'text-white/45 hover:text-white/75'
     }`;
 
   const isAdmin = !!user?.isAdmin;
+  const fabMotion = navVisible
+    ? 'translate-y-0 opacity-100'
+    : 'translate-y-2 opacity-0 pointer-events-none';
 
   return (
     <>
@@ -111,7 +109,7 @@ function UltimaNav({ onCreateClick }) {
           className={`ik-tap-spring fixed z-[95] flex items-center gap-2 rounded-full px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-white transition-all duration-[220ms] ease-out ${fabMotion}`}
           style={{
             right: '16px',
-            bottom: 'calc(var(--ultima-nav-offset, 6.5rem) + 12px)',
+            bottom: 'calc(var(--ultima-nav-offset, 6.37rem) + 8px)',
             background: 'linear-gradient(135deg, #E1306C 0%, #B91C58 100%)',
             boxShadow: '0 8px 28px rgba(225,48,108,0.5), 0 0 40px rgba(225,48,108,0.25)',
           }}
@@ -129,7 +127,7 @@ function UltimaNav({ onCreateClick }) {
           className={`ik-tap-spring fixed z-[95] flex items-center gap-2 rounded-full px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-white transition-all duration-[220ms] ease-out ${fabMotion}`}
           style={{
             left: '16px',
-            bottom: 'calc(var(--ultima-nav-offset, 6.5rem) + 12px)',
+            bottom: 'calc(var(--ultima-nav-offset, 6.37rem) + 8px)',
             background: 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
             boxShadow: '0 8px 28px rgba(239,68,68,0.5), 0 0 40px rgba(239,68,68,0.25)',
           }}
@@ -141,52 +139,49 @@ function UltimaNav({ onCreateClick }) {
       )}
 
       <nav
-        className={`ultima-dock supreme fixed bottom-4 left-1/2 z-[90] flex max-w-[min(100vw-1rem,520px)] -translate-x-1/2 items-center justify-between gap-0 rounded-[32px] px-1.5 py-2 backdrop-blur-3xl sm:gap-0.5 sm:px-2.5 ${
-          dockHidden ? 'ultima-dock--hidden' : ''
-        }`}
-        style={{ paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}
+        className={`ultima-dock ultima-dock--frame ${navVisible ? '' : 'ultima-dock--hidden'}`}
         aria-label="Primary"
-        aria-hidden={dockHidden}
+        aria-hidden={!navVisible}
       >
-        {isGuest && (
-          <span className="mr-0.5 rounded-full border border-gold-400/20 bg-gold-500/10 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider text-gold-300/80 sm:mr-1 sm:px-2 sm:text-[8px]">
-            Guest
-          </span>
-        )}
+        <div className="ultima-dock-inner">
+          {isGuest && (
+            <span className="ultima-dock-guest hidden sm:inline-flex">Guest</span>
+          )}
 
-        {navItems.map((item) => {
-          if (item.type === 'action') {
+          {navItems.map((item) => {
+            if (item.type === 'action') {
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={handleCreate}
+                  className="ultima-dock-create relative mx-0.5 flex h-[47px] w-[47px] shrink-0 items-center justify-center rounded-[17px] sm:mx-1 sm:h-[50px] sm:w-[50px] sm:rounded-[18px]"
+                  aria-label={item.label}
+                >
+                  <IkCreateLogo className="relative z-[2] h-[25px] w-[25px] sm:h-[28px] sm:w-[28px]" />
+                </button>
+              );
+            }
+
+            const active = item.isActive(location.pathname);
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={handleCreate}
-                className="ultima-dock-create relative mx-0.5 flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-[18px] sm:mx-1.5 sm:h-[52px] sm:w-[52px] sm:rounded-[20px]"
-                aria-label={item.label}
-              >
-                <IkCreateLogo className="relative z-[2] h-[26px] w-[26px] sm:h-[30px] sm:w-[30px]" />
-              </button>
+              <NavLink key={item.id} to={item.path} className={navItemClass(active)}>
+                {active && (
+                  <span className="absolute inset-0 rounded-xl bg-gradient-to-b from-pink-500/18 to-gold-400/10" />
+                )}
+                <NavIcon
+                  item={item}
+                  active={active}
+                  profileAvatar={profileAvatar}
+                  profileInitial={profileInitial}
+                />
+                <span className="relative z-10 text-[7.5px] font-semibold uppercase tracking-wider sm:text-[9px]">
+                  {item.label}
+                </span>
+              </NavLink>
             );
-          }
-
-          const active = item.isActive(location.pathname);
-          return (
-            <NavLink key={item.id} to={item.path} className={navItemClass(active)}>
-              {active && (
-                <span className="absolute inset-0 rounded-2xl bg-gradient-to-b from-pink-500/18 to-gold-400/10" />
-              )}
-              <NavIcon
-                item={item}
-                active={active}
-                profileAvatar={profileAvatar}
-                profileInitial={profileInitial}
-              />
-              <span className="relative z-10 text-[8px] font-semibold uppercase tracking-wider sm:text-[9px]">
-                {item.label}
-              </span>
-            </NavLink>
-          );
-        })}
+          })}
+        </div>
       </nav>
 
       {showUpgradePrompt && (
