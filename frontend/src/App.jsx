@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { CallProvider } from './context/CallContext';
 import { NavVisibilityProvider, useNavVisibility } from './context/NavVisibilityContext';
+import { CreateFlowProvider } from './context/CreateFlowContext';
 import UltimaNav from './ultima/UltimaNav';
 import Splash from './components/Splash';
 import './design-tokens.css';
@@ -51,7 +52,10 @@ function AppShell() {
     return () => setDockForcedHidden(false);
   }, [createFlowOpen, setDockForcedHidden]);
 
+  const openCreateSheet = () => setShowCreateSheet(true);
+
   return (
+    <CreateFlowProvider openCreateSheet={openCreateSheet}>
     <div className="page-container">
       <ErrorBoundary key={location.pathname}>
         <Suspense fallback={<UltimaLoading />}>
@@ -73,7 +77,7 @@ function AppShell() {
         </Suspense>
       </ErrorBoundary>
 
-      <UltimaNav onCreateClick={() => setShowCreateSheet(true)} />
+      <UltimaNav onCreateClick={openCreateSheet} />
 
       {showCreateSheet && (
         <UltimaCreateSheet
@@ -118,6 +122,7 @@ function AppShell() {
 
       <CallOverlay />
     </div>
+    </CreateFlowProvider>
   );
 }
 

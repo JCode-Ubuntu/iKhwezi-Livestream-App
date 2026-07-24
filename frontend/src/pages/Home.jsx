@@ -314,13 +314,14 @@ function Home() {
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const loadingMore = useRef(false);
   const desktopSentinelRef = useRef(null);
+  const guestPromptDismissedRef = useRef(false);
 
   useEffect(() => {
-    if (isGuest && guestInteractions >= 3 && !showGuestPrompt) {
-      setGuestPromptContext('interaction');
-      setShowGuestPrompt(true);
-    }
-  }, [guestInteractions, isGuest, showGuestPrompt]);
+    if (!isGuest || guestInteractions < 3) return;
+    if (guestPromptDismissedRef.current) return;
+    setGuestPromptContext('interaction');
+    setShowGuestPrompt(true);
+  }, [guestInteractions, isGuest]);
 
   const loadVideos = useCallback(
     async (pageNum = 1, append = false) => {
@@ -436,11 +437,11 @@ function Home() {
   const openAt = (item, type = 'video') => {
     if (type === 'ad') {
       const idx = findSlideIndex(fullscreenSlides, item, 'ad');
-      setFullscreenIndex(idx >= 0 ? idx : 0);
+      if (idx >= 0) setFullscreenIndex(idx);
       return;
     }
     const idx = findSlideIndex(fullscreenSlides, item, 'video');
-    setFullscreenIndex(idx >= 0 ? idx : 0);
+    if (idx >= 0) setFullscreenIndex(idx);
   };
 
   const prefetchFeed = useCallback(() => {
@@ -521,6 +522,15 @@ function Home() {
           </div>
         </div>
       </header>
+
+      {loadError && videos.length === 0 && (
+        <div className="mx-4 mb-2 shrink-0 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-2.5 text-center text-xs text-amber-100/90 sm:mx-5">
+          Video feed unavailable — showing what we can.{' '}
+          <button type="button" onClick={() => { setLoading(true); loadVideos(1, false); }} className="font-semibold underline">
+            Retry
+          </button>
+        </div>
+      )}
 
       <div className="home-stories-row shrink-0">
         <StoryTray compact hideLabels maxVisible={10} onAddStory={() => setShowStoryCreator(true)} />
@@ -657,7 +667,13 @@ function Home() {
       )}
 
       {showGuestPrompt && (
-        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context={guestPromptContext} />
+        <GuestPrompt
+          onClose={() => {
+            guestPromptDismissedRef.current = true;
+            setShowGuestPrompt(false);
+          }}
+          context={guestPromptContext}
+        />
       )}
       {showStoryCreator && (
         <StoryCreator onClose={() => setShowStoryCreator(false)} onPosted={() => setShowStoryCreator(false)} />

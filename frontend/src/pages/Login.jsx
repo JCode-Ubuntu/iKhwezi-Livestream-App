@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Phone, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 
 function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const [mode, setMode] = useState('email');
   const [formData, setFormData] = useState({ email: '', phone: '', password: '' });
@@ -24,7 +25,11 @@ function Login() {
     const result = await login(credentials);
     setLoading(false);
     if (result.success) {
-      navigate('/', { replace: true });
+      const from = location.state?.from;
+      const safeFrom = typeof from === 'string' && from.startsWith('/') && !from.startsWith('/login') && !from.startsWith('/register')
+        ? from
+        : '/';
+      navigate(safeFrom, { replace: true });
       return;
     }
     setError(result.error || 'Login failed');
@@ -133,7 +138,11 @@ function Login() {
 
         <p className="mt-8 text-center text-sm text-white/40">
           New to the constellation?{' '}
-          <Link to="/register" className="font-semibold text-gold-400 hover:text-gold-300">
+          <Link
+            to="/register"
+            state={{ from: location.state?.from }}
+            className="font-semibold text-gold-400 hover:text-gold-300"
+          >
             Create signal
           </Link>
         </p>

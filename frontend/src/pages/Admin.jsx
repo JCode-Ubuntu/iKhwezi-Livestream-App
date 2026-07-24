@@ -71,9 +71,12 @@ function Admin() {
   const adFileInputRef = useRef(null);
 
   const [streamKey, setStreamKey] = useState('');
+  const [rtmpServer, setRtmpServer] = useState('');
+  const [rtmpPublishUrl, setRtmpPublishUrl] = useState('');
+  const [hlsPlaybackUrl, setHlsPlaybackUrl] = useState('');
   const [isLive, setIsLive] = useState(false);
   const [showStreamKey, setShowStreamKey] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState('');
   const [liveTitle, setLiveTitle] = useState('');
 
   const [videos, setVideos] = useState([]);
@@ -148,19 +151,33 @@ function Admin() {
         return;
       }
       setStreamKey(data.streamKey || '');
+      setRtmpServer(data.rtmpServer || '');
+      setRtmpPublishUrl(data.rtmpPublishUrl || '');
+      setHlsPlaybackUrl(data.hlsPlaybackUrl || '');
       setIsLive(!!data.isLive);
     } catch (err) {
       console.error('Failed to load stream key:', err);
     }
   };
 
+  const copyText = (label, text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(''), 2000);
+  };
+
   const rotateStreamKey = async () => {
+    if (isLive) return;
     try {
       const res = await fetchAdmin('/admin/stream-key/rotate', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) return;
       setStreamKey(data.streamKey || '');
-      setCopied(false);
+      setRtmpServer(data.rtmpServer || rtmpServer);
+      setRtmpPublishUrl(data.rtmpPublishUrl || '');
+      setHlsPlaybackUrl(data.hlsPlaybackUrl || '');
+      setCopied('');
     } catch (err) {
       console.error('Failed to rotate stream key:', err);
     }
@@ -174,9 +191,18 @@ function Admin() {
         body: JSON.stringify({ title: liveTitle || 'Live Stream' }),
       });
       const data = await res.json();
-      if (res.ok) setIsLive(!!data.isLive);
+      if (res.ok) {
+        setIsLive(!!data.isLive);
+        if (data.rtmpServer) setRtmpServer(data.rtmpServer);
+        if (data.streamKey) setStreamKey(data.streamKey);
+        if (data.rtmpPublishUrl) setRtmpPublishUrl(data.rtmpPublishUrl);
+        if (data.hlsPlaybackUrl) setHlsPlaybackUrl(data.hlsPlaybackUrl);
+      } else {
+        alert(data.error || 'Failed to start live');
+      }
     } catch (err) {
       console.error('Failed to start live:', err);
+      alert('Failed to start live');
     }
   };
 
@@ -184,16 +210,15 @@ function Admin() {
     try {
       const res = await fetchAdmin('/admin/live/stop', { method: 'POST' });
       const data = await res.json();
-      if (res.ok) setIsLive(!!data.isLive);
+      if (res.ok) {
+        setIsLive(!!data.isLive);
+      } else {
+        alert(data.error || 'Failed to stop live');
+      }
     } catch (err) {
       console.error('Failed to stop live:', err);
+      alert('Failed to stop live');
     }
-  };
-
-  const copyStreamKey = () => {
-    navigator.clipboard.writeText(streamKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const loadVideos = async () => {
@@ -528,8 +553,12 @@ function Admin() {
             </AdminCard>
 
             <AdminCard eyebrow="Security" title="Stream Key">
+              <p className="mb-3 text-xs leading-relaxed text-white/45">
+                In OBS: set <strong className="text-white/70">Server</strong> to the RTMP URL below and{' '}
+                <strong className="text-white/70">Stream Key</strong> to your key. Both must match exactly.
+              </p>
               <div className="mb-3 flex items-center gap-2">
-                <div className="admin-mono-box">
+                <div className="admin-mono-box flex-1 truncate">
                   {showStreamKey ? streamKey : '••••••••••••••••••••'}
                 </div>
                 <button
@@ -542,18 +571,59 @@ function Admin() {
                 </button>
                 <button
                   type="button"
-                  onClick={copyStreamKey}
+                  onClick={() => copyText('key', streamKey)}
                   className="admin-icon-btn"
                   aria-label="Copy stream key"
                 >
-                  {copied ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
+                  {copied === 'key' ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
                 </button>
               </div>
-              <button type="button" onClick={rotateStreamKey} className="admin-btn-ghost">
+              <button
+                type="button"
+                onClick={rotateStreamKey}
+                disabled={isLive}
+                className="admin-btn-ghost disabled:opacity-40"
+              >
                 <RefreshCw size={18} />
                 Rotate Key
               </button>
-              <p className="mt-3 text-xs text-white/35">RTMP URL: rtmp://localhost:1935/live</p>
+              {isLive && (
+                <p className="mt-2 text-[11px] text-amber-300/80">Stop the stream before rotating the key.</p>
+              )}
+
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="admin-mono-box flex-1 truncate text-[11px]">
+                    {rtmpServer || rtmpPublishUrl || 'Loading RTMP URL…'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyText('rtmp', rtmpServer || rtmpPublishUrl)}
+                    className="admin-icon-btn shrink-0"
+                    aria-label="Copy RTMP server URL"
+                  >
+                    {copied === 'rtmp' ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-white/35">RTMP Server (OBS → Settings → Stream → Server)</p>
+
+                {hlsPlaybackUrl && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="admin-mono-box flex-1 truncate text-[11px]">{hlsPlaybackUrl}</div>
+                      <button
+                        type="button"
+                        onClick={() => copyText('hls', hlsPlaybackUrl)}
+                        className="admin-icon-btn shrink-0"
+                        aria-label="Copy HLS playback URL"
+                      >
+                        {copied === 'hls' ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-white/35">HLS playback (viewers — auto-used by the Live page)</p>
+                  </>
+                )}
+              </div>
             </AdminCard>
           </div>
         )}

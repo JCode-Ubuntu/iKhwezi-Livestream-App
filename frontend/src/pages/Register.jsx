@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Phone, Lock, User, Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
@@ -7,6 +7,7 @@ import { UltimaCrown } from '../ultima/UltimaPrimitives';
 
 function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { register } = useAuth();
   const [mode, setMode] = useState('email');
   const [formData, setFormData] = useState({
@@ -66,7 +67,11 @@ function Register() {
     setLoading(false);
 
     if (result.success) {
-      navigate('/', { replace: true });
+      const from = location.state?.from;
+      const safeFrom = typeof from === 'string' && from.startsWith('/') && !from.startsWith('/login') && !from.startsWith('/register')
+        ? from
+        : '/';
+      navigate(safeFrom, { replace: true });
       return;
     }
     setSubmitError(result.error || 'Registration failed');
@@ -247,7 +252,11 @@ function Register() {
 
         <p className="mt-8 text-center text-sm text-white/40">
           Already have a signal?{' '}
-          <Link to="/login" className="font-semibold text-gold-400 hover:text-gold-300">
+          <Link
+            to="/login"
+            state={{ from: location.state?.from }}
+            className="font-semibold text-gold-400 hover:text-gold-300"
+          >
             Sign in
           </Link>
         </p>

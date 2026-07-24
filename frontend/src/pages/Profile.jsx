@@ -1,24 +1,29 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Star, Video, UserPlus, UserCheck, LogOut, Play, Trophy, Globe, Pencil, Settings,
   Coins, Gift, Crown, MessageCircle, Plus, Ban, Shield, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useCreateFlow } from '../context/CreateFlowContext';
 import GlassCard from '../components/GlassCard';
 import VideoEditModal from '../components/VideoEditModal';
 import ProfileEditSheet from '../components/ProfileEditSheet';
 import MediaPreview from '../components/MediaPreview';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
-import { UI_MOTION_CREDIT } from '../config/credits';
 import { resolveMediaUrl } from '../config/appConfig';
 
 const GIFT_FALLBACK = { rose: { coins: 10, char: '🌹', label: 'Rose' }, gem: { coins: 50, char: '💎', label: 'Gem' }, crown: { coins: 200, char: '👑', label: 'Crown' }, star: { coins: 500, char: '🌟', label: 'Supernova' } };
 
+const PROFILE_ACCOUNT_BTN =
+  'flex w-full items-center justify-center gap-2.5 rounded-2xl border py-3.5 text-[15px] font-semibold transition active:scale-[0.98] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]';
+
 function Profile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, fetchWithAuth, logout, isAuthenticated, isGuest, showToast } = useAuth();
+  const { openCreateSheet } = useCreateFlow();
   const [profile, setProfile] = useState(null);
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +68,7 @@ function Profile() {
 
   const requireRegistered = () => {
     if (!isAuthenticated || isGuest) {
-      navigate('/login');
+      navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
       return true;
     }
     return false;
@@ -108,6 +113,11 @@ function Profile() {
   const loadVideos = async (requestedId) => {
     try {
       const res = await fetchWithAuth(`/users/${requestedId}/videos`);
+      if (activeIdRef.current !== requestedId) return;
+      if (!res.ok) {
+        setVideos([]);
+        return;
+      }
       const data = await res.json();
       if (activeIdRef.current !== requestedId) return;
       setVideos(Array.isArray(data) ? data : []);
@@ -122,7 +132,7 @@ function Profile() {
 
   const openVideo = (video) => {
     const idx = videos.findIndex((v) => v.id === video.id);
-    setFullscreenIndex(idx >= 0 ? idx : 0);
+    if (idx >= 0) setFullscreenIndex(idx);
   };
 
   const handleFollow = async () => {
@@ -167,8 +177,16 @@ function Profile() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleCreateOrLogin = () => {
+    if (!isAuthenticated || isGuest) {
+      navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
+    openCreateSheet();
+  };
+
+  const handleLogout = async () => {
+    await logout();
     navigate('/');
   };
 
@@ -306,7 +324,7 @@ function Profile() {
         <div className="mb-4 flex items-end gap-4">
           <button
             type="button"
-            onClick={() => isOwnProfile && setShowEditProfile(true)}
+            onClick={() => isOwnProfile && !isGuest && setShowEditProfile(true)}
             className="relative h-[88px] w-[88px] shrink-0"
           >
             <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-pink-500 via-gold-400 to-plasma-500 opacity-90 blur-md" />
@@ -317,7 +335,7 @@ function Profile() {
                 profile.username?.charAt(0).toUpperCase()
               )}
             </div>
-            {isOwnProfile && (
+            {isOwnProfile && !isGuest && (
               <div className="absolute bottom-0 right-0 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-void-950 bg-gold-400 text-void-950 shadow-sm">
                 <Pencil size={11} />
               </div>
@@ -344,7 +362,7 @@ function Profile() {
             <p className="text-sm text-white/45">@{profile.username}</p>
           </div>
 
-          {isOwnProfile && (
+          {isOwnProfile && !isGuest && (
             <button
               type="button"
               onClick={() => setShowEditProfile(true)}
@@ -554,8 +572,17 @@ function Profile() {
               <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/35">Account</span>
             </div>
             <button
+              type="button"
+              onClick={handleCreateOrLogin}
+              className={`${PROFILE_ACCOUNT_BTN} mb-2.5 border-pink-500/25 bg-gradient-to-r from-pink-500/12 via-pink-500/8 to-gold-500/10 text-white shadow-[0_0_22px_rgba(225,48,108,0.14)]`}
+            >
+              <UserPlus size={18} />
+              Create / Login
+            </button>
+            <button
+              type="button"
               onClick={() => setShowLogoutConfirm(true)}
-              className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-red-500/20 bg-red-500/[0.08] py-3.5 text-[15px] font-semibold text-red-400 transition active:scale-[0.98]"
+              className={`${PROFILE_ACCOUNT_BTN} mb-2.5 border-red-500/25 bg-gradient-to-r from-red-500/10 via-red-500/8 to-red-500/[0.05] text-red-400 shadow-[0_0_22px_rgba(239,68,68,0.12)]`}
             >
               <LogOut size={18} />
               Log Out
@@ -564,22 +591,11 @@ function Profile() {
               href="https://ikhwezi.site/account-deletion.html"
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2.5 flex w-full items-center justify-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-[15px] font-semibold text-white/55 transition active:scale-[0.98]"
+              className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-[15px] font-semibold text-white/55 transition active:scale-[0.98]"
             >
               <Trash2 size={18} />
               Delete Account &amp; Data
             </a>
-            <p className="mt-5 text-center text-[10px] leading-relaxed text-white/30">
-              {UI_MOTION_CREDIT.label} ·{' '}
-              <a
-                href={UI_MOTION_CREDIT.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white/45 underline decoration-white/20 underline-offset-2"
-              >
-                {UI_MOTION_CREDIT.name}
-              </a>
-            </p>
           </div>
         </div>
       )}
@@ -719,7 +735,7 @@ function Profile() {
           muted={muted}
           setMuted={setMuted}
           onUpdate={updateVideo}
-          showGuestPrompt={() => navigate('/login')}
+          showGuestPrompt={() => navigate('/login', { state: { from: `${location.pathname}${location.search}` } })}
         />
       )}
     </div>

@@ -42,6 +42,8 @@ function Live() {
   const [liveStatus, setLiveStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [statusError, setStatusError] = useState(null);
+  const [streamWaiting, setStreamWaiting] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [touchY0, setTouchY0] = useState(null);
@@ -51,16 +53,181 @@ function Live() {
   const [showGifts, setShowGifts] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(true);
   const [wallet, setWallet] = useState(null);
   const [giftCatalog, setGiftCatalog] = useState(null);
   const [sendingGift, setSendingGift] = useState(null);
 
-  const HLS_URL = liveStatus?.hlsUrl
-    ? resolveStreamUrl(liveStatus.hlsUrl)
-    : resolveStreamUrl('/hls/stream.m3u8');
+  const destroyPlayer = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.removeAttribute('src');
+      videoRef.current.load();
+    }
+    activeHlsUrlRef.current = null;
+  }, []);
 
-  const displayViewers = useAnimatedInteger(viewerCount, 450);
+  const initHlsRef = useRef(null);
+
+  const joinLive = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth('/live/join', { method: 'POST' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setViewerCount(data.viewerCount ?? 0);
+    } catch (err) {
+      console.error('Failed to join live:', err);
+    }
+  }, [fetchWithAuth]);
+
+  const leaveLive = useCallback(async () => {
+    try {
+      await fetchWithAuth('/live/leave', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to leave live:', err);
+    }
+  }, [fetchWithAuth]);
+
+  const initHls = useCallback(async (url) => {
+    if (!videoRef.current || !url) return;
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    setError(null);
+    setStreamWaiting(false);
+
+    const { default: Hls } = await import('hls.js');
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 90,
+        maxBufferLength: 30,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 6,
+      });
+
+      hls.loadSource(url);
+      hls.attachMedia(videoRef.current);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!videoRef.current) return;
+        setStreamWaiting(false);
+        setError(null);
+        videoRef.current.muted = muted;
+        videoRef.current.play().catch(() => {});
+        if (!hasJoinedRef.current) {
+          hasJoinedRef.current = true;
+          joinLive();
+        }
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        if (!data.fatal) return;
+        const manifestWaitDetails = [
+          Hls.ErrorDetails.MANIFEST_LOAD_ERROR,
+          Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT,
+          Hls.ErrorDetails.LEVEL_LOAD_ERROR,
+        ];
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && manifestWaitDetails.includes(data.details)) {
+          setStreamWaiting(true);
+          setError(null);
+          setTimeout(() => {
+            if (hlsRef.current) hls.startLoad();
+          }, 2500);
+          return;
+        }
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            setStreamWaiting(false);
+            setError('Stream buffering — reconnecting…');
+            hls.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            setStreamWaiting(false);
+            hls.recoverMediaError();
+            break;
+          default:
+            setStreamWaiting(false);
+            setError('Stream error occurred');
+            destroyPlayer();
+            break;
+        }
+      });
+
+      hlsRef.current = hls;
+    } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+      videoRef.current.src = url;
+      videoRef.current.muted = muted;
+      videoRef.current.addEventListener('loadedmetadata', () => {
+        setStreamWaiting(false);
+        setError(null);
+        videoRef.current.play().catch(() => {});
+        if (!hasJoinedRef.current) {
+          hasJoinedRef.current = true;
+          joinLive();
+        }
+      }, { once: true });
+      videoRef.current.addEventListener('error', () => {
+        setStreamWaiting(true);
+        setError(null);
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.src = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+            videoRef.current.load();
+          }
+        }, 2500);
+      }, { once: true });
+    } else {
+      setError('HLS playback is not supported on this device.');
+    }
+  }, [destroyPlayer, joinLive, muted]);
+
+  initHlsRef.current = initHls;
+
+  const checkLiveStatus = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth('/live/status');
+      if (!mountedRef.current) return;
+      if (!res.ok) {
+        setStatusError('Could not reach the live server. Check your connection and try again.');
+        setLiveStatus(null);
+        return;
+      }
+      const data = await res.json();
+      setStatusError(null);
+      setLiveStatus(data);
+      setViewerCount(data.viewerCount || 0);
+
+      if (data.isLive && data.hlsUrl && videoRef.current) {
+        const hlsUrl = resolveStreamUrl(data.hlsUrl);
+        if (activeHlsUrlRef.current !== hlsUrl || !hlsRef.current) {
+          activeHlsUrlRef.current = hlsUrl;
+          hasJoinedRef.current = false;
+          setStreamWaiting(true);
+          initHlsRef.current?.(hlsUrl);
+        }
+      } else if (!data.isLive) {
+        destroyPlayer();
+        hasJoinedRef.current = false;
+        setStreamWaiting(false);
+      }
+    } catch (err) {
+      console.error('Failed to check live status:', err);
+      if (mountedRef.current) {
+        setStatusError('Could not reach the live server. Check your connection and try again.');
+      }
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [destroyPlayer, fetchWithAuth]);
 
   useEffect(() => {
     checkLiveStatus();
@@ -70,15 +237,11 @@ function Live() {
       clearInterval(interval);
       reactionTimersRef.current.forEach(clearTimeout);
       reactionTimersRef.current = [];
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      activeHlsUrlRef.current = null;
+      destroyPlayer();
       hasJoinedRef.current = false;
       leaveLive();
     };
-  }, []);
+  }, [checkLiveStatus, destroyPlayer, leaveLive]);
 
   useEffect(() => {
     if (socket) {
@@ -124,18 +287,54 @@ function Live() {
       // these three events, so it was a latent footgun rather than an active
       // bug, but passing the exact handler reference is the correct pattern
       // regardless of what else may listen in the future.
+      const onViewerCount = ({ viewerCount: count }) => {
+        if (typeof count === 'number') setViewerCount(count);
+      };
+
+      const onLiveStarted = (payload) => {
+        setStatusError(null);
+        const resolvedHls = payload?.hlsUrl ? resolveStreamUrl(payload.hlsUrl) : null;
+        setLiveStatus((prev) => ({
+          ...(prev || {}),
+          isLive: true,
+          title: payload?.title || prev?.title || 'Live Stream',
+          startedAt: payload?.startedAt || prev?.startedAt,
+          hlsUrl: resolvedHls || prev?.hlsUrl,
+          viewerCount: payload?.viewerCount ?? prev?.viewerCount ?? 0,
+        }));
+        setLoading(false);
+        setStreamWaiting(true);
+        checkLiveStatus();
+      };
+
+      const onLiveStopped = () => {
+        destroyPlayer();
+        hasJoinedRef.current = false;
+        setStreamWaiting(false);
+        setLiveStatus((prev) => (prev ? { ...prev, isLive: false, hlsUrl: null } : prev));
+        setViewerCount(0);
+      };
+
       socket.on('chat-message', onChatMessage);
       socket.on('reaction', onReaction);
       socket.on('gift-received', onGiftReceived);
+      socket.on('viewer-count', onViewerCount);
+      socket.on('livestream-started', onLiveStarted);
+      socket.on('livestream-stopped', onLiveStopped);
 
       return () => {
         socket.off('chat-message', onChatMessage);
         socket.off('reaction', onReaction);
         socket.off('gift-received', onGiftReceived);
+        socket.off('viewer-count', onViewerCount);
+        socket.off('livestream-started', onLiveStarted);
+        socket.off('livestream-stopped', onLiveStopped);
         leaveRoom('live-stream');
       };
     }
-  }, [socket]);
+  }, [socket, checkLiveStatus, destroyPlayer]);
+
+  const displayViewers = useAnimatedInteger(viewerCount, 450);
 
   useEffect(() => {
     if (!user || isGuest) return;
@@ -144,38 +343,6 @@ function Live() {
       setGiftCatalog(data.giftCatalog || null);
     }).catch(() => {});
   }, [user, isGuest, fetchWithAuth]);
-
-  const checkLiveStatus = async () => {
-    try {
-      const res = await fetchWithAuth('/live/status');
-      const data = await res.json();
-      if (!mountedRef.current) return;
-      setLiveStatus(data);
-      setViewerCount(data.viewerCount || 0);
-
-      if (data.isLive && videoRef.current) {
-        const hlsUrl = data.hlsUrl
-          ? resolveStreamUrl(data.hlsUrl)
-          : resolveStreamUrl('/hls/stream.m3u8');
-        if (activeHlsUrlRef.current !== hlsUrl) {
-          activeHlsUrlRef.current = hlsUrl;
-          hasJoinedRef.current = false;
-          initHls(hlsUrl);
-        }
-      } else if (!data.isLive) {
-        activeHlsUrlRef.current = null;
-        hasJoinedRef.current = false;
-        if (hlsRef.current) {
-          hlsRef.current.destroy();
-          hlsRef.current = null;
-        }
-      }
-    } catch (err) {
-      console.error('Failed to check live status:', err);
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  };
 
   const handleSendChat = () => {
     if (isGuest || !user) {
@@ -229,85 +396,13 @@ function Live() {
     }
   };
 
-  const initHls = async (url) => {
-    if (!videoRef.current) return;
-
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-    }
-
-    const { default: Hls } = await import('hls.js');
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 90,
-      });
-
-      hls.loadSource(url);
-      hls.attachMedia(videoRef.current);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        videoRef.current.play().catch(() => {});
-        if (!hasJoinedRef.current) {
-          hasJoinedRef.current = true;
-          joinLive();
-        }
-      });
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              setError('Stream not available');
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              setError('Stream error occurred');
-              hls.destroy();
-              break;
-          }
-        }
-      });
-
-      hlsRef.current = hls;
-    } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-      videoRef.current.src = url;
-      videoRef.current.addEventListener('loadedmetadata', () => {
-        videoRef.current.play().catch(() => {});
-        if (!hasJoinedRef.current) {
-          hasJoinedRef.current = true;
-          joinLive();
-        }
-      }, { once: true });
-    }
-  };
-
-  const joinLive = async () => {
-    try {
-      const res = await fetchWithAuth('/live/join', { method: 'POST' });
-      const data = await res.json();
-      setViewerCount(data.viewerCount);
-    } catch (err) {
-      console.error('Failed to join live:', err);
-    }
-  };
-
-  const leaveLive = async () => {
-    try {
-      await fetchWithAuth('/live/leave', { method: 'POST' });
-    } catch (err) {
-      console.error('Failed to leave live:', err);
-    }
-  };
-
   const handleRetry = () => {
     setError(null);
+    setStatusError(null);
+    setStreamWaiting(false);
     setLoading(true);
+    destroyPlayer();
+    hasJoinedRef.current = false;
     checkLiveStatus();
   };
 
@@ -359,9 +454,13 @@ function Live() {
           <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 shadow-neon-ring">
             <WifiOff className="h-12 w-12 text-white/40" />
           </div>
-          <h2 className="ultima-text-glow mb-2 font-display text-3xl font-black tracking-tight text-white">No Live Stream</h2>
+          <h2 className="ultima-text-glow mb-2 font-display text-3xl font-black tracking-tight text-white">
+            {statusError ? 'Live Unavailable' : 'No Live Stream'}
+          </h2>
           <p className="text-lg leading-relaxed text-white/65">
-            The admin isn't broadcasting right now. Check back soon — or catch up on replays.
+            {statusError
+              ? statusError
+              : "The admin isn't broadcasting right now. Check back soon — or catch up on replays."}
           </p>
           <button
             type="button"
@@ -465,6 +564,14 @@ function Live() {
             <FlyingReaction key={reaction.rid} char={reaction.reaction} />
           ))}
         </div>
+
+        {streamWaiting && !error && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center">
+            <RefreshCw size={28} className="animate-spin text-pink-400" />
+            <p className="text-sm font-semibold text-white">Waiting for broadcast signal…</p>
+            <p className="text-xs text-white/50">Start OBS with your stream key — video appears when RTMP connects.</p>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -563,7 +670,7 @@ function Live() {
             </div>
           ))}
         </div>
-        {user && !isGuest && (
+        {user && !isGuest ? (
           <div
             className="flex gap-2 border-t border-white/10 p-3"
             style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
@@ -583,6 +690,19 @@ function Live() {
               className="ik-tap-spring flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-gold-500 text-white"
             >
               <Send size={16} />
+            </button>
+          </div>
+        ) : (
+          <div
+            className="border-t border-white/10 p-4 text-center"
+            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowUpgradePrompt(true)}
+              className="ik-btn ik-btn-primary ik-btn-pill w-full justify-center py-2.5 text-sm"
+            >
+              Sign in to chat
             </button>
           </div>
         )}

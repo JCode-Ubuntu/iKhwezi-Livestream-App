@@ -132,7 +132,10 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
         </div>
       </div>
 
-      <div className="ultima-nav-scroll flex-1 overflow-y-auto">
+      <div
+        className="ultima-nav-scroll flex-1 overflow-y-auto"
+        style={{ paddingBottom: 'calc(var(--ultima-nav-offset, 4rem) + 4.5rem)' }}
+      >
         {loading && (
           <div className="flex justify-center py-8">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-pink-400 border-t-transparent" />
@@ -185,8 +188,6 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
             </div>
           </button>
         ))}
-        {/* Bottom padding so FAB doesn't cover last item */}
-        <div style={{ height: 80 }} />
       </div>
 
       {/* Floating compose button */}
@@ -194,8 +195,11 @@ function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
         type="button"
         onClick={onNewMsg}
         aria-label="New message"
-        className="ik-btn ik-btn-primary ik-btn-pill absolute bottom-4 right-4 px-5 py-3 shadow-[0_4px_24px_rgba(225,48,108,0.5)]"
-        style={{ zIndex: 10 }}
+        className="ik-btn ik-btn-primary ik-btn-pill absolute right-4 px-5 py-3 shadow-[0_4px_24px_rgba(225,48,108,0.5)]"
+        style={{
+          zIndex: 95,
+          bottom: 'calc(var(--ultima-nav-offset, 4rem) + 0.75rem)',
+        }}
       >
         <Edit size={16} />
         New Message
@@ -482,6 +486,7 @@ function Messages() {
   }, [isGuest, fetchWithAuth]);
 
   if (isGuest) {
+    const openTarget = location.state?.openUser;
     return (
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
         <div className="ultima-page ultima-content flex min-h-0 flex-1 flex-col">
@@ -489,11 +494,22 @@ function Messages() {
             <GuestPrompt onClose={() => navigate('/')} context="interaction" />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
-              <p className="text-sm text-white/50">Sign in to send and receive direct messages.</p>
+              <p className="text-sm text-white/50">
+                {openTarget
+                  ? `Sign in to message @${openTarget.username || 'this creator'}.`
+                  : 'Sign in to send and receive direct messages.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/login', { state: { from: '/messages', openUser: openTarget } })}
+                className="ik-btn ik-btn-primary ik-btn-pill px-6 py-2.5 text-sm font-bold"
+              >
+                Sign in
+              </button>
               <button
                 type="button"
                 onClick={() => setShowGuestPrompt(true)}
-                className="ik-btn ik-btn-primary ik-btn-pill px-6 py-2.5 text-sm font-bold"
+                className="text-sm font-semibold text-gold-400"
               >
                 Create free account
               </button>

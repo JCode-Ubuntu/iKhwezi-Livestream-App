@@ -89,7 +89,13 @@ const JWT_SECRET = requireSecretOrGenerate('JWT_SECRET');
 const ADMIN_KEY = requireSecretOrGenerate('ADMIN_KEY', { minLength: 12 });
 // Shared secret nginx-rtmp must send when calling on-publish webhooks.
 const RTMP_WEBHOOK_SECRET = process.env.RTMP_WEBHOOK_SECRET || '';
-const HLS_HOST = process.env.HLS_HOST || '';
+// Accept HLS_HOST or legacy HLS_URL from docker-compose / .env.dist
+const HLS_HOST = (process.env.HLS_HOST || process.env.HLS_URL || '').replace(/\/$/, '');
+const RTMP_SERVER = (process.env.RTMP_SERVER || process.env.RTMP_HOST || 'rtmp://localhost:1935/live').replace(/\/$/, '');
+// Public ingest URL shown in Admin / OBS (defaults to RTMP_SERVER — override when backend uses internal Docker hostname)
+const RTMP_PUBLIC_SERVER = (process.env.RTMP_PUBLIC_SERVER || RTMP_SERVER).replace(/\/$/, '');
+const TRUST_INTERNAL_RTMP_WEBHOOK = process.env.TRUST_INTERNAL_RTMP_WEBHOOK === '1'
+  || process.env.TRUST_INTERNAL_RTMP_WEBHOOK === 'true';
 
 // Real-money top-ups activate automatically once these are set — no code
 // changes needed. Until then, /api/wallet/topup runs in dev mode and grants
@@ -397,16 +403,65 @@ Subscription.belongsTo(User, { foreignKey: 'subscriberId', as: 'subscriber' });
 Subscription.belongsTo(User, { foreignKey: 'creatorId', as: 'creator' });
 
 // Public HLS playback URL — safe to expose (watch-only). Never expose streamKey/RTMP on public routes.
+// nginx-rtmp writes playlists as /tmp/hls/{streamKey}.m3u8 (served at /hls/{streamKey}.m3u8).
 function buildPublicHlsUrl(streamKey) {
+  if (!streamKey) return null;
+  const playlist = `${streamKey}.m3u8`;
   if (HLS_HOST) {
-    return `${HLS_HOST.replace(/\/$/, '')}/hls/${streamKey}/index.m3u8`;
+    return `${HLS_HOST}/${playlist}`;
   }
-  return `/hls/${streamKey}.m3u8`;
+  return `/hls/${playlist}`;
+}
+
+function buildRtmpPublishUrl(streamKey) {
+  if (!streamKey) return null;
+  return `${RTMP_PUBLIC_SERVER}/${streamKey}`;
+}
+
+function buildRtmpIngestInfo(streamKey) {
+  if (!streamKey) {
+    return { rtmpServer: RTMP_PUBLIC_SERVER, streamKey: null, rtmpPublishUrl: null };
+  }
+  return {
+    rtmpServer: RTMP_PUBLIC_SERVER,
+    streamKey,
+    rtmpPublishUrl: buildRtmpPublishUrl(streamKey),
+  };
+}
+
+function isPrivateNetworkIp(ip) {
+  if (!ip) return false;
+  const normalized = ip.replace(/^::ffff:/, '');
+  if (normalized === '127.0.0.1' || normalized === '::1') return true;
+  const parts = normalized.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return false;
+  if (parts[0] === 10) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  return false;
+}
+
+function emitLiveStarted(liveStatus) {
+  io.emit('livestream-started', {
+    title: liveStatus.title || 'Live Stream',
+    viewerCount: liveStatus.viewerCount || 0,
+    startedAt: liveStatus.startedAt,
+    hlsUrl: buildPublicHlsUrl(liveStatus.streamKey),
+  });
+}
+
+function emitLiveStopped() {
+  io.emit('livestream-stopped', { isLive: false });
+  io.emit('viewer-count', { viewerCount: 0 });
 }
 
 function requireRtmpWebhook(req, res) {
   if (!RTMP_WEBHOOK_SECRET) {
     if (IS_PRODUCTION) {
+      // Docker nginx-rtmp calls the backend on the private bridge network.
+      if (TRUST_INTERNAL_RTMP_WEBHOOK && isPrivateNetworkIp(req.socket?.remoteAddress)) {
+        return true;
+      }
       console.error('RTMP_WEBHOOK_SECRET is not set — rejecting on-publish callback in production');
       res.status(503).send('RTMP webhook not configured');
       return false;
@@ -414,11 +469,12 @@ function requireRtmpWebhook(req, res) {
     return true; // dev: allow unauthenticated callbacks for local nginx testing
   }
   const provided = req.headers['x-rtmp-secret'] || req.query.secret;
-  if (provided !== RTMP_WEBHOOK_SECRET) {
-    res.status(403).send('Forbidden');
-    return false;
+  if (provided === RTMP_WEBHOOK_SECRET) return true;
+  if (TRUST_INTERNAL_RTMP_WEBHOOK && isPrivateNetworkIp(req.socket?.remoteAddress)) {
+    return true;
   }
-  return true;
+  res.status(403).send('Forbidden');
+  return false;
 }
 
 // Middleware
@@ -473,6 +529,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 });
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use('/storage', express.static(path.join(__dirname, 'storage')));
 
 // File upload config
@@ -1153,6 +1210,7 @@ app.post('/api/videos/:id/star', authenticate, requireRegistered, interactionRat
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
+    if (!video.isPublished) return res.status(403).json({ error: 'Video is not published' });
 
     if (video.userId === req.user.id) {
       return res.status(400).json({ error: 'Cannot star your own video' });
@@ -1818,7 +1876,9 @@ app.post('/api/live/join', authenticate, async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
     if (liveStatus) {
-      res.json({ viewerCount: await incrementViewerCount(liveStatus) });
+      const viewerCount = await incrementViewerCount(liveStatus);
+      io.emit('viewer-count', { viewerCount });
+      res.json({ viewerCount });
     } else {
       res.json({ viewerCount: 0 });
     }
@@ -1831,7 +1891,9 @@ app.post('/api/live/leave', authenticate, async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
     if (liveStatus) {
-      res.json({ viewerCount: await decrementViewerCount(liveStatus) });
+      const viewerCount = await decrementViewerCount(liveStatus);
+      io.emit('viewer-count', { viewerCount });
+      res.json({ viewerCount });
     } else {
       res.json({ viewerCount: 0 });
     }
@@ -2202,7 +2264,14 @@ app.get('/api/admin/stream-key', requireAdmin, async (req, res) => {
     if (!liveStatus) {
       liveStatus = await LiveStatus.create({ streamKey: uuidv4(), isLive: false });
     }
-    res.json({ streamKey: liveStatus.streamKey, isLive: liveStatus.isLive });
+    const ingest = buildRtmpIngestInfo(liveStatus.streamKey);
+    res.json({
+      streamKey: ingest.streamKey,
+      isLive: liveStatus.isLive,
+      rtmpServer: ingest.rtmpServer,
+      rtmpPublishUrl: ingest.rtmpPublishUrl,
+      hlsPlaybackUrl: buildPublicHlsUrl(liveStatus.streamKey),
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get stream key' });
   }
@@ -2218,7 +2287,13 @@ app.post('/api/admin/stream-key/rotate', requireAdmin, async (req, res) => {
       await liveStatus.save();
     }
     await logAudit('STREAM_KEY_ROTATED', {}, req.ip);
-    res.json({ streamKey: liveStatus.streamKey });
+    const ingest = buildRtmpIngestInfo(liveStatus.streamKey);
+    res.json({
+      streamKey: ingest.streamKey,
+      rtmpServer: ingest.rtmpServer,
+      rtmpPublishUrl: ingest.rtmpPublishUrl,
+      hlsPlaybackUrl: buildPublicHlsUrl(liveStatus.streamKey),
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to rotate stream key' });
   }
@@ -2429,12 +2504,27 @@ app.delete('/api/videos/:id', authenticate, requireRegistered, async (req, res) 
 app.post('/api/live/on-publish', async (req, res) => {
   if (!requireRtmpWebhook(req, res)) return;
   try {
+    const publishedName = (req.body?.name || req.query?.name || '').trim();
     let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
     if (!liveStatus) {
-      liveStatus = await LiveStatus.create({ streamKey: uuidv4(), isLive: true, title: 'Live Stream', startedAt: new Date(), viewerCount: 0 });
+      liveStatus = await LiveStatus.create({
+        streamKey: publishedName || uuidv4(),
+        isLive: true,
+        title: 'Live Stream',
+        startedAt: new Date(),
+        viewerCount: 0,
+      });
       await assignLiveHost(liveStatus);
       await liveStatus.save();
     } else {
+      if (publishedName && liveStatus.streamKey !== publishedName) {
+        console.warn(`Rejected RTMP publish: key mismatch (expected ${liveStatus.streamKey}, got ${publishedName})`);
+        // nginx-rtmp treats non-2xx as publish rejection — 403 stops wrong-key ingest
+        return res.status(403).send('Invalid stream key');
+      }
+      if (publishedName && !liveStatus.streamKey) {
+        liveStatus.streamKey = publishedName;
+      }
       liveStatus.isLive = true;
       liveStatus.startedAt = new Date();
       liveStatus.viewerCount = 0;
@@ -2442,7 +2532,8 @@ app.post('/api/live/on-publish', async (req, res) => {
       await assignLiveHost(liveStatus);
       await liveStatus.save();
     }
-    console.log('Stream started via on_publish');
+    emitLiveStarted(liveStatus);
+    console.log(`Stream started via on_publish (${liveStatus.streamKey})`);
     res.status(200).send('OK');
   } catch (err) {
     console.error('on_publish error:', err);
@@ -2460,6 +2551,7 @@ app.post('/api/live/on-publish-done', async (req, res) => {
       liveStatus.viewerCount = 0;
       await liveStatus.save();
     }
+    emitLiveStopped();
     console.log('Stream ended via on_publish_done');
     res.status(200).send('OK');
   } catch (err) {
@@ -2493,7 +2585,17 @@ app.post('/api/admin/live/start', requireAdmin, async (req, res) => {
     }
     
     await logAudit('LIVE_STARTED', { title }, req.ip);
-    res.json({ success: true, isLive: true });
+    emitLiveStarted(liveStatus);
+    const ingest = buildRtmpIngestInfo(liveStatus.streamKey);
+    res.json({
+      success: true,
+      isLive: true,
+      hlsUrl: buildPublicHlsUrl(liveStatus.streamKey),
+      rtmpServer: ingest.rtmpServer,
+      streamKey: ingest.streamKey,
+      rtmpPublishUrl: ingest.rtmpPublishUrl,
+      hlsPlaybackUrl: buildPublicHlsUrl(liveStatus.streamKey),
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to start live' });
   }
@@ -2509,6 +2611,7 @@ app.post('/api/admin/live/stop', requireAdmin, async (req, res) => {
       await liveStatus.save();
     }
     await logAudit('LIVE_STOPPED', {}, req.ip);
+    emitLiveStopped();
     res.json({ success: true, isLive: false });
   } catch (err) {
     res.status(500).json({ error: 'Failed to stop live' });

@@ -43,7 +43,7 @@ function NavIcon({ item, active, profileAvatar, profileInitial }) {
 }
 
 function UltimaNav({ onCreateClick }) {
-  const { isAuthenticated, user, isGuest, trackGuestInteraction } = useAuth();
+  const { user, isGuest, trackGuestInteraction } = useAuth();
   const { navVisible } = useNavVisibility();
   const location = useLocation();
   const navigate = useNavigate();

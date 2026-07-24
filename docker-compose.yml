@@ -36,7 +36,10 @@ services:
       # audit report's "RTMP webhook auth" finding for the two remediation
       # options and pick one before relying on auto-detected live status.
       - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET}
+      - TRUST_INTERNAL_RTMP_WEBHOOK=true
       - RTMP_SERVER=rtmp://nginx-rtmp:1935/live
+      - RTMP_PUBLIC_SERVER=rtmp://ikhwezi.site:1935/live
+      - HLS_HOST=https://ikhwezi.site/hls
       - HLS_URL=https://ikhwezi.site/hls
     volumes:
       - backend-storage:/app/storage

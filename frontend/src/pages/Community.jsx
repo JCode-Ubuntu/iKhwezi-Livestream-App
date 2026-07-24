@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Hash, Users, Plus, Crown, Radio, X, Check, PlaySquare } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { resolveMediaUrl } from '../config/appConfig';
+import { resolveMediaUrl, resolveStreamUrl } from '../config/appConfig';
 
 function ChallengeCard({ challenge }) {
   return (
@@ -98,7 +98,7 @@ function Community() {
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
-    if (!isAuthenticated) { setLoading(false); return; }
+    if (!isAuthenticated || isGuest) { setLoading(false); return; }
     setLoading(true);
     setLoadError(false);
     try {
@@ -119,7 +119,7 @@ function Community() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, fetchWithAuth]);
+  }, [isAuthenticated, isGuest, fetchWithAuth]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -138,6 +138,14 @@ function Community() {
       }
       showToast(`Joined "${party.name}"!`, 'success');
       load();
+      if (party.streamUrl) {
+        const url = resolveStreamUrl(party.streamUrl);
+        if (url.includes('.m3u8') || url.includes('/hls/')) {
+          window.location.href = '/live';
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
+      }
     } catch {
       showToast('Failed to join', 'error');
     } finally {
@@ -228,7 +236,14 @@ function Community() {
         {isGuest ? (
           <div className="py-16 text-center">
             <Crown size={32} className="mx-auto mb-3 text-gold-400/60" />
-            <p className="text-sm text-white/45">Sign in to see and join the community</p>
+            <p className="mb-4 text-sm text-white/45">Sign in to see and join the community</p>
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="ik-btn ik-btn-primary ik-btn-pill px-6 py-2.5 text-sm font-bold"
+            >
+              Sign in
+            </button>
           </div>
         ) : loading ? (
           <div className="flex flex-col gap-3">

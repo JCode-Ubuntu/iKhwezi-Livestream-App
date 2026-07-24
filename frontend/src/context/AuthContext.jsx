@@ -203,16 +203,14 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(async () => {
     localStorage.removeItem('ikhwezi_token');
     setToken(null);
-    setUser(null);
     setIsGuest(false);
     setGuestInteractions(0);
     showToast('Logged out', 'success');
-    // Re-bootstrap a guest session so the app isn't left in a broken no-auth state.
-    createGuestSession();
-  };
+    await createGuestSession();
+  }, [createGuestSession, showToast]);
 
   const trackGuestInteraction = useCallback(() => {
     if (isGuest) {

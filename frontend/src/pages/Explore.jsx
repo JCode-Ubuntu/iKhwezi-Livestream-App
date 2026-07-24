@@ -204,6 +204,11 @@ function Explore() {
               Retry
             </button>
           </div>
+        ) : videos.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 px-8 py-20 text-center">
+            <p className="text-sm font-semibold text-white/55">No videos to discover yet</p>
+            <p className="text-xs text-white/35">Check back soon — creators are always uploading.</p>
+          </div>
         ) : (
           <div className="ultima-stagger grid grid-cols-3 gap-1.5 px-3 pb-24 pt-2">
             {videos.map((video, index) => (
