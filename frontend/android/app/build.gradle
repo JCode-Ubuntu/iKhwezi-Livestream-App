@@ -7,9 +7,9 @@ android {
         applicationId "com.ikhwezi.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Play Console: increment by 1 each release. Last uploaded: 30009 → next: 30010.
-        versionCode 30010
-        versionName "3.0.10"
+        // Play Console: increment by 1 each release. Last uploaded: 30010 → next: 30011.
+        versionCode 30011
+        versionName "3.0.11"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

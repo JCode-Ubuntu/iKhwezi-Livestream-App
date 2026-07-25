@@ -34,7 +34,7 @@ Copies `dist/` into `android/` and `ios/` native projects.
 
 ### App identity
 - **Package:** `com.ikhwezi.app`
-- **Version:** `3.0.10` (`versionCode` **30010** — must increment by 1 per Play upload; last live: 30009)
+- **Version:** `3.0.11` (`versionCode` **30011** — must increment by 1 per Play upload; last live: 30010)
 - **Release format:** AAB (configured in `capacitor.config.json`)
 
 ### Signing (required for Play)
