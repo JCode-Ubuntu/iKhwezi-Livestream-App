@@ -2,14 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Radio, Users, ArrowLeft, RefreshCw, WifiOff, MessageCircle,
-  Volume2, VolumeX, Gift, Crown, Send, X, Coins,
+  Volume2, VolumeX, Gift, Crown, Send, X, Coins, Zap, Maximize2, Minimize2,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import UltimaField from '../ultima/UltimaField';
 import ReactionsBar from '../components/ReactionsBar';
 import GuestPrompt from '../components/GuestPrompt';
-import { resolveStreamUrl } from '../config/appConfig';
+import { resolveStreamUrl, isNativeApp } from '../config/appConfig';
 import { useAnimatedInteger } from '../hooks/useAnimatedInteger';
 
 const GIFT_ICONS = { rose: '🌹', gem: '💎', crown: '👑', star: '🌟' };
@@ -33,20 +34,19 @@ function Live() {
   const { fetchWithAuth, user, isGuest, trackGuestInteraction, showToast } = useAuth();
   const { socket, joinRoom, leaveRoom, sendChatMessage, sendReaction } = useSocket();
   const videoRef = useRef(null);
-  const wrapRef = useRef(null);
   const hlsRef = useRef(null);
   const activeHlsUrlRef = useRef(null);
   const hasJoinedRef = useRef(false);
   const reactionTimersRef = useRef([]);
   const mountedRef = useRef(true);
+  const soundHintShownRef = useRef(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const [liveStatus, setLiveStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [statusError, setStatusError] = useState(null);
   const [streamWaiting, setStreamWaiting] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
-  const [zoom, setZoom] = useState(1);
-  const [touchY0, setTouchY0] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [reactions, setReactions] = useState([]);
   const [showChat, setShowChat] = useState(false);
@@ -91,6 +91,40 @@ function Live() {
     }
   }, [fetchWithAuth]);
 
+  const syncToLiveEdge = useCallback(() => {
+    const hls = hlsRef.current;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (hls && Number.isFinite(hls.liveSyncPosition)) {
+      video.currentTime = Math.max(0, hls.liveSyncPosition - 0.25);
+    } else if (video.seekable.length > 0) {
+      const end = video.seekable.end(video.seekable.length - 1);
+      video.currentTime = Math.max(0, end - 1.5);
+    }
+    video.play().catch(() => {});
+    showToast?.('Synced to live', 'success');
+  }, [showToast]);
+
+  const tryAttachStream = useCallback((status) => {
+    if (!status?.isLive || !status?.hlsUrl || !videoRef.current) return;
+    const hlsUrl = resolveStreamUrl(status.hlsUrl);
+    const video = videoRef.current;
+    const hasPlayer = hlsRef.current || (video.src && video.src.includes('.m3u8'));
+    if (activeHlsUrlRef.current === hlsUrl && hasPlayer) return;
+    activeHlsUrlRef.current = hlsUrl;
+    hasJoinedRef.current = false;
+    setStreamWaiting(true);
+    initHlsRef.current?.(hlsUrl);
+  }, []);
+
+  const attachVideoRef = useCallback((node) => {
+    videoRef.current = node;
+    if (node && liveStatus?.isLive) {
+      tryAttachStream(liveStatus);
+    }
+  }, [liveStatus, tryAttachStream]);
+
   const initHls = useCallback(async (url) => {
     if (!videoRef.current || !url) return;
 
@@ -102,55 +136,104 @@ function Live() {
     setError(null);
     setStreamWaiting(false);
 
-    const { default: Hls } = await import('hls.js');
+    const video = videoRef.current;
+    const native = isNativeApp();
+    video.playsInline = true;
+    video.setAttribute('webkit-playsinline', 'true');
+    video.setAttribute('x5-playsinline', 'true');
+    video.setAttribute('x5-video-player-type', 'h5');
+    if (!native) {
+      video.crossOrigin = 'anonymous';
+    } else {
+      video.removeAttribute('crossorigin');
+    }
 
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
+    const seekLiveEdge = () => {
+      const hls = hlsRef.current;
+      if (hls && Number.isFinite(hls.liveSyncPosition)) {
+        video.currentTime = Math.max(0, hls.liveSyncPosition - 0.25);
+      } else if (video.seekable.length > 0) {
+        const end = video.seekable.end(video.seekable.length - 1);
+        video.currentTime = Math.max(0, end - 1.5);
+      }
+    };
+
+    const onReady = () => {
+      if (!videoRef.current) return;
+      setStreamWaiting(false);
+      setError(null);
+      seekLiveEdge();
+      videoRef.current.muted = muted;
+      videoRef.current.play().then(() => {
+        if (muted && !soundHintShownRef.current) {
+          soundHintShownRef.current = true;
+          showToast?.('Tap the speaker icon for sound', 'success');
+        }
+      }).catch((err) => {
+        console.error('[Live] autoplay blocked:', err);
+        setError('Tap unmute or interact to start playback');
+      });
+      if (!hasJoinedRef.current) {
+        hasJoinedRef.current = true;
+        joinLive();
+      }
+    };
+
+    let HlsLib;
+    try {
+      ({ default: HlsLib } = await import('hls.js'));
+    } catch {
+      HlsLib = null;
+    }
+
+    // iOS WebView: native HLS. Android app: hls.js (WebView MSE).
+    const preferNativeHls = Capacitor.getPlatform() === 'ios'
+      && video.canPlayType('application/vnd.apple.mpegurl');
+
+    if (!preferNativeHls && HlsLib?.isSupported()) {
+      const hls = new HlsLib({
+        enableWorker: !native,
         lowLatencyMode: true,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 6,
+        startPosition: -1,
+        backBufferLength: 30,
+        maxBufferLength: 6,
+        maxMaxBufferLength: 10,
+        liveSyncDurationCount: 2,
+        liveMaxLatencyDurationCount: 5,
+        liveBackBufferLength: 0,
+        maxLiveSyncPlaybackRate: 1.35,
+        xhrSetup: (xhr) => {
+          xhr.withCredentials = false;
+        },
       });
 
       hls.loadSource(url);
-      hls.attachMedia(videoRef.current);
+      hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (!videoRef.current) return;
-        setStreamWaiting(false);
-        setError(null);
-        videoRef.current.muted = muted;
-        videoRef.current.play().catch(() => {});
-        if (!hasJoinedRef.current) {
-          hasJoinedRef.current = true;
-          joinLive();
-        }
-      });
+      hls.on(HlsLib.Events.MANIFEST_PARSED, onReady);
 
-      hls.on(Hls.Events.ERROR, (event, data) => {
+      hls.on(HlsLib.Events.ERROR, (event, data) => {
         if (!data.fatal) return;
         const manifestWaitDetails = [
-          Hls.ErrorDetails.MANIFEST_LOAD_ERROR,
-          Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT,
-          Hls.ErrorDetails.LEVEL_LOAD_ERROR,
+          HlsLib.ErrorDetails.MANIFEST_LOAD_ERROR,
+          HlsLib.ErrorDetails.MANIFEST_LOAD_TIMEOUT,
+          HlsLib.ErrorDetails.LEVEL_LOAD_ERROR,
         ];
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && manifestWaitDetails.includes(data.details)) {
+        if (data.type === HlsLib.ErrorTypes.NETWORK_ERROR && manifestWaitDetails.includes(data.details)) {
           setStreamWaiting(true);
           setError(null);
           setTimeout(() => {
-            if (hlsRef.current) hls.startLoad();
+            if (hlsRef.current) hls.startLoad(-1);
           }, 2500);
           return;
         }
         switch (data.type) {
-          case Hls.ErrorTypes.NETWORK_ERROR:
+          case HlsLib.ErrorTypes.NETWORK_ERROR:
             setStreamWaiting(false);
             setError('Stream buffering — reconnecting…');
-            hls.startLoad();
+            hls.startLoad(-1);
             break;
-          case Hls.ErrorTypes.MEDIA_ERROR:
+          case HlsLib.ErrorTypes.MEDIA_ERROR:
             setStreamWaiting(false);
             hls.recoverMediaError();
             break;
@@ -163,19 +246,13 @@ function Live() {
       });
 
       hlsRef.current = hls;
-    } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-      videoRef.current.src = url;
-      videoRef.current.muted = muted;
-      videoRef.current.addEventListener('loadedmetadata', () => {
-        setStreamWaiting(false);
-        setError(null);
-        videoRef.current.play().catch(() => {});
-        if (!hasJoinedRef.current) {
-          hasJoinedRef.current = true;
-          joinLive();
-        }
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.muted = muted;
+      video.addEventListener('loadedmetadata', () => {
+        onReady();
       }, { once: true });
-      videoRef.current.addEventListener('error', () => {
+      video.addEventListener('error', () => {
         setStreamWaiting(true);
         setError(null);
         setTimeout(() => {
@@ -188,7 +265,7 @@ function Live() {
     } else {
       setError('HLS playback is not supported on this device.');
     }
-  }, [destroyPlayer, joinLive, muted]);
+  }, [destroyPlayer, joinLive, muted, showToast]);
 
   initHlsRef.current = initHls;
 
@@ -206,14 +283,8 @@ function Live() {
       setLiveStatus(data);
       setViewerCount(data.viewerCount || 0);
 
-      if (data.isLive && data.hlsUrl && videoRef.current) {
-        const hlsUrl = resolveStreamUrl(data.hlsUrl);
-        if (activeHlsUrlRef.current !== hlsUrl || !hlsRef.current) {
-          activeHlsUrlRef.current = hlsUrl;
-          hasJoinedRef.current = false;
-          setStreamWaiting(true);
-          initHlsRef.current?.(hlsUrl);
-        }
+      if (data.isLive && data.hlsUrl) {
+        tryAttachStream(data);
       } else if (!data.isLive) {
         destroyPlayer();
         hasJoinedRef.current = false;
@@ -227,7 +298,11 @@ function Live() {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [destroyPlayer, fetchWithAuth]);
+  }, [destroyPlayer, fetchWithAuth, tryAttachStream]);
+
+  useEffect(() => {
+    if (liveStatus?.isLive) tryAttachStream(liveStatus);
+  }, [liveStatus, tryAttachStream]);
 
   useEffect(() => {
     checkLiveStatus();
@@ -414,27 +489,37 @@ function Live() {
     });
   };
 
-  const onWheelZoom = useCallback((e) => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    setZoom((z) => Math.min(1.5, Math.max(1, z + (e.deltaY > 0 ? -0.06 : 0.06))));
-  }, []);
-
-  const onTouchStart = (e) => {
-    setTouchY0(e.touches[0].clientY);
-  };
-
-  const onTouchEnd = (e) => {
-    if (touchY0 == null) return;
-    const y = e.changedTouches[0].clientY;
-    const dy = touchY0 - y;
-    setTouchY0(null);
-    if (dy > 70) {
-      if (navigator.vibrate) try { navigator.vibrate(8); } catch { /* ignore */ }
-    }
-  };
-
   if (loading) {
+    if (liveStatus?.isLive) {
+      return (
+        <div className={`ik-live-stage ${controlsVisible ? '' : 'ik-live-stage--clean'}`}>
+          <div className="ik-live-video-layer">
+            <video ref={attachVideoRef} playsInline autoPlay muted={muted} />
+            {streamWaiting && !error && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
+                <RefreshCw size={28} className="animate-spin text-pink-400" />
+                <p className="text-sm font-semibold text-white">Connecting to live stream…</p>
+              </div>
+            )}
+          </div>
+          <div className="ik-live-overlay-top">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="ik-tap-spring flex h-10 w-10 items-center justify-center rounded-full text-white/75"
+              style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)' }}
+              aria-label="Back"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-600/90 px-3 py-1.5">
+              <Radio size={14} className="text-white" />
+              <span className="text-xs font-bold text-white">LIVE</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-5">
         <UltimaField intensity={0.8} fixed />
@@ -487,77 +572,21 @@ function Live() {
   const pulseGlow = Math.min(1, (viewerCount || 0) / 80 + displayViewers / 200);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
-      <UltimaField intensity={0.25} fixed />
-
-      <div className="ultima-content flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Header */}
+    <div className={`ik-live-stage ${controlsVisible ? '' : 'ik-live-stage--clean'}`}>
       <div
-        className="relative z-20 flex items-center justify-between px-4"
-        style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: '0.5rem' }}
-      >
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="ik-tap-spring flex h-10 w-10 items-center justify-center rounded-full text-white/75"
-          style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)' }}
-          aria-label="Back"
-        >
-          <ArrowLeft size={20} />
-        </button>
-
-        <div className="flex items-center gap-2">
-          <div
-            className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-600/90 px-3 py-1.5 shadow-[0_0_24px_rgba(239,68,68,0.45)] animate-live-ring"
-            style={{
-              boxShadow: `0 0 ${16 + pulseGlow * 24}px rgba(239, 68, 68, ${0.35 + pulseGlow * 0.2})`,
-            }}
-          >
-            <Radio size={14} className="text-white" />
-            <span className="text-xs font-bold text-white">LIVE</span>
-          </div>
-
-          <div className="ik-sparkle flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 font-semibold text-white shadow-glass backdrop-blur-xl">
-            <Users size={14} />
-            <span className="text-xs tabular-nums">{displayViewers}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative z-20 -mt-1 flex items-center gap-1.5 px-4 pb-2">
-        <span className="ultima-glass-gold flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gold-200">
-          <Crown size={12} className="fill-gold-300 text-gold-300" />
-          iKHWEZI · Admin
-        </span>
-      </div>
-
-      {/* Video */}
-      <div
-        ref={wrapRef}
-        className="relative w-full overflow-hidden bg-black"
-        style={{ touchAction: 'manipulation', height: '56vw', minHeight: 200, maxHeight: '58vh' }}
-        onWheel={onWheelZoom}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
+        className="ik-live-video-layer"
+        onClick={() => setControlsVisible((v) => !v)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setControlsVisible((v) => !v); }}
+        role="button"
+        tabIndex={0}
+        aria-label={controlsVisible ? 'Hide controls' : 'Show controls'}
       >
         <video
-          ref={videoRef}
-          className="h-full w-full bg-black object-contain transition-transform duration-200 ease-out"
-          style={{ transform: `scale(${zoom})` }}
+          ref={attachVideoRef}
           playsInline
           autoPlay
           muted={muted}
         />
-
-        <button
-          type="button"
-          onClick={toggleMute}
-          aria-label={muted ? 'Unmute' : 'Mute'}
-          className="ik-tap-spring absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full text-white"
-          style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
-        >
-          {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
-        </button>
 
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {reactions.map((reaction) => (
@@ -566,33 +595,101 @@ function Live() {
         </div>
 
         {streamWaiting && !error && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
             <RefreshCw size={28} className="animate-spin text-pink-400" />
             <p className="text-sm font-semibold text-white">Waiting for broadcast signal…</p>
-            <p className="text-xs text-white/50">Start OBS with your stream key — video appears when RTMP connects.</p>
+            <p className="text-xs text-white/50">Video appears when OBS connects.</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/90 px-6">
+            <WifiOff size={48} className="text-red-500" />
+            <p className="text-center text-white/70">{error}</p>
+            <button type="button" onClick={handleRetry} className="ultima-btn-supreme rounded-2xl px-6 py-3 text-sm">
+              <RefreshCw size={18} />
+              Retry
+            </button>
           </div>
         )}
       </div>
 
-      {error && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/90">
-          <WifiOff size={48} className="text-red-500" />
-          <p className="text-white/70">{error}</p>
-          <button type="button" onClick={handleRetry} className="ultima-btn-supreme rounded-2xl px-6 py-3 text-sm">
-            <RefreshCw size={18} />
-            Retry
-          </button>
-        </div>
-      )}
+      <div className={`ik-live-overlay-top ${controlsVisible ? '' : 'ik-live-overlay-top--minimal'}`}>
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="ik-tap-spring flex h-10 w-10 items-center justify-center rounded-full text-white/75"
+          style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)' }}
+          aria-label="Back"
+        >
+          <ArrowLeft size={20} />
+        </button>
 
-      {/* Controls panel */}
-      <div
-        className="ultima-page ultima-page--flush flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-black/95 px-4 pt-3"
-        style={{
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          paddingBottom: 'var(--ultima-nav-offset)',
-        }}
-      >
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-600/90 px-3 py-1.5 animate-live-ring"
+            style={{
+              boxShadow: `0 0 ${16 + pulseGlow * 24}px rgba(239, 68, 68, ${0.35 + pulseGlow * 0.2})`,
+            }}
+          >
+            <Radio size={14} className="text-white" />
+            <span className="text-xs font-bold text-white">LIVE</span>
+          </div>
+          {controlsVisible && (
+          <div className="ik-sparkle flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 font-semibold text-white backdrop-blur-xl">
+            <Users size={14} />
+            <span className="text-xs tabular-nums">{displayViewers}</span>
+          </div>
+          )}
+        </div>
+      </div>
+
+      <div className={`ik-live-actions ${controlsVisible ? '' : 'ik-live-actions--hidden'}`}>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setControlsVisible((v) => !v); }}
+          aria-label={controlsVisible ? 'Hide controls' : 'Show controls'}
+          className="ik-tap-spring flex h-11 w-11 items-center justify-center rounded-full text-white"
+          style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
+        >
+          {controlsVisible ? <Maximize2 size={18} /> : <Minimize2 size={18} />}
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); syncToLiveEdge(); }}
+          aria-label="Sync to live"
+          className="ik-tap-spring flex h-11 w-11 items-center justify-center rounded-full text-amber-200"
+          style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
+        >
+          <Zap size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+          aria-label={muted ? 'Unmute' : 'Mute'}
+          className="ik-tap-spring flex h-11 w-11 items-center justify-center rounded-full text-white"
+          style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
+        >
+          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
+      </div>
+
+      <div className={`ik-live-overlay-bottom ${controlsVisible ? '' : 'ik-live-overlay-bottom--hidden'}`}>
+        <span className="ultima-glass-gold inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gold-200">
+          <Crown size={12} className="fill-gold-300 text-gold-300" />
+          iKHWEZI · Admin
+        </span>
+
+        <div className="ultima-glass rounded-[20px] px-4 py-3">
+          <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">
+            {liveStatus.title || 'Live Stream'}
+          </h2>
+          <p className="mt-0.5 text-xs text-white/55 sm:text-sm">
+            iKHWEZI Live •{' '}
+            {liveStatus.startedAt ? new Date(liveStatus.startedAt).toLocaleTimeString() : 'recently'}
+          </p>
+        </div>
+
         <div className="flex justify-center">
           <ReactionsBar
             engagement={(viewerCount || 0) * 3}
@@ -607,7 +704,7 @@ function Live() {
           <button
             type="button"
             onClick={() => setShowChat(true)}
-            className="ik-tap-spring flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white"
+            className="ik-tap-spring flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-4 py-2.5 text-white backdrop-blur-md"
           >
             <MessageCircle size={14} />
             Chat
@@ -618,21 +715,11 @@ function Live() {
           <button
             type="button"
             onClick={() => setShowGifts(true)}
-            className="ik-tap-spring flex items-center gap-1.5 rounded-full border border-gold-400/30 bg-gold-500/12 px-4 py-2 text-gold-200"
+            className="ik-tap-spring flex items-center gap-1.5 rounded-full border border-gold-400/30 bg-gold-500/20 px-4 py-2.5 text-gold-200 backdrop-blur-md"
           >
             <Gift size={14} />
             Send Gift
           </button>
-        </div>
-
-        <div className="ultima-glass rounded-[20px] px-4 py-3">
-          <h2 className="text-xl font-black tracking-tight text-white">
-            {liveStatus.title || 'Live Stream'}
-          </h2>
-          <p className="mt-1 text-sm text-white/55">
-            iKHWEZI Live •{' '}
-            {liveStatus.startedAt ? new Date(liveStatus.startedAt).toLocaleTimeString() : 'recently'}
-          </p>
         </div>
       </div>
 
@@ -760,7 +847,6 @@ function Live() {
           context="interaction"
         />
       )}
-      </div>
     </div>
   );
 }

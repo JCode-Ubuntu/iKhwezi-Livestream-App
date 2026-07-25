@@ -47,10 +47,12 @@ function AppShell() {
     || showStoryCreator
     || showImagePostCreator;
 
+  const isLiveRoute = location.pathname === '/live';
+
   useEffect(() => {
-    setDockForcedHidden(createFlowOpen);
+    setDockForcedHidden(createFlowOpen || isLiveRoute);
     return () => setDockForcedHidden(false);
-  }, [createFlowOpen, setDockForcedHidden]);
+  }, [createFlowOpen, isLiveRoute, setDockForcedHidden]);
 
   const openCreateSheet = () => setShowCreateSheet(true);
 

@@ -8,8 +8,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Play Console: increment by 1 each release. Last uploaded: 30010 → next: 30011.
-        versionCode 30011
-        versionName "3.0.11"
+        versionCode 30013
+        versionName "3.0.13"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -594,7 +594,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 90;
+  z-index: 80;
   width: 100%;
   max-width: none;
   margin: 0;
@@ -1252,4 +1252,119 @@ body.ultima-nav-hidden {
 @keyframes ik-sparkle-pop {
   0%, 100% { opacity: 0.5; transform: scale(0.85) rotate(0deg); }
   50% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+}
+
+/* Immersive live broadcast viewer — fills phone + laptop viewport */
+.ik-live-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #000;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+}
+
+.ik-live-video-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #000;
+}
+
+.ik-live-video-layer video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.ik-live-overlay-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.5rem;
+  pointer-events: none;
+}
+
+.ik-live-overlay-top > * {
+  pointer-events: auto;
+}
+
+.ik-live-overlay-top--minimal {
+  opacity: 0.85;
+}
+
+.ik-live-overlay-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 2.5rem 1rem max(1rem, env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.55) 55%, transparent 100%);
+  pointer-events: none;
+}
+
+.ik-live-overlay-bottom > * {
+  pointer-events: auto;
+}
+
+.ik-live-actions {
+  position: absolute;
+  right: 0.75rem;
+  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 11rem);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.ik-live-actions--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(12px);
+}
+
+.ik-live-overlay-bottom--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(16px);
+}
+
+.ik-live-stage--clean .ik-live-overlay-bottom,
+.ik-live-stage--clean .ik-live-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ik-live-stage--clean .ik-live-overlay-top--minimal,
+.ik-live-stage--clean .ik-live-overlay-top {
+  opacity: 0.35;
+}
+
+.ik-live-overlay-bottom {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+@media (min-width: 768px) {
+  .ik-live-overlay-bottom {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .ik-live-actions {
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 9rem);
+  }
 }
