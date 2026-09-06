@@ -3244,6 +3244,16 @@ const initialize = async () => {
       });
     } catch (err) {
       console.warn('Guest cleanup could not start (non-fatal):', err.message);
+    }
+
+    // Automated encrypted backups: SQLite VACUUM INTO + integrity verify, or
+    // an honest skip line on Postgres (managed snapshots own that job).
+    // backend/jobs/backupJob.js — see docs/ops/backup-restore.md.
+    try {
+      const { buildBackupJob } = require('./jobs/backupJob');
+      buildBackupJob({ sequelize, logger: console }).start();
+    } catch (err) {
+      console.warn('Backup job could not start (non-fatal):', err.message);
     };
     
     // Ensure storage directories exist

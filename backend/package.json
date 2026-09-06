@@ -10,7 +10,8 @@
     "test:smoke": "node test-smoke.js",
     "seed": "node seed.js",
     "migrate": "node db/migrate.js",
-    "migrate:status": "node db/migrate.js status"
+    "migrate:status": "node db/migrate.js status",
+    "backup": "node scripts/backup.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

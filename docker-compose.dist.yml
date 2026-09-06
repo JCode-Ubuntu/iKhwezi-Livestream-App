@@ -23,6 +23,21 @@ services:
       # service name. DATABASE_SSL=false: private network, no TLS needed.
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ikhwezi}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-ikhwezi}
       - DATABASE_SSL=false
+      # ==================== REDIS (queues / cache) ====================
+      # Worker A's BullMQ wiring connects lazily via REDIS_URL and falls back
+      # to an in-process queue when it is unset (dev outside compose).
+      - REDIS_URL=redis://redis:6379
+      # ==================== AUTOMATED ENCRYPTED BACKUPS ====================
+      # backend/jobs/backupJob.js writes timestamped, integrity-verified,
+      # optionally encrypted backups here on boot + every BACKUP_INTERVAL_HOURS.
+      # The `backup-storage-prod` volume keeps them across container
+      # replacement. BACKUP_ENCRYPTION_KEY has no default — empty = plain
+      # files, named `.UNENCRYPTED` with a loud log line.
+      - BACKUP_DIR=/app/storage/backups
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:-}
+      - BACKUP_KEEP=${BACKUP_KEEP:-7}
+      - BACKUP_INCLUDE_MEDIA=${BACKUP_INCLUDE_MEDIA:-true}
+      - BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-24}
       # Meeting A/V (LiveKit) — all four or none; see docker-compose.yml notes.
       - LIVEKIT_URL=${LIVEKIT_URL:-}
       - LIVEKIT_PUBLIC_URL=${LIVEKIT_PUBLIC_URL:-}
@@ -31,11 +46,17 @@ services:
       - LOG_LEVEL=info
     volumes:
       - backend-storage-prod:/app/storage
+      # Backups on their own volume: pruning old backups can never touch the
+      # live DB/uploads in backend-storage-prod, and a backend-storage wipe
+      # leaves backups intact.
+      - backup-storage-prod:/app/storage/backups
       - backend-logs-prod:/app/logs
     depends_on:
       nginx-rtmp:
         condition: service_started
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: always
     networks:
@@ -84,6 +105,34 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+
+  # ==================== REDIS — queues / cache ====================
+  # Same AOF-persisted Redis as docker-compose.yml; backend gates on its
+  # healthcheck (condition: service_healthy above). No host port in the
+  # dist file (matches postgres: private to the compose network).
+  redis:
+    image: redis:8-alpine
+    container_name: ikhwezi-redis-prod
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data-prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: always
+    networks:
+      - ikhwezi-network-prod
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
   # ==================== DATABASE — PostgreSQL ====================
   # Backend boot runs the versioned migrations (backend/migrations/) against
@@ -203,6 +252,10 @@ volumes:
   hls-storage-prod:
     driver: local
   postgres-data-prod:
+    driver: local
+  redis-data-prod:
+    driver: local
+  backup-storage-prod:
     driver: local
 
 networks:

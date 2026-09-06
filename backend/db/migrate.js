@@ -30,6 +30,11 @@ const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 const LEGACY_BASELINE_TABLE = 'Users';
 
 function createUmzug({ sequelize, logger = console } = {}) {
+  // `logger: false` = quiet mode (tests): give umzug inert sinks instead of
+  // passing the raw boolean through (umzug calls logger.info etc. blindly).
+  const umzugLogger = logger
+    ? logger
+    : { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
   const umzug = new Umzug({
     migrations: {
       // umzug resolves each *.js via require() (defaultResolver) — names in
@@ -38,7 +43,7 @@ function createUmzug({ sequelize, logger = console } = {}) {
     },
     context: sequelize.getQueryInterface(),
     storage: new SequelizeStorage({ sequelize }),
-    logger,
+    logger: umzugLogger,
   });
   return umzug;
 }

@@ -40,6 +40,30 @@ http {
     tcp_nopush on;
     default_type application/octet-stream;
 
+    # ---- HLS delivery hardening -------------------------------------------
+    # Cache split, single source of truth (no Expires header: it would add a
+    # second clock-dependent truth next to Cache-Control and multiplies drift
+    # bugs on wrong-clocked clients; browsers honor Cache-Control alone).
+    #   .m3u8 playlists — always "no-cache": the live window must be current
+    #                     (a cached playlist = frozen picture).
+    #   .ts segments    — write-once files (nginx-rtmp never reuses a segment
+    #                     index, so a URL's bytes NEVER change) → safe to
+    #                     cache "immutable" for a long window. A lagging
+    #                     player that re-requests a pruned segment is BETTER
+    #                     served by a warm cache than by a 404.
+    map $uri $hls_cache_control {
+        ~\.m3u8$   "no-cache";
+        default    "public, max-age=3600, immutable";
+    }
+
+    # Compress ONLY the text playlists (application/vnd.apple.mpegurl, the
+    # exact Content-Type the /hls location assigns). MPEG-TS segments are
+    # already-compressed media — gzipping them burns CPU for ~0% gain.
+    gzip on;
+    gzip_types application/vnd.apple.mpegurl;
+    gzip_vary on;
+    gzip_min_length 100;
+
     server {
         listen 8080;
         
@@ -61,7 +85,7 @@ http {
                 return 204;
             }
             
-            add_header Cache-Control no-cache always;
+            add_header Cache-Control $hls_cache_control always;
             add_header Access-Control-Allow-Origin * always;
             add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS' always;
             add_header Access-Control-Allow-Headers 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' always;

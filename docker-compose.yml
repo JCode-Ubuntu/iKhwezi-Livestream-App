@@ -46,6 +46,24 @@ services:
       # beyond a local machine (this repo is public).
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ikhwezi}:${POSTGRES_PASSWORD:-ikhwezi-dev-password-change-me}@postgres:5432/${POSTGRES_DB:-ikhwezi}
       - DATABASE_SSL=false
+      # ==================== REDIS (queues / cache) ====================
+      # Worker A's BullMQ wiring reads REDIS_URL lazily and falls back to an
+      # in-process queue when it is unset — passing it here simply makes the
+      # compose Redis reachable. Outside compose (bare `npm run dev`), leave
+      # REDIS_URL unset and no Redis is needed.
+      - REDIS_URL=redis://redis:6379
+      # ==================== AUTOMATED ENCRYPTED BACKUPS ====================
+      # backend/jobs/backupJob.js writes timestamped, integrity-verified,
+      # optionally encrypted backups here on boot + every BACKUP_INTERVAL_HOURS.
+      # The `backup-storage` volume (backend volumes below) makes them survive
+      # container replacement. BACKUP_ENCRYPTION_KEY is deliberately NOT given
+      # a default here — an empty value means plain (unencrypted) files, which
+      # the job names `.UNENCRYPTED` and logs loudly. Set it via .env.
+      - BACKUP_DIR=/app/storage/backups
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:-}
+      - BACKUP_KEEP=${BACKUP_KEEP:-7}
+      - BACKUP_INCLUDE_MEDIA=${BACKUP_INCLUDE_MEDIA:-true}
+      - BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-24}
       # ==================== MEETING A/V (LiveKit SFU) ====================
       # When all four are set, meetings get real audio/video (tokens are
       # minted server-side after membership+live checks; capabilities report
@@ -61,9 +79,38 @@ services:
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
     volumes:
       - backend-storage:/app/storage
+      # Backups are on their own volume so a `backup-storage` prune is
+      # surgical and never touches the live DB/uploads in backend-storage.
+      - backup-storage:/app/storage/backups
     depends_on:
       - nginx-rtmp
       - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - ikhwezi-network
+
+  # ==================== REDIS — queues / cache ====================
+  # Single-instance, AOF-persisted Redis for the backend's queue/cache layer
+  # (worker A's BullMQ wiring connects lazily via REDIS_URL on the backend
+  # service and falls back to an in-process queue when REDIS_URL is not set,
+  # so this service is safe to start but also optional at runtime).
+  # Port exposed on the host in the DEV file only (for redis-cli inspection);
+  # 6379 was free on this Windows dev host — override via .env REDIS_HOST_PORT.
+  redis:
+    image: redis:8-alpine
+    container_name: ikhwezi-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
     networks:
       - ikhwezi-network
@@ -171,6 +218,8 @@ volumes:
   backend-storage:
   hls-storage:
   postgres-data:
+  redis-data:
+  backup-storage:
 
 networks:
   ikhwezi-network:
