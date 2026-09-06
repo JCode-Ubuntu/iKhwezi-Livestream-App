@@ -121,7 +121,7 @@ const { defineCoreModels } = require('./models');
 const coreModels = defineCoreModels(sequelize, DataTypes);
 const {
   User, Video, Like, VideoSave, VideoRepost, Comment, Follow, Story, StoryView,
-  StoryComment, Challenge, WatchParty, WatchPartyParticipant, Star, DirectMessage,
+  StoryComment, Challenge, Star, DirectMessage,
   TextPost, PostLike, Points, Wallet, Subscription, GiftLog, LiveStatus, AuditLog,
   ProcessedStripeEvent, Ad,
 } = coreModels;
@@ -1845,78 +1845,6 @@ app.post('/api/challenges', authenticate, requireRegistered, async (req, res) =>
   }
 });
 
-// ==================== WATCH PARTY ROUTES ====================
-
-app.get('/api/watch-parties', authenticate, async (req, res) => {
-  try {
-    const watchParties = await WatchParty.findAll({
-      where: { isActive: true },
-      include: [
-        { model: User, as: 'host', attributes: ['id', 'username', 'displayName', 'avatar'] },
-        { model: WatchPartyParticipant, as: 'participants', include: [{ model: User, attributes: ['id', 'username'] }] }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-    res.json(watchParties);
-  } catch (err) {
-    console.error('Watch parties fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch watch parties' });
-  }
-});
-
-app.post('/api/watch-parties', authenticate, requireRegistered, async (req, res) => {
-  try {
-    const { name, streamUrl, maxParticipants } = req.body;
-    
-    const watchParty = await WatchParty.create({
-      hostId: req.user.id,
-      name,
-      streamUrl,
-      maxParticipants: maxParticipants || 8
-    });
-    
-    res.json(watchParty);
-  } catch (err) {
-    console.error('Watch party creation error:', err);
-    res.status(500).json({ error: 'Failed to create watch party' });
-  }
-});
-
-app.post('/api/watch-parties/:id/join', authenticate, requireRegistered, async (req, res) => {
-  try {
-    const watchParty = await WatchParty.findByPk(req.params.id);
-    if (!watchParty || !watchParty.isActive) {
-      return res.status(404).json({ error: 'Watch party not found' });
-    }
-    
-    const existing = await WatchPartyParticipant.findOne({
-      where: { watchPartyId: watchParty.id, userId: req.user.id }
-    });
-    
-    if (existing) {
-      return res.json({ message: 'Already joined' });
-    }
-    
-    const participantCount = await WatchPartyParticipant.count({
-      where: { watchPartyId: watchParty.id }
-    });
-    
-    if (participantCount >= watchParty.maxParticipants) {
-      return res.status(400).json({ error: 'Watch party is full' });
-    }
-    
-    await WatchPartyParticipant.create({
-      watchPartyId: watchParty.id,
-      userId: req.user.id
-    });
-    
-    res.json({ message: 'Joined watch party' });
-  } catch (err) {
-    console.error('Join watch party error:', err);
-    res.status(500).json({ error: 'Failed to join watch party' });
-  }
-});
-
 // ==================== ADMIN ROUTES ====================
 
 app.post('/api/admin/verify', requireAdmin, async (req, res) => {
@@ -2953,10 +2881,17 @@ io.on('connection', (socket) => {
 
 // ==================== INITIALIZE ====================
 
+// The four fixups below are LEGACY V1 SQLite repairs (PRAGMA / ALTER TABLE
+// ADD COLUMN / duplicate-row cleanup on old pre-migration files). They are
+// dead code for migration-built databases — those are created with the full
+// column set and composite unique indexes from day one (see
+// migrations/20260906-0001-initial-v2-schema.js). initialize() runs them
+// ONLY when the migrator baseline-adopts an existing legacy database.
+
 const ensureLiveStatusColumns = async () => {
-  // On a fresh database the table does not exist yet — sync() creates it with
-  // the full column set, so there is nothing to repair. (Previously this threw
-  // "no such table" and crash-looped every fresh deploy.)
+  // On a fresh database the table does not exist yet — the initial migration
+  // creates it with the full column set, so there is nothing to repair.
+  // (Previously this threw "no such table" and crash-looped every fresh deploy.)
   const [columns] = await sequelize.query('PRAGMA table_info(LiveStatuses)');
   if (!columns || columns.length === 0) return;
   const existing = new Set(columns.map((col) => String(col.name || '').toLowerCase()));
@@ -3196,20 +3131,37 @@ async function ensureDemoMedia() {
 const initialize = async () => {
   try {
     await sequelize.authenticate();
-    // The boot-time fixups below are legacy SQLite repairs (PRAGMA / ALTER TABLE
-    // ADD COLUMN on a live file). They are not migrations and are skipped on
-    // PostgreSQL, where the schema must be managed with real migrations.
     const isSqlite = sequelize.getDialect() === 'sqlite';
-    if (isSqlite) {
+
+    // Versioned migrations replace sequelize.sync(). The runner
+    // (db/migrate.js) creates the full schema on fresh databases and
+    // BASELINE-ADOPTs legacy pre-migration databases (records the migration
+    // into SequelizeMeta without re-running DDL, so old dev files stay
+    // bootable). See backend/migrations/ and db/migrate.js.
+    const { migrate } = require('./db/migrate');
+    const { executed, adoptedBaseline } = await migrate({
+      sequelize,
+      logger: { info: () => {}, warn: console.warn, error: console.error },
+    });
+
+    // Legacy V1 SQLite repair fixups. On migration-built databases these are
+    // obsolete — the initial migration already creates every table with the
+    // full column set, deduped uniqueness enforced by composite indexes, and
+    // no duplicate-prone rows can exist in an empty file. They only still
+    // matter for basesline-adopted legacy SQLite files old dev/production
+    // machines may carry, so they run ONLY on that path (guarded inside the
+    // adopt branch of the migrator outcome).
+    if (isSqlite && adoptedBaseline) {
       await deduplicateUsernames();
       await ensureGuestColumn();
       await ensureLiveStatusColumns();
+      await enforceInteractionUniqueness();
     }
-    // sync() only CREATEs missing tables (new Group*/Meeting* tables land here);
-    // it never alters or drops existing ones.
-    await sequelize.sync();
-    if (isSqlite) await enforceInteractionUniqueness();
-    console.log(`Database synchronized (${sequelize.getDialect()})`);
+    if (executed.length) {
+      console.log(`Migrations applied (${sequelize.getDialect()}): ${executed.join(', ')}`);
+    } else {
+      console.log(`Database up to date (${sequelize.getDialect()}, migrations verified)`);
+    }
 
     // Guest-account hygiene: purge stale @guest.local rows (inactive 14+ days,
     // no owned content) with their Wallet/Points companions, or idle rows

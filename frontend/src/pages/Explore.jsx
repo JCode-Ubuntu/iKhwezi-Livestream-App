@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, Eye, TrendingUp, Hash, Radio, ChevronRight } from 'lucide-react';
+import { Search, X, Eye, TrendingUp, Hash, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import { resolveMediaUrl } from '../config/appConfig';
@@ -175,10 +175,9 @@ function Explore() {
               <Hash size={18} className="text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-white">Challenges &amp; Watch Parties</p>
-              <p className="truncate text-xs text-white/45">Start a trend or watch together, live</p>
+              <p className="text-sm font-bold text-white">Challenges &amp; Creators</p>
+              <p className="truncate text-xs text-white/45">Start a trend, inspire the community</p>
             </div>
-            <Radio size={13} className="text-pink-400" />
             <ChevronRight size={16} className="text-white/30" />
           </button>
         )}

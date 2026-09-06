@@ -30,7 +30,7 @@ const DEFAULT_IDLE_DAYS = 14;
 function buildGuestCleanupJob({ sequelize, models, logger = console }) {
   const {
     User, Like, VideoSave, VideoRepost, Comment, StoryView, StoryComment,
-    WatchPartyParticipant, PostLike, DirectMessage, Follow, GiftLog,
+    PostLike, DirectMessage, Follow, GiftLog,
     Subscription, Star, Video, Story, TextPost, Points, Wallet,
     GroupMember, GroupBan, GroupMessage, MeetingParticipant,
   } = models;
@@ -45,7 +45,6 @@ function buildGuestCleanupJob({ sequelize, models, logger = console }) {
     [Comment, 'userId'],
     [StoryView, 'viewerId'],
     [StoryComment, 'userId'],
-    [WatchPartyParticipant, 'userId'],
     [PostLike, 'userId'],
     [Star, 'userId'],
     [DirectMessage, 'senderId'],

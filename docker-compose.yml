@@ -35,6 +35,17 @@ services:
       - RTMP_PUBLIC_SERVER=rtmp://ikhwezi.site:1935/live
       - HLS_HOST=https://ikhwezi.site/hls
       - HLS_URL=https://ikhwezi.site/hls
+      # ==================== DATABASE (PostgreSQL) ====================
+      # The backend runs migrations on boot (backend/db/migrate.js). With
+      # DATABASE_URL set it uses PostgreSQL; left empty it falls back to
+      # SQLite at /app/storage/ikhwezi.db (local dev without postgres).
+      # Hostname `postgres` resolves on the compose network only.
+      # DATABASE_SSL=false: the connection is inside the private compose
+      # network, so TLS is unnecessary (would fail without certs anyway).
+      # Safe dev default password — CHANGE IT in your .env for anything
+      # beyond a local machine (this repo is public).
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ikhwezi}:${POSTGRES_PASSWORD:-ikhwezi-dev-password-change-me}@postgres:5432/${POSTGRES_DB:-ikhwezi}
+      - DATABASE_SSL=false
       # ==================== MEETING A/V (LiveKit SFU) ====================
       # When all four are set, meetings get real audio/video (tokens are
       # minted server-side after membership+live checks; capabilities report
@@ -52,6 +63,36 @@ services:
       - backend-storage:/app/storage
     depends_on:
       - nginx-rtmp
+      - postgres
+    restart: unless-stopped
+    networks:
+      - ikhwezi-network
+
+  # ==================== DATABASE — PostgreSQL ====================
+  # Managed-by-compose Postgres for the backend. The backend container runs
+  # versioned migrations (backend/migrations/) on boot; DELETE the volume
+  # and it rebuilds cleanly on Postgres like it does on SQLite.
+  # Post 5432 is exposed on the host in the DEV file only (for
+  # psql/pgAdmin/local smoke tests); the dist file keeps it private.
+  postgres:
+    image: postgres:16-alpine
+    container_name: ikhwezi-postgres
+    environment:
+      # Safe dev defaults; override via .env. Set real credentials
+      # anywhere beyond a local machine (this repo is public).
+      - POSTGRES_USER=${POSTGRES_USER:-ikhwezi}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ikhwezi-dev-password-change-me}
+      - POSTGRES_DB=${POSTGRES_DB:-ikhwezi}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ikhwezi} -d ${POSTGRES_DB:-ikhwezi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
     networks:
       - ikhwezi-network
@@ -129,6 +170,7 @@ services:
 volumes:
   backend-storage:
   hls-storage:
+  postgres-data:
 
 networks:
   ikhwezi-network:

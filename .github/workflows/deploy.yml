@@ -6,9 +6,57 @@ on:
       - master
   workflow_dispatch:
 
+# One deploy at a time: an in-flight deploy finishes (killing it mid-SSH
+# would leave the server half-deployed), and any queued runs collapse to
+# only the most recent — stale deploys never run.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
+  quality-gate:
+    name: Quality Gate (backend tests, frontend tests & build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ── Backend: install → test ─────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test
+
+      # ── Frontend: install → test → build ───────────────────────────────
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
   deploy:
     name: SSH Deploy
+    needs: quality-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

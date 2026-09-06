@@ -16,6 +16,13 @@ services:
       - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
       - RTMP_SERVER=${RTMP_SERVER:-rtmp://nginx-rtmp-prod:1935/live}
       - HLS_URL=${HLS_URL:-http://localhost:8081/hls}
+      # ==================== DATABASE (PostgreSQL) ====================
+      # Backend runs versioned migrations on boot (backend/db/migrate.js).
+      # DATABASE_URL set → PostgreSQL; unset → SQLite fallback
+      # (/app/storage/ikhwezi.db). Hostname `postgres` is the compose-network
+      # service name. DATABASE_SSL=false: private network, no TLS needed.
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ikhwezi}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-ikhwezi}
+      - DATABASE_SSL=false
       # Meeting A/V (LiveKit) — all four or none; see docker-compose.yml notes.
       - LIVEKIT_URL=${LIVEKIT_URL:-}
       - LIVEKIT_PUBLIC_URL=${LIVEKIT_PUBLIC_URL:-}
@@ -26,7 +33,10 @@ services:
       - backend-storage-prod:/app/storage
       - backend-logs-prod:/app/logs
     depends_on:
-      - nginx-rtmp
+      nginx-rtmp:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     restart: always
     networks:
       - ikhwezi-network-prod
@@ -74,6 +84,39 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+
+  # ==================== DATABASE — PostgreSQL ====================
+  # Backend boot runs the versioned migrations (backend/migrations/) against
+  # this instance; the backend service waits for its healthcheck
+  # (condition: service_healthy above).
+  postgres:
+    image: postgres:16-alpine
+    container_name: ikhwezi-postgres-prod
+    environment:
+      # POSTGRES_PASSWORD is REQUIRED (compose-level). USER/DB have safe
+      # defaults matching the backend DATABASE_URL.
+      - POSTGRES_USER=${POSTGRES_USER:-ikhwezi}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-ikhwezi}
+    volumes:
+      - postgres-data-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ikhwezi} -d ${POSTGRES_DB:-ikhwezi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: always
+    networks:
+      - ikhwezi-network-prod
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
 
   nginx-rtmp:
     build:
@@ -158,6 +201,8 @@ volumes:
   backend-logs-prod:
     driver: local
   hls-storage-prod:
+    driver: local
+  postgres-data-prod:
     driver: local
 
 networks:

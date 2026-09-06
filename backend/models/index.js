@@ -108,21 +108,6 @@ function defineCoreModels(sequelize, DataTypes) {
     createdBy: { type: DataTypes.UUID, allowNull: false }
   });
 
-  const WatchParty = sequelize.define('WatchParty', {
-    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    hostId: { type: DataTypes.UUID, allowNull: false },
-    name: { type: DataTypes.STRING, allowNull: false },
-    streamUrl: { type: DataTypes.STRING, allowNull: false },
-    isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-    maxParticipants: { type: DataTypes.INTEGER, defaultValue: 8 }
-  });
-
-  const WatchPartyParticipant = sequelize.define('WatchPartyParticipant', {
-    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    watchPartyId: { type: DataTypes.UUID, allowNull: false },
-    userId: { type: DataTypes.UUID, allowNull: false }
-  });
-
   const Star = sequelize.define('Star', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     userId: { type: DataTypes.UUID, allowNull: false },
@@ -280,12 +265,6 @@ function defineCoreModels(sequelize, DataTypes) {
   User.hasMany(Challenge, { foreignKey: 'createdBy', as: 'challenges' });
   Challenge.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
 
-  User.hasMany(WatchParty, { foreignKey: 'hostId', as: 'watchParties' });
-  WatchParty.belongsTo(User, { foreignKey: 'hostId', as: 'host' });
-  WatchParty.hasMany(WatchPartyParticipant, { foreignKey: 'watchPartyId', as: 'participants' });
-  WatchPartyParticipant.belongsTo(WatchParty, { foreignKey: 'watchPartyId' });
-  WatchPartyParticipant.belongsTo(User, { foreignKey: 'userId' });
-
   User.hasMany(TextPost, { foreignKey: 'userId', as: 'textPosts' });
   TextPost.belongsTo(User, { foreignKey: 'userId', as: 'author' });
   TextPost.hasMany(PostLike, { foreignKey: 'postId', as: 'likes' });
@@ -302,7 +281,7 @@ function defineCoreModels(sequelize, DataTypes) {
 
   return {
     User, Video, Like, VideoSave, VideoRepost, Comment, Follow, Story, StoryView,
-    StoryComment, Challenge, WatchParty, WatchPartyParticipant, Star, DirectMessage,
+    StoryComment, Challenge, Star, DirectMessage,
     TextPost, PostLike, Points, Wallet, Subscription, GiftLog, LiveStatus, AuditLog,
     ProcessedStripeEvent, Ad,
   };

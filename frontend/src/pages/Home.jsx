@@ -636,7 +636,7 @@ function Home() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-white">Join Community</p>
-              <p className="truncate text-xs text-white/45">Challenges, watch parties &amp; creators</p>
+              <p className="truncate text-xs text-white/45">Challenges &amp; creators</p>
             </div>
             <ChevronRight size={18} className="shrink-0 text-gold-300/70" />
           </button>
