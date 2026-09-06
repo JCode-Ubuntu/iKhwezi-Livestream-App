@@ -40,7 +40,10 @@ jobs:
               COMPOSE="docker-compose"
             fi
 
-            $COMPOSE build --no-cache frontend backend
-            $COMPOSE up -d --force-recreate frontend backend
+            # nginx-rtmp is now built from ./nginx (renders the RTMP webhook
+            # secret into nginx.conf at start), so it must be rebuilt and
+            # recreated alongside the app services.
+            $COMPOSE build --no-cache frontend backend nginx-rtmp
+            $COMPOSE up -d --force-recreate frontend backend nginx-rtmp
             docker image prune -f
             echo "✅ Deployed $(git rev-parse --short HEAD) at $(date)"

@@ -206,8 +206,11 @@
   margin-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
-/* ── Mobile Home: single viewport, no scroll ── */
-@media (max-width: 639px) {
+/* ── Mobile Home: single viewport, no scroll ──
+   Must be the exact complement of Tailwind's `sm` (min-width: 640px).
+   Using 639px left a dead zone for fractional viewports (e.g. 639.2px),
+   where neither layout applied and the Home page collapsed. */
+@media (max-width: 639.98px) {
   .home-page-shell.home-page-shell--locked.ultima-page {
     overflow-y: hidden !important;
     padding-bottom: 0;

@@ -1,489 +1,285 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Send, MessageCircle, Search, Edit, X, UserCircle2, Plus, Phone, Video } from 'lucide-react';
+import { ArrowLeft, Search, X, MessageCircle, Users, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { useCall } from '../context/CallContext';
+import { useCreateFlow } from '../context/CreateFlowContext';
 import UltimaField from '../ultima/UltimaField';
 import GuestPrompt from '../components/GuestPrompt';
 import { resolveMediaUrl } from '../config/appConfig';
+import { useGroupsApi } from '../hooks/useGroupsApi';
+import GroupAvatar from '../components/groups/GroupAvatar';
+import DmThread from '../components/messages/DmThread';
+import GroupChat from './GroupChat';
+import GroupInfo from './GroupInfo';
 
-/* ── New Conversation Search Modal ── */
-function NewConversationModal({ onSelect, onClose, fetchWithAuth }) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const debounceRef = useRef(null);
+/**
+ * Messages
+ * ├── Direct   — 1:1 conversations (DmThread)
+ * └── Groups   — group conversations (GroupChat / GroupInfo)
+ *
+ * Starting something new (a DM, a group, a meeting) is NOT done here — that is
+ * the CREATE hub's job. This page receives hand-offs via router state:
+ *   { openUser }                    → open a DM thread
+ *   { openGroupId, openMeetingId? } → open a group chat (optionally a meeting)
+ * and consumes the state so back/forward navigation does not replay it.
+ */
 
-  const doSearch = useCallback(async (q) => {
-    if (!q.trim()) { setResults([]); return; }
-    setSearching(true);
-    try {
-      const res = await fetchWithAuth(`/users/search?q=${encodeURIComponent(q)}&limit=20`);
-      if (res.ok) {
-        const data = await res.json();
-        setResults(Array.isArray(data) ? data : []);
-      }
-    } catch {}
-    finally { setSearching(false); }
-  }, [fetchWithAuth]);
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'direct', label: 'Direct' },
+  { id: 'groups', label: 'Groups' },
+  { id: 'unread', label: 'Unread' },
+];
 
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(query), 350);
-    return () => clearTimeout(debounceRef.current);
-  }, [query, doSearch]);
-
+function FilterBar({ active, onChange, unreadCount }) {
   return (
-    <div
-      className="fixed inset-0 z-[400] flex flex-col bg-[#050816]/95 backdrop-blur-xl"
-      style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b border-white/8 px-4 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', flexShrink: 0 }}
-        >
-          <X size={18} />
-        </button>
-        <h2 className="text-base font-bold text-white">New Message</h2>
-      </div>
-
-      {/* Search box */}
-      <div className="px-4 py-3 border-b border-white/8">
-        <div className="flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2.5 border border-white/10 focus-within:border-pink-400/50 transition-colors">
-          <Search size={15} className="flex-shrink-0 text-white/40" />
-          <input
-            autoFocus
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search people…"
-            className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
-          />
-          {searching && (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-pink-400 border-t-transparent flex-shrink-0" />
-          )}
-        </div>
-      </div>
-
-      {/* Results */}
-      <div className="flex-1 overflow-y-auto">
-        {results.length === 0 && query.trim() && !searching && (
-          <div className="flex flex-col items-center justify-center py-16 gap-2 text-white/40">
-            <UserCircle2 size={40} />
-            <p className="text-sm">No users found</p>
-          </div>
-        )}
-        {results.length === 0 && !query.trim() && (
-          <div className="flex flex-col items-center justify-center py-16 gap-2 text-white/40">
-            <Search size={36} />
-            <p className="text-sm">Search for a person to message</p>
-          </div>
-        )}
-        {results.map(u => (
-          <button
-            key={u.id}
-            type="button"
-            onClick={() => { onSelect(u); onClose(); }}
-            className="flex w-full items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/8 transition-colors border-b border-white/4 text-left"
-          >
-            <div className="avatar flex-shrink-0" style={{ width: 44, height: 44, fontSize: 16 }}>
-              {u.avatar ? <img src={resolveMediaUrl(u.avatar)} alt="" className="w-full h-full object-cover rounded-full" /> : u.username?.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-white truncate">{u.displayName || u.username}</p>
-              <p className="text-xs text-white/40 truncate">@{u.username}</p>
-            </div>
-            <Send size={16} className="text-pink-400 flex-shrink-0" />
+    <div className="flex flex-shrink-0 items-center gap-2 overflow-x-auto px-4 py-2 border-b border-white/8" style={{ scrollbarWidth: 'none' }}>
+      {FILTERS.map((f) => {
+        const isActive = active === f.id;
+        const badge = f.id === 'unread' && unreadCount > 0 ? unreadCount : null;
+        return (
+          <button key={f.id} type="button" onClick={() => onChange(f.id)}
+            className={`flex flex-shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors ${
+              isActive ? 'bg-gradient-to-br from-pink-500 to-[#C13584] text-white' : 'bg-white/6 text-white/55 border border-white/10'
+            }`}>
+            {f.label}
+            {badge != null && <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white/20 px-1 text-[10px]">{badge > 99 ? '99+' : badge}</span>}
           </button>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }
 
-/* ── Conversation list ── */
-function ConversationList({ conversations, onSelect, loading, onNewMsg }) {
-  const [search, setSearch] = useState('');
-  const filtered = conversations.filter(c =>
-    (c.user?.username || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.user?.displayName || '').toLowerCase().includes(search.toLowerCase())
-  );
+function ThreadList({ threads, onSelect, loading, error, onRetry, onCreate, search, setSearch }) {
+  const filtered = threads.filter((t) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    if (t.type === 'group') return (t.group?.name || '').toLowerCase().includes(q);
+    return (t.user?.username || '').toLowerCase().includes(q) || (t.user?.displayName || '').toLowerCase().includes(q);
+  });
 
   return (
     <div className="flex flex-col h-full" style={{ position: 'relative' }}>
-      <div className="px-4 py-3 border-b border-white/8">
+      <div className="px-4 py-2 border-b border-white/8">
         <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 border border-white/8">
           <Search size={15} className="text-white/40" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search conversations…"
-            className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
-          />
-          {search && (
-            <button type="button" onClick={() => setSearch('')} className="text-white/30 hover:text-white/60">
-              <X size={14} />
-            </button>
-          )}
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conversations…" className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none" />
+          {search && <button type="button" onClick={() => setSearch('')} className="text-white/30 hover:text-white/60"><X size={14} /></button>}
         </div>
       </div>
 
-      <div
-        className="ultima-nav-scroll flex-1 overflow-y-auto"
-        style={{ paddingBottom: 'calc(var(--ultima-nav-offset, 4rem) + 4.5rem)' }}
-      >
+      <div className="ultima-nav-scroll flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(var(--ultima-nav-offset, 4rem) + 4.5rem)' }}>
         {loading && (
-          <div className="flex justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-pink-400 border-t-transparent" />
+          <div className="flex justify-center py-8"><div className="h-6 w-6 animate-spin rounded-full border-2 border-pink-400 border-t-transparent" /></div>
+        )}
+        {!loading && error && (
+          <div className="mx-4 mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-300">
+            {error}
+            <button type="button" onClick={onRetry} className="ml-3 font-semibold underline">Retry</button>
           </div>
         )}
-        {!loading && filtered.length === 0 && (
+        {!loading && !error && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-8">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-pink-500/15 to-gold-500/15 border border-pink-400/20">
               <MessageCircle size={30} className="text-pink-300/70" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white/60 mb-1">No conversations yet</p>
-              <p className="text-xs text-white/35">Tap the pencil icon to start a chat</p>
+              <p className="text-sm font-semibold text-white/60 mb-1">{search.trim() ? 'No matches' : 'No conversations yet'}</p>
+              <p className="text-xs text-white/35">
+                {search.trim() ? 'Try a different name' : 'Use Create to start a chat or a group'}
+              </p>
             </div>
+            {!search.trim() && (
+              <button type="button" onClick={onCreate} className="ik-btn ik-btn-primary ik-btn-pill flex items-center gap-2 px-5 py-2.5 text-sm font-bold">
+                <Plus size={16} /> Create
+              </button>
+            )}
           </div>
         )}
-        {filtered.map(conv => (
-          <button
-            key={conv.user?.id}
-            type="button"
-            onClick={() => onSelect(conv.user)}
-            className="flex w-full items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/8 transition-colors border-b border-white/4 text-left"
-          >
-            <div className="avatar flex-shrink-0" style={{ width: 48, height: 48, fontSize: 17 }}>
-              {conv.user?.avatar
-                ? <img src={resolveMediaUrl(conv.user.avatar)} alt="" className="w-full h-full object-cover rounded-full" />
-                : conv.user?.username?.charAt(0).toUpperCase()}
-            </div>
+        {filtered.map((t) => (
+          <button key={t.type === 'group' ? `g-${t.group.id}` : `d-${t.user.id}`} type="button" onClick={() => onSelect(t)}
+            className="flex w-full items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/8 transition-colors border-b border-white/4 text-left">
+            {t.type === 'group' ? (
+              <GroupAvatar group={t.group} members={t.members || []} size={48} />
+            ) : (
+              <div className="avatar flex-shrink-0" style={{ width: 48, height: 48, fontSize: 17 }}>
+                {t.user?.avatar ? <img src={resolveMediaUrl(t.user.avatar)} alt="" className="w-full h-full object-cover rounded-full" /> : t.user?.username?.charAt(0).toUpperCase()}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-0.5">
-                <p className="font-semibold text-sm text-white truncate">
-                  {conv.user?.displayName || conv.user?.username}
+                <p className="font-semibold text-sm text-white truncate flex items-center gap-1.5">
+                  {t.type === 'group' && <Users size={12} className="text-gold-300/70 flex-shrink-0" />}
+                  {t.type === 'group' ? t.group.name : (t.user?.displayName || t.user?.username)}
                 </p>
                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                  {conv.lastMessage?.createdAt && (
-                    <span className="text-[11px] text-white/30">
-                      {new Date(conv.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                  {t.lastMessage?.createdAt && (
+                    <span className="text-[11px] text-white/30">{new Date(t.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   )}
-                  {conv.unread > 0 && (
-                    <span className="h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-gold-500 text-[10px] font-bold text-white">
-                      {conv.unread > 99 ? '99+' : conv.unread}
-                    </span>
+                  {t.unread > 0 && (
+                    <span className="h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-gold-500 text-[10px] font-bold text-white">{t.unread > 99 ? '99+' : t.unread}</span>
                   )}
                 </div>
               </div>
-              <p className={`text-xs truncate mt-0.5 ${conv.unread > 0 ? 'text-white/70 font-medium' : 'text-white/40'}`}>
-                {conv.lastMessage?.content || 'No messages yet'}
+              <p className={`text-xs truncate mt-0.5 ${t.unread > 0 ? 'text-white/70 font-medium' : 'text-white/40'}`}>
+                {t.preview || 'No messages yet'}
               </p>
             </div>
           </button>
         ))}
       </div>
-
-      {/* Floating compose button */}
-      <button
-        type="button"
-        onClick={onNewMsg}
-        aria-label="New message"
-        className="ik-btn ik-btn-primary ik-btn-pill absolute right-4 px-5 py-3 shadow-[0_4px_24px_rgba(225,48,108,0.5)]"
-        style={{
-          zIndex: 95,
-          bottom: 'calc(var(--ultima-nav-offset, 4rem) + 0.75rem)',
-        }}
-      >
-        <Edit size={16} />
-        New Message
-      </button>
     </div>
   );
 }
 
-/* ── Chat thread ── */
-function ChatThread({ otherUser, onBack }) {
-  const { fetchWithAuth, user, showToast } = useAuth();
-  const { socket, joinUserRoom } = useSocket();
-  const { startCall, phase } = useCall();
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
-  const inputRef = useRef(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetchWithAuth(`/messages/${otherUser.id}`);
-      if (res.ok) setMessages(await res.json());
-    } catch {}
-  }, [fetchWithAuth, otherUser.id]);
-
-  useEffect(() => { load(); }, [load]);
-
-  // Join our own room — re-join immediately and also whenever socket reconnects
-  useEffect(() => {
-    if (!socket || !user?.id) return;
-    const rejoin = () => joinUserRoom(user.id);
-    rejoin();
-    socket.on('connect', rejoin);
-    return () => socket.off('connect', rejoin);
-  }, [socket, user?.id, joinUserRoom]);
-
-  // Real-time incoming DM
-  useEffect(() => {
-    if (!socket) return;
-    const handler = (msg) => {
-      // Only append if this message is from the user we're chatting with
-      if (msg.senderId === otherUser.id) {
-        setMessages(prev => [...prev, msg]);
-      }
-    };
-    socket.on('new-dm', handler);
-    return () => socket.off('new-dm', handler);
-  }, [socket, otherUser.id]);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-
-  const send = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || sending) return;
-    const content = input.trim();
-    setSending(true);
-    // Optimistic update
-    const optimistic = {
-      id: `tmp-${Date.now()}`,
-      senderId: user?.id,
-      receiverId: otherUser.id,
-      content,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, optimistic]);
-    setInput('');
-    // Reset textarea height
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-    }
-    try {
-      const res = await fetchWithAuth(`/messages/${otherUser.id}`, {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      });
-      if (res.ok) {
-        const msg = await res.json();
-        // Replace optimistic message with real one
-        setMessages(prev => prev.map(m => m.id === optimistic.id ? msg : m));
-      } else {
-        // Roll back
-        setMessages(prev => prev.filter(m => m.id !== optimistic.id));
-        showToast('Failed to send', 'error');
-      }
-    } catch {
-      setMessages(prev => prev.filter(m => m.id !== optimistic.id));
-      showToast('Failed to send', 'error');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const formatTime = (d) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  // Focus input when thread opens
-  useEffect(() => {
-    const t = setTimeout(() => inputRef.current?.focus(), 200);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    // position:fixed inset-0 (not absolute) — an active thread is a full-screen
-    // takeover, same as StoryCreator/ImageEditor/NewConversationModal. It must sit
-    // above the app-level bottom nav (z-90/95) rather than being clipped by it, so
-    // the message input never collides with the fixed nav bar.
-    <div
-      className="z-[250]"
-      style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#050816' }}
-    >
-      {/* Header */}
-      <div className="flex flex-shrink-0 items-center gap-3 px-4 py-3 border-b border-white/8 bg-[#050816]/95">
-        <button type="button" onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}>
-          <ArrowLeft size={18} />
-        </button>
-        <div className="avatar" style={{ width: 36, height: 36, fontSize: 14 }}>
-          {otherUser.avatar ? <img src={resolveMediaUrl(otherUser.avatar)} alt="" /> : otherUser.username?.charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm text-white truncate">{otherUser.displayName || otherUser.username}</p>
-          <p className="text-xs text-white/40 truncate">@{otherUser.username}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => startCall(otherUser, 'audio')}
-          disabled={phase !== 'idle'}
-          aria-label="Voice call"
-          className="ik-btn ik-btn-ghost flex h-9 w-9 items-center justify-center !p-0 text-pink-300"
-        >
-          <Phone size={18} />
-        </button>
-        <button
-          type="button"
-          onClick={() => startCall(otherUser, 'video')}
-          disabled={phase !== 'idle'}
-          aria-label="Video call"
-          className="ik-btn ik-btn-ghost flex h-9 w-9 items-center justify-center !p-0 text-pink-300"
-        >
-          <Video size={18} />
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2" style={{ minHeight: 0 }}>
-        {messages.map(msg => {
-          const mine = msg.senderId === user?.id;
-          return (
-            <div key={msg.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                  mine
-                    ? 'rounded-br-sm bg-gradient-to-br from-pink-500 to-[#C13584] text-white'
-                    : 'rounded-bl-sm bg-white/8 text-white/90 border border-white/8'
-                }`}
-              >
-                <p>{msg.content}</p>
-                <p className={`mt-1 text-[10px] ${mine ? 'text-white/60' : 'text-white/35'} text-right`}>
-                  {formatTime(msg.createdAt)}
-                  {mine && msg.readAt && ' ✓✓'}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input bar */}
-      <form
-        onSubmit={send}
-        className="flex flex-shrink-0 items-end gap-2 border-t border-white/8 bg-[#050816]"
-        style={{ padding: '8px 12px', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
-      >
-        <textarea
-          ref={inputRef}
-          value={input}
-          rows={1}
-          onChange={e => {
-            setInput(e.target.value);
-            e.target.style.height = 'auto';
-            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-          }}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }}
-          placeholder="Message…"
-          autoComplete="off"
-          maxLength={1000}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            resize: 'none',
-            overflow: 'hidden',
-            background: 'rgba(255,255,255,0.07)',
-            border: '1.5px solid rgba(255,255,255,0.12)',
-            borderRadius: 22,
-            padding: '10px 16px',
-            color: 'white',
-            fontSize: 14,
-            lineHeight: '1.4',
-            outline: 'none',
-            transition: 'border-color 0.15s',
-          }}
-          onFocus={e => (e.target.style.borderColor = '#E1306C')}
-          onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.12)')}
-        />
-        {/* Send button — slides in when user starts typing */}
-        <button
-          type="submit"
-          disabled={!input.trim() || sending}
-          aria-label="Send message"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            width: input.trim() ? 44 : 0,
-            height: 44,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg,#E1306C,#C13584)',
-            border: 'none',
-            cursor: 'pointer',
-            overflow: 'hidden',
-            opacity: input.trim() ? 1 : 0,
-            transform: input.trim() ? 'scale(1)' : 'scale(0.6)',
-            transition: 'width 0.2s ease, opacity 0.2s ease, transform 0.2s ease',
-            pointerEvents: input.trim() ? 'auto' : 'none',
-          }}
-        >
-          {sending
-            ? <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite' }} />
-            : <Send size={16} color="white" />
-          }
-        </button>
-      </form>
-    </div>
-  );
+function previewFor(t) {
+  const m = t.lastMessage;
+  if (!m) return '';
+  const who = t.type === 'group'
+    ? (m.senderId === t.meId ? 'You' : (m.sender?.displayName || m.sender?.username || '')) + ': '
+    : '';
+  const body = m.content || (m.messageType === 'image' ? '📷 Photo' : m.messageType === 'video' ? '🎬 Video' : '');
+  return who + body;
 }
 
-/* ── Main Messages page ── */
 function Messages() {
   const navigate = useNavigate();
   const location = useLocation();
   const { fetchWithAuth, user, isGuest } = useAuth();
   const { socket, joinUserRoom } = useSocket();
-  const [conversations, setConversations] = useState([]);
+  const { openCreateSheet } = useCreateFlow();
+  const groupsApi = useGroupsApi();
+
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [dmThreads, setDmThreads] = useState([]);
+  const [groupThreads, setGroupThreads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeUser, setActiveUser] = useState(location.state?.openUser || null);
-  const [showNewMsg, setShowNewMsg] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [activeDm, setActiveDm] = useState(null);
+  // Group hand-off carries only an id (the thread list may not be loaded yet).
+  const [activeGroup, setActiveGroup] = useState(null);
+  const [activeMeetingId, setActiveMeetingId] = useState(null);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
-  // Join personal socket room — re-join immediately and also whenever socket reconnects
+  // Apply the router hand-off on EVERY navigation into this page — including
+  // when we are already on /messages (CREATE → Message/Meeting while browsing
+  // the list re-navigates to the same route without remounting). The state is
+  // then cleared so back/forward does not replay it. `location.key` changes on
+  // each navigate() call, which is what makes the same-route case observable.
   useEffect(() => {
-    if (isGuest || !socket || !user?.id) return;
+    if (isGuest) return; // the guest branch below reads the state directly
+    const s = location.state;
+    if (!s || (!s.openUser && !s.openGroupId)) return;
+    if (s.openUser) {
+      setActiveGroup(null);
+      setActiveMeetingId(null);
+      setActiveDm(s.openUser);
+    } else if (s.openGroupId) {
+      setActiveDm(null);
+      setActiveGroup({ id: s.openGroupId });
+      setActiveMeetingId(s.openMeetingId || null);
+    }
+    setShowGroupInfo(false);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [isGuest, location.key, location.state, location.pathname, navigate]);
+
+  // In-flight guard: socket bursts (several messages arriving together) must
+  // not fan out into overlapping list reloads.
+  const inFlight = useRef(false);
+  const loadAll = useCallback(async ({ silent = false } = {}) => {
+    if (isGuest) { setLoading(false); return; }
+    if (inFlight.current) return;
+    inFlight.current = true;
+    if (!silent) setLoading(true);
+    try {
+      const [dmRes, groups] = await Promise.all([
+        fetchWithAuth('/messages/conversations'),
+        groupsApi.listThreads(),
+      ]);
+      const dms = dmRes.ok ? await dmRes.json() : [];
+      setDmThreads(Array.isArray(dms) ? dms : []);
+      setGroupThreads(Array.isArray(groups) ? groups : []);
+      setLoadError('');
+    } catch (err) {
+      setLoadError(err.message || "Couldn't load your conversations.");
+    } finally {
+      inFlight.current = false;
+      setLoading(false);
+    }
+  }, [isGuest, fetchWithAuth, groupsApi]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Personal socket room (the server also auto-joins on connect; this covers
+  // older backends and reconnects).
+  useEffect(() => {
+    if (isGuest || !socket || !user?.id) return undefined;
     const rejoin = () => joinUserRoom(user.id);
     rejoin();
     socket.on('connect', rejoin);
     return () => socket.off('connect', rejoin);
   }, [isGuest, socket, user?.id, joinUserRoom]);
 
-  // Listen for incoming DMs — refresh conversation list to show latest message + unread
+  // Refresh the list (silently) on any incoming DM or group event.
   useEffect(() => {
-    if (isGuest || !socket) return;
-    const handler = () => {
-      fetchWithAuth('/messages/conversations')
-        .then(r => r.json())
-        .then(data => { if (Array.isArray(data)) setConversations(data); })
-        .catch(() => {});
-    };
-    socket.on('new-dm', handler);
-    return () => socket.off('new-dm', handler);
-  }, [isGuest, socket, fetchWithAuth]);
+    if (isGuest || !socket) return undefined;
+    const refresh = () => loadAll({ silent: true });
+    const events = ['new-dm', 'group-message', 'group-member-added', 'group-member-removed', 'group-updated', 'group-deleted'];
+    events.forEach((e) => socket.on(e, refresh));
+    return () => events.forEach((e) => socket.off(e, refresh));
+  }, [isGuest, socket, loadAll]);
 
+  // If the group we were handed no longer exists for us, fall back to the list.
   useEffect(() => {
-    if (isGuest) {
-      setLoading(false);
-      return;
-    }
-    fetchWithAuth('/messages/conversations')
-      .then(r => r.json())
-      .then(data => { setConversations(Array.isArray(data) ? data : []); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [isGuest, fetchWithAuth]);
+    if (!socket || !activeGroup?.id) return undefined;
+    const gone = (p) => {
+      if (p?.groupId !== activeGroup.id) return;
+      if (p.userId && p.userId !== user?.id) return;
+      setActiveGroup(null);
+      setShowGroupInfo(false);
+    };
+    socket.on('group-deleted', gone);
+    socket.on('group-member-removed', gone);
+    return () => {
+      socket.off('group-deleted', gone);
+      socket.off('group-member-removed', gone);
+    };
+  }, [socket, activeGroup?.id, user?.id]);
+
+  // Merge DM + group threads into one list with a preview + type tag.
+  const merged = [
+    ...dmThreads.map((c) => ({ type: 'direct', user: c.user, lastMessage: c.lastMessage, unread: c.unread || 0, preview: c.lastMessage?.content || 'No messages yet', meId: user?.id })),
+    ...groupThreads.map((g) => ({
+      type: 'group', group: g.group, members: g.members || g.group?.members || [],
+      lastMessage: g.lastMessage, unread: g.unread || 0,
+      preview: previewFor({ ...g, meId: user?.id }),
+      meId: user?.id,
+    })),
+  ];
+
+  const filtered = merged.filter((t) => {
+    if (filter === 'direct') return t.type === 'direct';
+    if (filter === 'groups') return t.type === 'group';
+    if (filter === 'unread') return t.unread > 0;
+    return true;
+  });
+  const totalUnread = merged.reduce((n, t) => n + (t.unread || 0), 0);
+
+  const onSelectThread = (t) => {
+    if (t.type === 'group') { setActiveGroup(t.group); setActiveMeetingId(null); }
+    else setActiveDm(t.user);
+  };
+
+  const closeGroup = () => {
+    setActiveGroup(null);
+    setActiveMeetingId(null);
+    setShowGroupInfo(false);
+    loadAll({ silent: true }); // pick up read state / new threads
+  };
 
   if (isGuest) {
     const openTarget = location.state?.openUser;
@@ -495,24 +291,10 @@ function Messages() {
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
               <p className="text-sm text-white/50">
-                {openTarget
-                  ? `Sign in to message @${openTarget.username || 'this creator'}.`
-                  : 'Sign in to send and receive direct messages.'}
+                {openTarget ? `Sign in to message @${openTarget.username || 'this creator'}.` : 'Sign in to send and receive messages.'}
               </p>
-              <button
-                type="button"
-                onClick={() => navigate('/login', { state: { from: '/messages', openUser: openTarget } })}
-                className="ik-btn ik-btn-primary ik-btn-pill px-6 py-2.5 text-sm font-bold"
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowGuestPrompt(true)}
-                className="text-sm font-semibold text-gold-400"
-              >
-                Create free account
-              </button>
+              <button type="button" onClick={() => navigate('/login', { state: { from: '/messages', openUser: openTarget } })} className="ik-btn ik-btn-primary ik-btn-pill px-6 py-2.5 text-sm font-bold">Sign in</button>
+              <button type="button" onClick={() => setShowGuestPrompt(true)} className="text-sm font-semibold text-gold-400">Create free account</button>
             </div>
           )}
         </div>
@@ -524,45 +306,49 @@ function Messages() {
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950">
       <UltimaField intensity={0.15} fixed />
 
-      {/* Header — only shown on conversation list */}
-      {!activeUser && (
+      {!activeDm && !activeGroup && (
         <div className="relative flex items-center gap-3 border-b border-white/8 px-4 py-3 bg-[#050816]/90 backdrop-blur-xl">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', flexShrink: 0 }}>
+          <button type="button" onClick={() => navigate(-1)} className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-transform active:scale-95" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', flexShrink: 0 }}>
             <ArrowLeft size={18} />
           </button>
           <h1 className="flex-1 text-lg font-black tracking-tight text-white">Messages</h1>
-          <button
-            type="button"
-            onClick={() => setShowNewMsg(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-pink-400/40 bg-pink-500/15 text-pink-300 transition-all active:scale-95 hover:bg-pink-500/25"
-            title="New message"
-          >
-            <Edit size={16} />
-          </button>
         </div>
       )}
 
-      {/* NOTE: no `z-10` here — a positioned ancestor with its own z-index creates a
-          stacking context that caps every fixed-position descendant (like the
-          full-screen ChatThread below) beneath the app-level bottom nav, no matter
-          how high its own z-index is. See ultima.css `.ultima-page` for the same fix. */}
       <div className="ultima-content relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        {activeUser ? (
-          <ChatThread key={activeUser.id} otherUser={activeUser} onBack={() => setActiveUser(null)} />
+        {!activeDm && !activeGroup && (
+          <FilterBar active={filter} onChange={setFilter} unreadCount={totalUnread} />
+        )}
+
+        {activeGroup ? (
+          <GroupChat
+            key={activeGroup.id}
+            groupId={activeGroup.id}
+            initialMeetingId={activeMeetingId}
+            onBack={closeGroup}
+            onOpenInfo={() => setShowGroupInfo(true)}
+          />
+        ) : activeDm ? (
+          <DmThread key={activeDm.id} otherUser={activeDm} onBack={() => { setActiveDm(null); loadAll({ silent: true }); }} />
         ) : (
-          <ConversationList conversations={conversations} onSelect={setActiveUser} loading={loading} onNewMsg={() => setShowNewMsg(true)} />
+          <ThreadList
+            threads={filtered}
+            onSelect={onSelectThread}
+            loading={loading}
+            error={loadError}
+            onRetry={() => loadAll()}
+            onCreate={openCreateSheet}
+            search={search}
+            setSearch={setSearch}
+          />
         )}
       </div>
 
-      {showNewMsg && (
-        <NewConversationModal
-          fetchWithAuth={fetchWithAuth}
-          onSelect={(u) => { setActiveUser(u); }}
-          onClose={() => setShowNewMsg(false)}
+      {activeGroup && showGroupInfo && (
+        <GroupInfo
+          groupId={activeGroup.id}
+          onBack={() => setShowGroupInfo(false)}
+          onLeft={closeGroup}
         />
       )}
     </div>

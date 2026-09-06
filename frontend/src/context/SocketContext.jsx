@@ -51,8 +51,18 @@ export const SocketProvider = ({ children }) => {
   const requestDuet     = useCallback((room, uid, uname)      => socketRef.current?.emit('duet-request', { roomId: room, userId: uid, username: uname }), []);
   const inviteCoHost    = useCallback((room, uid, uname)      => socketRef.current?.emit('co-host-invite', { roomId: room, userId: uid, username: uname }), []);
 
+  // ---- Group Chat socket helpers ----
+  const groupJoin        = useCallback((groupId) => socketRef.current?.emit('group-join', groupId), []);
+  const groupLeave       = useCallback((groupId) => socketRef.current?.emit('group-leave', groupId), []);
+  const groupTyping      = useCallback((groupId, isTyping) => socketRef.current?.emit('group-typing', { groupId, isTyping }), []);
+  const groupRead         = useCallback((groupId, messageId) => socketRef.current?.emit('group-read', { groupId, messageId }), []);
+  const groupReactSocket = useCallback((messageId, emoji) => socketRef.current?.emit('group-reaction', { messageId, emoji }), []);
+
   return (
-    <SocketContext.Provider value={{ socket, joinRoom, leaveRoom, joinUserRoom, sendChatMessage, sendReaction, requestDuet, inviteCoHost }}>
+    <SocketContext.Provider value={{
+      socket, joinRoom, leaveRoom, joinUserRoom, sendChatMessage, sendReaction, requestDuet, inviteCoHost,
+      groupJoin, groupLeave, groupTyping, groupRead, groupReactSocket,
+    }}>
       {children}
     </SocketContext.Provider>
   );

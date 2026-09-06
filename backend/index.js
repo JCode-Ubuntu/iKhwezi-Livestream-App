@@ -67,6 +67,9 @@ function isAllowedCorsOrigin(origin) {
   return false;
 }
 
+// Keep one bad promise or callback from taking the whole API down.
+require('./utils/processGuards').installProcessGuards();
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -107,300 +110,21 @@ const STRIPE_ENABLED = !!STRIPE_SECRET_KEY;
 const stripeClient = STRIPE_ENABLED ? require('stripe')(STRIPE_SECRET_KEY) : null;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// Database setup — absolute path so CWD never selects the wrong DB file.
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: path.join(__dirname, 'storage', 'ikhwezi.db'),
-  logging: false
+// Database setup — see ./config/database.js. SQLite by default (absolute path so
+// CWD never selects the wrong DB file); DATABASE_URL switches to PostgreSQL.
+const sequelize = require('./config/database').createSequelize({
+  sqlitePath: path.join(__dirname, 'storage', 'ikhwezi.db'),
 });
 
-// Models
-const User = sequelize.define('User', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  email: { type: DataTypes.STRING, unique: true, allowNull: true },
-  phone: { type: DataTypes.STRING, unique: true, allowNull: true },
-  password: { type: DataTypes.STRING, allowNull: false },
-  username: { type: DataTypes.STRING, unique: true, allowNull: false },
-  displayName: { type: DataTypes.STRING, allowNull: true },
-  avatar: { type: DataTypes.STRING, allowNull: true },
-  coverImage: { type: DataTypes.STRING, allowNull: true },
-  bio: { type: DataTypes.TEXT, allowNull: true },
-  isCreator: { type: DataTypes.BOOLEAN, defaultValue: false },
-  isAdmin: { type: DataTypes.BOOLEAN, defaultValue: false },
-  isBanned: { type: DataTypes.BOOLEAN, defaultValue: false },
-  isGuest: { type: DataTypes.BOOLEAN, defaultValue: false },
-  lastActive: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
-});
-
-const Video = sequelize.define('Video', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  title: { type: DataTypes.STRING, allowNull: true },
-  description: { type: DataTypes.TEXT, allowNull: true },
-  filename: { type: DataTypes.STRING, allowNull: false },
-  thumbnail: { type: DataTypes.STRING, allowNull: true },
-  duration: { type: DataTypes.FLOAT, defaultValue: 0 },
-  views: { type: DataTypes.INTEGER, defaultValue: 0 },
-  isPublished: { type: DataTypes.BOOLEAN, defaultValue: true },
-  isSponsored: { type: DataTypes.BOOLEAN, defaultValue: false },
-  isTrending: { type: DataTypes.BOOLEAN, defaultValue: false }
-});
-
-const Like = sequelize.define('Like', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  videoId: { type: DataTypes.UUID, allowNull: false }
-});
-
-const VideoSave = sequelize.define('VideoSave', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  videoId: { type: DataTypes.UUID, allowNull: false }
-});
-
-const VideoRepost = sequelize.define('VideoRepost', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  videoId: { type: DataTypes.UUID, allowNull: false }
-});
-
-const Comment = sequelize.define('Comment', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  videoId: { type: DataTypes.UUID, allowNull: false },
-  parentId: { type: DataTypes.UUID, allowNull: true },
-  content: { type: DataTypes.TEXT, allowNull: false }
-});
-
-const Follow = sequelize.define('Follow', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  followerId: { type: DataTypes.UUID, allowNull: false },
-  followingId: { type: DataTypes.UUID, allowNull: false }
-});
-
-const Story = sequelize.define('Story', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  type: { type: DataTypes.ENUM('image', 'video'), allowNull: false },
-  url: { type: DataTypes.STRING, allowNull: false },
-  caption: { type: DataTypes.TEXT, allowNull: true },
-  expiresAt: { type: DataTypes.DATE, allowNull: false }
-});
-
-const StoryView = sequelize.define('StoryView', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  storyId: { type: DataTypes.UUID, allowNull: false },
-  viewerId: { type: DataTypes.UUID, allowNull: false },
-});
-
-const StoryComment = sequelize.define('StoryComment', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  storyId: { type: DataTypes.UUID, allowNull: false },
-  parentId: { type: DataTypes.UUID, allowNull: true },
-  content: { type: DataTypes.TEXT, allowNull: false }
-});
-
-const Challenge = sequelize.define('Challenge', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  title: { type: DataTypes.STRING, allowNull: false },
-  description: { type: DataTypes.TEXT, allowNull: true },
-  hashtag: { type: DataTypes.STRING, allowNull: false },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-  createdBy: { type: DataTypes.UUID, allowNull: false }
-});
-
-const WatchParty = sequelize.define('WatchParty', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  hostId: { type: DataTypes.UUID, allowNull: false },
-  name: { type: DataTypes.STRING, allowNull: false },
-  streamUrl: { type: DataTypes.STRING, allowNull: false },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-  maxParticipants: { type: DataTypes.INTEGER, defaultValue: 8 }
-});
-
-const WatchPartyParticipant = sequelize.define('WatchPartyParticipant', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  watchPartyId: { type: DataTypes.UUID, allowNull: false },
-  userId: { type: DataTypes.UUID, allowNull: false }
-});
-
-const Star = sequelize.define('Star', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  creatorId: { type: DataTypes.UUID, allowNull: false },
-  videoId: { type: DataTypes.UUID, allowNull: false },
-  amount: { type: DataTypes.INTEGER, defaultValue: 1 }
-});
-
-const DirectMessage = sequelize.define('DirectMessage', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  senderId: { type: DataTypes.UUID, allowNull: false },
-  receiverId: { type: DataTypes.UUID, allowNull: false },
-  content: { type: DataTypes.TEXT, allowNull: false },
-  mediaUrl: { type: DataTypes.STRING, allowNull: true },
-  mediaType: { type: DataTypes.STRING, allowNull: true }, // 'image' | 'video'
-  readAt: { type: DataTypes.DATE, allowNull: true }
-});
-
-const TextPost = sequelize.define('TextPost', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  content: { type: DataTypes.TEXT, allowNull: false },
-  backgroundColor: { type: DataTypes.STRING, defaultValue: '#1a1a2e' },
-  textColor: { type: DataTypes.STRING, defaultValue: '#ffffff' },
-  fontStyle: { type: DataTypes.STRING, defaultValue: 'normal' }, // normal | bold | italic
-  likeCount: { type: DataTypes.INTEGER, defaultValue: 0 },
-  commentCount: { type: DataTypes.INTEGER, defaultValue: 0 },
-});
-
-const PostLike = sequelize.define('PostLike', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  postId: { type: DataTypes.UUID, allowNull: false },
-});
-
-const Points = sequelize.define('Points', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  creatorId: { type: DataTypes.UUID, allowNull: false, unique: true },
-  totalPoints: { type: DataTypes.INTEGER, defaultValue: 0 },
-  lifetimePoints: { type: DataTypes.INTEGER, defaultValue: 0 }
-});
-
-// In-app currency wallet. Coins are spent on gifts + subscriptions and are
-// credited via /api/wallet/topup — either instantly in dev mode, or through a
-// real Stripe Checkout session once STRIPE_SECRET_KEY is configured.
-const Wallet = sequelize.define('Wallet', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false, unique: true },
-  coins: { type: DataTypes.INTEGER, defaultValue: 500 }
-});
-
-const Subscription = sequelize.define('Subscription', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  subscriberId: { type: DataTypes.UUID, allowNull: false },
-  creatorId: { type: DataTypes.UUID, allowNull: false },
-  tier: { type: DataTypes.STRING, defaultValue: 'supporter' },
-  expiresAt: { type: DataTypes.DATE, allowNull: false }
-});
-
-const GiftLog = sequelize.define('GiftLog', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  fromUserId: { type: DataTypes.UUID, allowNull: false },
-  toUserId: { type: DataTypes.UUID, allowNull: false },
-  giftId: { type: DataTypes.STRING, allowNull: false },
-  coins: { type: DataTypes.INTEGER, allowNull: false },
-  roomId: { type: DataTypes.STRING, allowNull: true }
-});
-
-const LiveStatus = sequelize.define('LiveStatus', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  streamKey: { type: DataTypes.STRING, allowNull: false },
-  isLive: { type: DataTypes.BOOLEAN, defaultValue: false },
-  title: { type: DataTypes.STRING, allowNull: true },
-  hostUserId: { type: DataTypes.UUID, allowNull: true },
-  viewerCount: { type: DataTypes.INTEGER, defaultValue: 0 },
-  startedAt: { type: DataTypes.DATE, allowNull: true }
-});
-
-const AuditLog = sequelize.define('AuditLog', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  action: { type: DataTypes.STRING, allowNull: false },
-  details: { type: DataTypes.TEXT, allowNull: true },
-  ip: { type: DataTypes.STRING, allowNull: true }
-});
-
-// Idempotency guard for Stripe webhook retries — prevents double-crediting coins.
-const ProcessedStripeEvent = sequelize.define('ProcessedStripeEvent', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  eventId: { type: DataTypes.STRING, unique: true, allowNull: false },
-  sessionId: { type: DataTypes.STRING, allowNull: true },
-  userId: { type: DataTypes.UUID, allowNull: true },
-  coins: { type: DataTypes.INTEGER, allowNull: true },
-});
-
-// Admin-managed tailored ads (image or video) shown inline in the main feed.
-const Ad = sequelize.define('Ad', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  title: { type: DataTypes.STRING, defaultValue: '' },
-  caption: { type: DataTypes.TEXT, defaultValue: '' },
-  filename: { type: DataTypes.STRING, allowNull: false },
-  mediaType: { type: DataTypes.STRING, defaultValue: 'image' },
-  clickUrl: { type: DataTypes.STRING, defaultValue: '' },
-  ctaLabel: { type: DataTypes.STRING, defaultValue: 'Learn more' },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-  placement: { type: DataTypes.STRING, defaultValue: 'feed' },
-  priority: { type: DataTypes.INTEGER, defaultValue: 0 },
-  views: { type: DataTypes.INTEGER, defaultValue: 0 },
-  clicks: { type: DataTypes.INTEGER, defaultValue: 0 },
-});
-
-// Associations
-User.hasMany(Video, { foreignKey: 'userId', as: 'videos' });
-Video.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
-
-User.hasMany(Like, { foreignKey: 'userId' });
-Like.belongsTo(User, { foreignKey: 'userId' });
-Video.hasMany(Like, { foreignKey: 'videoId' });
-Like.belongsTo(Video, { foreignKey: 'videoId' });
-
-User.hasMany(VideoSave, { foreignKey: 'userId' });
-VideoSave.belongsTo(User, { foreignKey: 'userId' });
-Video.hasMany(VideoSave, { foreignKey: 'videoId' });
-VideoSave.belongsTo(Video, { foreignKey: 'videoId' });
-
-User.hasMany(VideoRepost, { foreignKey: 'userId' });
-VideoRepost.belongsTo(User, { foreignKey: 'userId' });
-Video.hasMany(VideoRepost, { foreignKey: 'videoId' });
-VideoRepost.belongsTo(Video, { foreignKey: 'videoId' });
-
-User.hasMany(Comment, { foreignKey: 'userId' });
-Comment.belongsTo(User, { foreignKey: 'userId', as: 'author' });
-Video.hasMany(Comment, { foreignKey: 'videoId' });
-Comment.belongsTo(Video, { foreignKey: 'videoId' });
-Comment.hasMany(Comment, { foreignKey: 'parentId', as: 'replies' });
-Comment.belongsTo(Comment, { foreignKey: 'parentId', as: 'parent' });
-
-User.hasMany(Star, { foreignKey: 'userId' });
-Star.belongsTo(User, { foreignKey: 'userId' });
-
-User.hasOne(Points, { foreignKey: 'creatorId', as: 'points' });
-Points.belongsTo(User, { foreignKey: 'creatorId' });
-
-User.hasMany(Story, { foreignKey: 'userId', as: 'stories' });
-Story.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
-Story.hasMany(StoryView, { foreignKey: 'storyId', as: 'views' });
-StoryView.belongsTo(Story, { foreignKey: 'storyId' });
-StoryView.belongsTo(User, { foreignKey: 'viewerId', as: 'viewer' });
-User.hasMany(StoryComment, { foreignKey: 'userId' });
-StoryComment.belongsTo(User, { foreignKey: 'userId', as: 'author' });
-Story.hasMany(StoryComment, { foreignKey: 'storyId', as: 'comments' });
-StoryComment.belongsTo(Story, { foreignKey: 'storyId' });
-StoryComment.hasMany(StoryComment, { foreignKey: 'parentId', as: 'replies' });
-StoryComment.belongsTo(StoryComment, { foreignKey: 'parentId', as: 'parent' });
-
-User.hasMany(Challenge, { foreignKey: 'createdBy', as: 'challenges' });
-Challenge.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
-
-User.hasMany(WatchParty, { foreignKey: 'hostId', as: 'watchParties' });
-WatchParty.belongsTo(User, { foreignKey: 'hostId', as: 'host' });
-WatchParty.hasMany(WatchPartyParticipant, { foreignKey: 'watchPartyId', as: 'participants' });
-WatchPartyParticipant.belongsTo(WatchParty, { foreignKey: 'watchPartyId' });
-WatchPartyParticipant.belongsTo(User, { foreignKey: 'userId' });
-
-User.hasMany(TextPost, { foreignKey: 'userId', as: 'textPosts' });
-TextPost.belongsTo(User, { foreignKey: 'userId', as: 'author' });
-TextPost.hasMany(PostLike, { foreignKey: 'postId', as: 'likes' });
-PostLike.belongsTo(TextPost, { foreignKey: 'postId' });
-PostLike.belongsTo(User, { foreignKey: 'userId' });
-
-User.hasOne(Wallet, { foreignKey: 'userId', as: 'wallet' });
-Wallet.belongsTo(User, { foreignKey: 'userId' });
-
-User.hasMany(Subscription, { foreignKey: 'subscriberId', as: 'subscriptions' });
-User.hasMany(Subscription, { foreignKey: 'creatorId', as: 'subscribers' });
-Subscription.belongsTo(User, { foreignKey: 'subscriberId', as: 'subscriber' });
-Subscription.belongsTo(User, { foreignKey: 'creatorId', as: 'creator' });
+// Models — defined in ./models so they can be loaded without booting the server.
+const { defineCoreModels } = require('./models');
+const coreModels = defineCoreModels(sequelize, DataTypes);
+const {
+  User, Video, Like, VideoSave, VideoRepost, Comment, Follow, Story, StoryView,
+  StoryComment, Challenge, WatchParty, WatchPartyParticipant, Star, DirectMessage,
+  TextPost, PostLike, Points, Wallet, Subscription, GiftLog, LiveStatus, AuditLog,
+  ProcessedStripeEvent, Ad,
+} = coreModels;
 
 // Public HLS playback URL — safe to expose (watch-only). Never expose streamKey/RTMP on public routes.
 // nginx-rtmp writes playlists as /tmp/hls/{streamKey}.m3u8 (served at /hls/{streamKey}.m3u8).
@@ -429,17 +153,12 @@ function buildRtmpIngestInfo(streamKey) {
   };
 }
 
-function isPrivateNetworkIp(ip) {
-  if (!ip) return false;
-  const normalized = ip.replace(/^::ffff:/, '');
-  if (normalized === '127.0.0.1' || normalized === '::1') return true;
-  const parts = normalized.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return false;
-  if (parts[0] === 10) return true;
-  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-  if (parts[0] === 192 && parts[1] === 168) return true;
-  return false;
-}
+// RTMP webhook auth — see ./middleware/rtmpWebhook.js.
+const { requireRtmpWebhook } = require('./middleware/rtmpWebhook').buildRtmpWebhookGuard({
+  secret: RTMP_WEBHOOK_SECRET,
+  isProduction: IS_PRODUCTION,
+  trustInternal: TRUST_INTERNAL_RTMP_WEBHOOK,
+});
 
 function emitLiveStarted(liveStatus) {
   io.emit('livestream-started', {
@@ -455,27 +174,6 @@ function emitLiveStopped() {
   io.emit('viewer-count', { viewerCount: 0 });
 }
 
-function requireRtmpWebhook(req, res) {
-  if (!RTMP_WEBHOOK_SECRET) {
-    if (IS_PRODUCTION) {
-      // Docker nginx-rtmp calls the backend on the private bridge network.
-      if (TRUST_INTERNAL_RTMP_WEBHOOK && isPrivateNetworkIp(req.socket?.remoteAddress)) {
-        return true;
-      }
-      console.error('RTMP_WEBHOOK_SECRET is not set — rejecting on-publish callback in production');
-      res.status(503).send('RTMP webhook not configured');
-      return false;
-    }
-    return true; // dev: allow unauthenticated callbacks for local nginx testing
-  }
-  const provided = req.headers['x-rtmp-secret'] || req.query.secret;
-  if (provided === RTMP_WEBHOOK_SECRET) return true;
-  if (TRUST_INTERNAL_RTMP_WEBHOOK && isPrivateNetworkIp(req.socket?.remoteAddress)) {
-    return true;
-  }
-  res.status(403).send('Forbidden');
-  return false;
-}
 
 // Middleware
 app.use(cors({
@@ -594,67 +292,16 @@ function detectAdMediaType(filename) {
   return VIDEO_EXT.test(filename || '') ? 'video' : 'image';
 }
 
-// Auth middleware
-const authenticate = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    req.user = null;
-    return next();
-  }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findByPk(decoded.id);
-    if (user && !user.isBanned) {
-      req.user = user;
-      // Keep requests authenticated even if optional activity tracking write fails.
-      user.lastActive = new Date();
-      user.save().catch((saveErr) => {
-        console.warn('Last active update failed:', saveErr.message);
-      });
-    } else {
-      req.user = null;
-    }
-  } catch (err) {
-    req.user = null;
-  }
-  next();
-};
+// Auth middleware — see ./middleware/auth.js (extracted, behaviour unchanged).
+const { buildAuthMiddleware } = require('./middleware/auth');
+const {
+  authenticate, requireAuth, requireRegistered, requireAdmin, requireAdminAccess, socketAuth,
+} = buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY });
 
-const requireAuth = (req, res, next) => {
-  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-  next();
-};
-
-/** Block guest sessions from mutations that need a real account. */
-const requireRegistered = (req, res, next) => {
-  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-  if (req.user.isGuest) return res.status(403).json({ error: 'Sign in to continue' });
-  next();
-};
-
-const requireAdmin = (req, res, next) => {
-  const adminKey = req.headers['x-admin-key'];
-  // Constant-time comparison — a plain !== leaks how many leading characters
-  // matched via response timing, which matters more now that this is the
-  // only gate in front of user PII, bans, and admin grants.
-  const provided = Buffer.from(String(adminKey || ''));
-  const expected = Buffer.from(ADMIN_KEY);
-  const match = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
-  if (!match) {
-    return res.status(403).json({ error: 'Admin access denied' });
-  }
-  next();
-};
-
-/** Admin panel secret key OR logged-in owner account (isAdmin). */
-const requireAdminAccess = (req, res, next) => {
-  const adminKey = req.headers['x-admin-key'];
-  const provided = Buffer.from(String(adminKey || ''));
-  const expected = Buffer.from(ADMIN_KEY);
-  const keyMatch = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
-  if (keyMatch || req.user?.isAdmin) return next();
-  return res.status(403).json({ error: 'Admin access denied' });
-};
+// Socket.IO JWT handshake — populates socket.user (null for anonymous/banned).
+// Registered here, before any feature module attaches `io.on('connection')`
+// handlers, so every connection handler can rely on socket.user being set.
+io.use(socketAuth);
 
 // Audit logger
 const logAudit = async (action, details, ip) => {
@@ -829,6 +476,24 @@ function createRateLimiter(windowMs, max, message) {
 const authRateLimit = createRateLimiter(15 * 60 * 1000, 20, 'Too many auth attempts. Try again in 15 minutes.');
 const commentRateLimit = createRateLimiter(60 * 1000, 10, 'Posting too fast. Please wait a moment.');
 const interactionRateLimit = createRateLimiter(60 * 1000, 60, 'Too many actions. Please slow down.');
+
+// ==================== GROUP CHAT ====================
+// Modular feature mounted as its own package. Defines its own Sequelize
+// models (synced below), REST routes under /api/groups, and Socket.IO
+// handlers. See backend/groups/README.md.
+const groupsModule = require('./groups').mount({
+  app, io, sequelize, User, DataTypes, Op,
+  authenticate, requireRegistered, interactionRateLimit, logAudit,
+});
+
+// ==================== MEETINGS ====================
+// Group meetings (scheduling + presence foundation). Depends on the groups
+// module for membership checks; REST under /api/meetings. See backend/meetings.
+require('./meetings').mount({
+  app, io, sequelize, User, DataTypes,
+  authenticate, requireRegistered, interactionRateLimit, logAudit,
+  groups: groupsModule,
+});
 
 // ==================== AUTH ROUTES ====================
 
@@ -1437,6 +1102,8 @@ app.get('/api/users/search', authenticate, async (req, res) => {
       where: {
         isBanned: false,
         isGuest: false,
+        // Never offer the caller their own account (used by DM / group pickers).
+        ...(req.user?.id ? { id: { [Op.ne]: req.user.id } } : {}),
         [Op.or]: [
           { username: { [Op.like]: `%${q}%` } },
           { displayName: { [Op.like]: `%${q}%` } },
@@ -2300,78 +1967,9 @@ app.post('/api/admin/stream-key/rotate', requireAdmin, async (req, res) => {
 });
 
 // ==================== DIRECT MESSAGES ====================
-
-// Get all conversations for the current user
-app.get('/api/messages/conversations', authenticate, requireRegistered, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const msgs = await DirectMessage.findAll({
-      where: { [Op.or]: [{ senderId: userId }, { receiverId: userId }] },
-      order: [['createdAt', 'DESC']],
-    });
-    // Group by the other user, pick latest message per conversation
-    const convMap = new Map();
-    for (const m of msgs) {
-      const otherId = m.senderId === userId ? m.receiverId : m.senderId;
-      if (!convMap.has(otherId)) convMap.set(otherId, m);
-    }
-    const otherIds = [...convMap.keys()];
-    const others = await User.findAll({ where: { id: otherIds }, attributes: ['id', 'username', 'displayName', 'avatar'] });
-    const otherMap = Object.fromEntries(others.map(u => [u.id, u]));
-    const conversations = otherIds.map(id => ({
-      user: otherMap[id],
-      lastMessage: convMap.get(id),
-      unread: msgs.filter(m => m.senderId === id && m.receiverId === userId && !m.readAt).length,
-    }));
-    res.json(conversations);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load conversations' });
-  }
-});
-
-// Get messages between current user and another user
-app.get('/api/messages/:userId', authenticate, requireRegistered, async (req, res) => {
-  try {
-    const me = req.user.id;
-    const other = req.params.userId;
-    const messages = await DirectMessage.findAll({
-      where: {
-        [Op.or]: [
-          { senderId: me, receiverId: other },
-          { senderId: other, receiverId: me },
-        ],
-      },
-      order: [['createdAt', 'ASC']],
-    });
-    // Mark as read
-    await DirectMessage.update({ readAt: new Date() }, {
-      where: { senderId: other, receiverId: me, readAt: null },
-    });
-    res.json(messages);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load messages' });
-  }
-});
-
-// Send a message
-app.post('/api/messages/:userId', authenticate, requireRegistered, async (req, res) => {
-  try {
-    const me = req.user.id;
-    const other = req.params.userId;
-    const { content } = req.body;
-    if (!content?.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
-    if (content.trim().length > 1000) return res.status(400).json({ error: 'Message too long (max 1000 characters)' });
-    const msg = await DirectMessage.create({
-      senderId: me,
-      receiverId: other,
-      content: content.trim(),
-    });
-    // Real-time notification via socket
-    io.to(`user_${other}`).emit('new-dm', { ...msg.toJSON(), senderId: me });
-    res.status(201).json(msg);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to send message' });
-  }
+// Extracted to ./routes/messages.js (same API surface, receiver validation added).
+require('./routes/messages').buildMessageRoutes({
+  app, io, sequelize, Op, User, DirectMessage, authenticate, requireRegistered, interactionRateLimit,
 });
 
 // ==================== TEXT POSTS ====================
@@ -3240,24 +2838,6 @@ app.post('/api/v3/livestream/viewers/leave', authenticate, async (req, res) => {
 
 // ==================== SOCKET.IO REAL-TIME ====================
 
-io.use(async (socket, next) => {
-  const rawToken = socket.handshake.auth?.token
-    || socket.handshake.headers?.authorization?.split(' ')[1]
-    || null;
-  if (!rawToken) {
-    socket.user = null;
-    return next();
-  }
-  try {
-    const decoded = jwt.verify(rawToken, JWT_SECRET);
-    const user = await User.findByPk(decoded.id);
-    socket.user = user && !user.isBanned ? user : null;
-  } catch {
-    socket.user = null;
-  }
-  return next();
-});
-
 const isValidSocketRoomId = (roomId) => {
   if (roomId == null || typeof roomId !== 'string') return false;
   const id = roomId.trim();
@@ -3268,7 +2848,15 @@ const isValidSocketRoomId = (roomId) => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // Join personal user room for DM notifications
+  // Every authenticated socket is placed in its personal room straight away so
+  // DM / group / wallet notifications reach the user wherever they are in the
+  // app (not only while the Messages page is mounted). The identity comes from
+  // the verified JWT (socket.user), never from the client.
+  if (socket.user?.id && !socket.user.isBanned) {
+    socket.join(`user_${socket.user.id}`);
+  }
+
+  // Legacy explicit join — still honoured, but only for the caller's own id.
   socket.on('join-user-room', (userId) => {
     if (!socket.user?.id || String(socket.user.id) !== String(userId)) return;
     socket.join(`user_${userId}`);
@@ -3363,8 +2951,12 @@ io.on('connection', (socket) => {
 // ==================== INITIALIZE ====================
 
 const ensureLiveStatusColumns = async () => {
+  // On a fresh database the table does not exist yet — sync() creates it with
+  // the full column set, so there is nothing to repair. (Previously this threw
+  // "no such table" and crash-looped every fresh deploy.)
   const [columns] = await sequelize.query('PRAGMA table_info(LiveStatuses)');
-  const existing = new Set((columns || []).map((col) => String(col.name || '').toLowerCase()));
+  if (!columns || columns.length === 0) return;
+  const existing = new Set(columns.map((col) => String(col.name || '').toLowerCase()));
   if (!existing.has('hostuserid')) {
     await sequelize.query('ALTER TABLE LiveStatuses ADD COLUMN hostUserId VARCHAR(255)');
     console.log('Schema migration: added LiveStatuses.hostUserId');
@@ -3519,6 +3111,27 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
+// Unknown /api paths must answer JSON, never fall through to the SPA shell.
+app.all('/api/*', (req, res) => res.status(404).json({ error: 'Not found' }));
+
+// Final JSON error handler. Without this, Express's default handler returned an
+// HTML stack trace (leaking file paths in production) for any error that
+// escaped a route's try/catch — e.g. malformed JSON bodies (400 from the body
+// parser) or an exception thrown synchronously inside a handler.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return;
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Malformed JSON body' });
+  }
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request body too large' });
+  }
+  const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+  if (status >= 500) console.error('[http] Unhandled route error:', err?.stack || err);
+  res.status(status).json({ error: status >= 500 ? 'Internal server error' : (err.message || 'Request failed') });
+});
+
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
@@ -3580,12 +3193,20 @@ async function ensureDemoMedia() {
 const initialize = async () => {
   try {
     await sequelize.authenticate();
-    await deduplicateUsernames();
-    await ensureGuestColumn();
-    await ensureLiveStatusColumns();
+    // The boot-time fixups below are legacy SQLite repairs (PRAGMA / ALTER TABLE
+    // ADD COLUMN on a live file). They are not migrations and are skipped on
+    // PostgreSQL, where the schema must be managed with real migrations.
+    const isSqlite = sequelize.getDialect() === 'sqlite';
+    if (isSqlite) {
+      await deduplicateUsernames();
+      await ensureGuestColumn();
+      await ensureLiveStatusColumns();
+    }
+    // sync() only CREATEs missing tables (new Group*/Meeting* tables land here);
+    // it never alters or drops existing ones.
     await sequelize.sync();
-    await enforceInteractionUniqueness();
-    console.log('Database synchronized');
+    if (isSqlite) await enforceInteractionUniqueness();
+    console.log(`Database synchronized (${sequelize.getDialect()})`);
     
     // Ensure storage directories exist
     const dirs = ['storage/videos', 'storage/uploads', 'storage/hls'];

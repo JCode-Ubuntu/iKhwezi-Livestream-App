@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { useAuth } from './context/AuthContext';
@@ -17,6 +17,13 @@ import StoryCreator from './components/StoryCreator';
 import ImagePostCreator from './components/ImagePostCreator';
 import CallOverlay from './components/CallOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
+import GuestPrompt from './components/GuestPrompt';
+
+// CREATE → Group / Message / Meeting flows. Lazy: they pull in the messaging
+// components which most sessions never open.
+const CreateGroupWizard = lazy(() => import('./components/groups/CreateGroupWizard'));
+const NewConversationModal = lazy(() => import('./components/messages/NewConversationModal'));
+const CreateMeetingSheet = lazy(() => import('./components/meetings/CreateMeetingSheet'));
 
 const Home = lazy(() => import('./pages/Home'));
 const Live = lazy(() => import('./pages/Live'));
@@ -29,24 +36,25 @@ const Explore = lazy(() => import('./pages/Explore'));
 const Reels = lazy(() => import('./pages/Reels'));
 const Community = lazy(() => import('./pages/Community'));
 
+/**
+ * AppShell owns the CREATE hub. Every creation / initiation flow in the app is
+ * mounted here exactly once and reached through the CREATE sheet (or through
+ * `useCreateFlow().openCreate(action)` from a contextual button). Pages do not
+ * mount their own composers.
+ */
 function AppShell() {
-  const { user } = useAuth();
+  const { user, isGuest, trackGuestInteraction } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { setDockForcedHidden } = useNavVisibility();
   const [showCreateSheet, setShowCreateSheet] = useState(false);
-  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
-  const [showTextComposer, setShowTextComposer] = useState(false);
-  const [showStoryCreator, setShowStoryCreator] = useState(false);
-  const [showImagePostCreator, setShowImagePostCreator] = useState(false);
+  // `active` is the single open CREATE flow: null | 'signal' | 'video' | 'image'
+  // | 'story' | 'group' | 'message' | 'meeting'. One at a time, by design.
+  const [active, setActive] = useState(null);
+  const [activeOptions, setActiveOptions] = useState({});
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
-  const createFlowOpen =
-    showCreateSheet
-    || showVideoRecorder
-    || showTextComposer
-    || showStoryCreator
-    || showImagePostCreator;
-
+  const createFlowOpen = showCreateSheet || active !== null;
   const isLiveRoute = location.pathname === '/live';
 
   useEffect(() => {
@@ -54,10 +62,42 @@ function AppShell() {
     return () => setDockForcedHidden(false);
   }, [createFlowOpen, isLiveRoute, setDockForcedHidden]);
 
-  const openCreateSheet = () => setShowCreateSheet(true);
+  const close = useCallback(() => { setActive(null); setActiveOptions({}); }, []);
+
+  const openCreateSheet = useCallback(() => {
+    if (isGuest) { trackGuestInteraction?.(); setShowGuestPrompt(true); return; }
+    setShowCreateSheet(true);
+  }, [isGuest, trackGuestInteraction]);
+
+  const goLive = useCallback(() => {
+    // Production live is a single operator broadcast (OBS → RTMP → HLS).
+    // Operators land on the streaming console; everyone else joins as a viewer.
+    if (user?.isAdmin) navigate('/admin', { state: { tab: 'streaming' } });
+    else navigate('/live');
+  }, [user?.isAdmin, navigate]);
+
+  /** Open one hub action directly (used by the sheet and by contextual buttons). */
+  const openCreate = useCallback((action, options = {}) => {
+    setShowCreateSheet(false);
+    if (isGuest) { trackGuestInteraction?.(); setShowGuestPrompt(true); return; }
+    if (action === 'live') { goLive(); return; }
+    setActiveOptions(options || {});
+    setActive(action);
+  }, [isGuest, trackGuestInteraction, goLive]);
+
+  // Hand-offs into Messages after a successful Group / Message / Meeting action.
+  const openGroupInMessages = useCallback((groupId, extra = {}) => {
+    close();
+    navigate('/messages', { state: { openGroupId: groupId, ...extra } });
+  }, [close, navigate]);
+
+  const openDmInMessages = useCallback((otherUser) => {
+    close();
+    navigate('/messages', { state: { openUser: otherUser } });
+  }, [close, navigate]);
 
   return (
-    <CreateFlowProvider openCreateSheet={openCreateSheet}>
+    <CreateFlowProvider openCreateSheet={openCreateSheet} openCreate={openCreate}>
     <div className="page-container">
       <ErrorBoundary key={location.pathname}>
         <Suspense fallback={<UltimaLoading />}>
@@ -84,43 +124,58 @@ function AppShell() {
       {showCreateSheet && (
         <UltimaCreateSheet
           onClose={() => setShowCreateSheet(false)}
-          onSignal={() => { setShowCreateSheet(false); setShowTextComposer(true); }}
-          onVideo={() => { setShowCreateSheet(false); setShowVideoRecorder(true); }}
-          onImage={() => { setShowCreateSheet(false); setShowImagePostCreator(true); }}
-          onStory={() => { setShowCreateSheet(false); setShowStoryCreator(true); }}
-          onGoLive={() => {
-            setShowCreateSheet(false);
-            if (user?.isAdmin) navigate('/admin', { state: { tab: 'streaming' } });
-            else navigate('/live');
-          }}
-          onMessage={() => { setShowCreateSheet(false); navigate('/messages'); }}
+          canBroadcast={!!user?.isAdmin}
+          onSignal={() => openCreate('signal')}
+          onVideo={() => openCreate('video')}
+          onImage={() => openCreate('image')}
+          onStory={() => openCreate('story')}
+          onGroup={() => openCreate('group')}
+          onMessage={() => openCreate('message')}
+          onGoLive={() => openCreate('live')}
+          onMeeting={() => openCreate('meeting')}
         />
       )}
 
-      {showVideoRecorder && (
-        <VideoRecorder
-          onClose={() => setShowVideoRecorder(false)}
-          onVideoUploaded={() => setShowVideoRecorder(false)}
-        />
+      {showGuestPrompt && (
+        <GuestPrompt onClose={() => setShowGuestPrompt(false)} context="create" />
       )}
-      {showTextComposer && (
-        <TextComposer
-          onClose={() => setShowTextComposer(false)}
-          onPosted={() => setShowTextComposer(false)}
-        />
+
+      {/* ---- CREATE flows (existing components, mounted once) ---- */}
+      {active === 'video' && (
+        <VideoRecorder onClose={close} onVideoUploaded={close} />
       )}
-      {showImagePostCreator && (
-        <ImagePostCreator
-          onClose={() => setShowImagePostCreator(false)}
-          onPosted={() => setShowImagePostCreator(false)}
-        />
+      {active === 'signal' && (
+        <TextComposer onClose={close} onPosted={close} />
       )}
-      {showStoryCreator && (
-        <StoryCreator
-          onClose={() => setShowStoryCreator(false)}
-          onPosted={() => setShowStoryCreator(false)}
-        />
+      {active === 'image' && (
+        <ImagePostCreator onClose={close} onPosted={close} />
       )}
+      {active === 'story' && (
+        <StoryCreator onClose={close} onPosted={close} />
+      )}
+
+      <Suspense fallback={active ? <UltimaLoading /> : null}>
+        {active === 'group' && (
+          <CreateGroupWizard
+            onClose={close}
+            onCreated={(group) => openGroupInMessages(group.id)}
+          />
+        )}
+        {active === 'message' && (
+          <NewConversationModal
+            onClose={close}
+            onSelect={openDmInMessages}
+          />
+        )}
+        {active === 'meeting' && (
+          <CreateMeetingSheet
+            onClose={close}
+            preselectedGroupId={activeOptions.groupId || null}
+            onNeedGroup={() => openCreate('group')}
+            onCreated={(meeting) => openGroupInMessages(meeting.groupId, { openMeetingId: meeting.id })}
+          />
+        )}
+      </Suspense>
 
       <CallOverlay />
     </div>
@@ -144,6 +199,9 @@ function App() {
     let cancelled = false;
     import('@capacitor/splash-screen').then(({ SplashScreen }) => {
       if (!cancelled) SplashScreen.hide().catch(() => {});
+    }).catch(() => {});
+    import('./native/pushNotifications').then(({ initPushNotifications }) => {
+      if (!cancelled) initPushNotifications().catch(() => {});
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [isNative, loading, showSplash]);

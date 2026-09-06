@@ -3,7 +3,6 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Play, Search, Radio } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavVisibility } from '../context/NavVisibilityContext';
-import GuestPrompt from '../components/GuestPrompt';
 import IkCreateLogo from './IkCreateLogo';
 import { getApiBase, resolveMediaUrl } from '../config/appConfig';
 
@@ -43,11 +42,10 @@ function NavIcon({ item, active, profileAvatar, profileInitial }) {
 }
 
 function UltimaNav({ onCreateClick }) {
-  const { user, isGuest, trackGuestInteraction } = useAuth();
+  const { user, isGuest } = useAuth();
   const { navVisible } = useNavVisibility();
   const location = useLocation();
   const navigate = useNavigate();
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
@@ -69,14 +67,9 @@ function UltimaNav({ onCreateClick }) {
 
   if (['/admin', '/login', '/register'].includes(location.pathname)) return null;
 
-  const handleCreate = () => {
-    if (isGuest) {
-      trackGuestInteraction();
-      setShowUpgradePrompt(true);
-    } else {
-      onCreateClick?.();
-    }
-  };
+  // Guest gating lives in the CREATE hub (App.jsx) so every entry point — the
+  // dock button and contextual `openCreate()` calls — behaves identically.
+  const handleCreate = () => onCreateClick?.();
 
   const profilePath = user ? `/profile/${user.id}` : '/login';
   const profileAvatar = user?.avatar ? resolveMediaUrl(user.avatar) : null;
@@ -95,31 +88,14 @@ function UltimaNav({ onCreateClick }) {
       active ? 'text-pink-300' : 'text-white/45 hover:text-white/75'
     }`;
 
-  const isAdmin = !!user?.isAdmin;
   const fabMotion = navVisible
     ? 'translate-y-0 opacity-100'
     : 'translate-y-2 opacity-0 pointer-events-none';
 
   return (
     <>
-      {isAdmin && !['/reels'].includes(location.pathname) && (
-        <button
-          type="button"
-          onClick={() => navigate('/admin')}
-          className={`ik-tap-spring fixed z-[95] flex items-center gap-2 rounded-full px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-white transition-all duration-[220ms] ease-out ${fabMotion}`}
-          style={{
-            right: '16px',
-            bottom: 'calc(var(--ultima-nav-offset, 6.37rem) + 8px)',
-            background: 'linear-gradient(135deg, #E1306C 0%, #B91C58 100%)',
-            boxShadow: '0 8px 28px rgba(225,48,108,0.5), 0 0 40px rgba(225,48,108,0.25)',
-          }}
-          aria-label="Go Live"
-        >
-          <Radio size={15} strokeWidth={2.5} className="animate-pulse" />
-          Go Live
-        </button>
-      )}
-
+      {/* "Live now" is a viewer shortcut (contextual), not a creation entry —
+          the operator's Go Live action lives in CREATE. */}
       {isLive && location.pathname !== '/live' && (
         <button
           type="button"
@@ -183,10 +159,6 @@ function UltimaNav({ onCreateClick }) {
           })}
         </div>
       </nav>
-
-      {showUpgradePrompt && (
-        <GuestPrompt onClose={() => setShowUpgradePrompt(false)} context="create" />
-      )}
     </>
   );
 }

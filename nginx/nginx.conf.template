@@ -21,9 +21,14 @@ rtmp {
             hls_playlist_length 4;
             hls_cleanup on;
             
-            # Auto-notify backend when OBS starts/stops streaming
-            on_publish http://ikhwezi-backend:3001/api/live/on-publish;
-            on_publish_done http://ikhwezi-backend:3001/api/live/on-publish-done;
+            # Auto-notify backend when OBS starts/stops streaming.
+            # nginx-rtmp cannot set custom headers, so the shared secret travels
+            # as a query parameter. __RTMP_WEBHOOK_SECRET__ is substituted from
+            # the RTMP_WEBHOOK_SECRET env var by docker-entrypoint.sh at start,
+            # and __BACKEND_UPSTREAM__ from BACKEND_UPSTREAM (default
+            # ikhwezi-backend:3001). This template is never used verbatim.
+            on_publish http://__BACKEND_UPSTREAM__/api/live/on-publish?secret=__RTMP_WEBHOOK_SECRET__;
+            on_publish_done http://__BACKEND_UPSTREAM__/api/live/on-publish-done?secret=__RTMP_WEBHOOK_SECRET__;
             
             deny play all;
         }

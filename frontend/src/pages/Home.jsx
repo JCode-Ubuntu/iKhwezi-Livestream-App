@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GuestPrompt from '../components/GuestPrompt';
 import { StoryTray } from '../components/Stories';
-import StoryCreator from '../components/StoryCreator';
+import { useCreateFlow } from '../context/CreateFlowContext';
 import SkeletonStream from '../components/SkeletonStream';
 import FullscreenFeed from '../components/feed/FullscreenFeed';
 import TextPostCard from '../components/feed/TextPostCard';
@@ -300,6 +300,8 @@ function BentoTile({ video, tall, onClick, index }) {
 function Home() {
   const navigate = useNavigate();
   const { fetchWithAuth, isGuest, guestInteractions, trackGuestInteraction } = useAuth();
+  // Story tray "+" is a contextual shortcut into CREATE → Story (single mount in App.jsx).
+  const { openCreate } = useCreateFlow();
   const [videos, setVideos] = useState([]);
   const [ads, setAds] = useState([]);
   const [textPosts, setTextPosts] = useState([]);
@@ -311,7 +313,6 @@ function Home() {
   const [guestPromptContext, setGuestPromptContext] = useState('default');
   const [muted, setMuted] = useState(true);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
-  const [showStoryCreator, setShowStoryCreator] = useState(false);
   const loadingMore = useRef(false);
   const desktopSentinelRef = useRef(null);
   const guestPromptDismissedRef = useRef(false);
@@ -533,7 +534,7 @@ function Home() {
       )}
 
       <div className="home-stories-row shrink-0">
-        <StoryTray compact hideLabels maxVisible={10} onAddStory={() => setShowStoryCreator(true)} />
+        <StoryTray compact hideLabels maxVisible={10} onAddStory={() => openCreate('story')} />
       </div>
 
       <div className="home-feed-shell">
@@ -674,9 +675,6 @@ function Home() {
           }}
           context={guestPromptContext}
         />
-      )}
-      {showStoryCreator && (
-        <StoryCreator onClose={() => setShowStoryCreator(false)} onPosted={() => setShowStoryCreator(false)} />
       )}
       </div>
     </div>

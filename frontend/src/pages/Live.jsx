@@ -305,6 +305,12 @@ function Live() {
   }, [liveStatus, tryAttachStream]);
 
   useEffect(() => {
+    // Re-arm on every (re)run. The cleanup below flips this to false, and this
+    // effect legitimately re-runs when fetchWithAuth changes identity (auth
+    // refresh) and under React StrictMode's dev double-invoke. Without this
+    // line, checkLiveStatus bails out forever and the page is stuck on
+    // "Checking live status…".
+    mountedRef.current = true;
     checkLiveStatus();
     const interval = setInterval(checkLiveStatus, 5000);
     return () => {

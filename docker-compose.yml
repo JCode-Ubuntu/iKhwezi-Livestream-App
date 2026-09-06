@@ -22,21 +22,15 @@ services:
       # logged-in session.
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_KEY=${ADMIN_KEY}
-      # KNOWN GAP (see audit report): backend/index.js's requireRtmpWebhook()
-      # rejects /api/live/on-publish(-done) with 503 whenever this is unset
-      # in production — and nginx-rtmp's on_publish/on_publish_done config
-      # below does not currently send this secret at all (nginx.conf is a
-      # static file; nginx-rtmp's stock image has no env-substitution step
-      # to inject it). Net effect: right now, in this exact configuration,
-      # nginx-rtmp-module treats that 503 as "reject the publish", so OBS
-      # cannot go live via on-publish auto-detection at all. Setting this
-      # alone does NOT fix that — nginx.conf/the nginx-rtmp image also needs
-      # to be changed to send it, which needs a Docker environment to build
-      # and verify (not available where this audit was performed). See the
-      # audit report's "RTMP webhook auth" finding for the two remediation
-      # options and pick one before relying on auto-detected live status.
-      - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET}
-      - TRUST_INTERNAL_RTMP_WEBHOOK=true
+      # Shared secret for nginx-rtmp → backend on-publish callbacks. The
+      # nginx-rtmp service below is built from ./nginx, whose entrypoint
+      # renders the SAME value into nginx.conf (?secret=...), so the backend
+      # can verify every callback (backend/middleware/rtmpWebhook.js).
+      # Both services must receive an identical value; set it once in the
+      # server's .env (e.g. `openssl rand -hex 32`). TRUST_INTERNAL_RTMP_WEBHOOK
+      # is intentionally NOT set any more — the private-IP bypass is no longer
+      # needed and would let any container on the bridge toggle live status.
+      - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
       - RTMP_SERVER=rtmp://nginx-rtmp:1935/live
       - RTMP_PUBLIC_SERVER=rtmp://ikhwezi.site:1935/live
       - HLS_HOST=https://ikhwezi.site/hls
@@ -64,13 +58,17 @@ services:
       - ikhwezi-network
 
   nginx-rtmp:
-    image: tiangolo/nginx-rtmp:latest
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     container_name: ikhwezi-rtmp
     ports:
       - "1935:1935"
       - "8081:8080"
+    environment:
+      # Must match the backend's RTMP_WEBHOOK_SECRET exactly (see above).
+      - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - hls-storage:/tmp/hls
     restart: unless-stopped
     networks:

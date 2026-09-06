@@ -1,6 +1,6 @@
 {
   "name": "ikhwezi-frontend",
-    "version": "3.0.13",
+  "version": "3.0.13",
   "contributors": [
     "Emil Kowalski (UI motion inspiration — https://emilkowal.ski/)"
   ],
@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build:mobile": "vite build",
     "preview": "vite preview",
     "cap:sync": "npm run build:mobile && npx cap sync",
@@ -26,6 +28,7 @@
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
     "@capacitor/keyboard": "^8.0.1",
+    "@capacitor/push-notifications": "^8.1.2",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.1",
     "hls.js": "^1.5.7",
@@ -36,13 +39,18 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.27",
+    "jsdom": "^25.0.1",
     "postcss": "^8.5.8",
     "sharp": "^0.33.5",
     "tailwindcss": "^3.4.19",
-    "vite": "^5.0.12"
+    "vite": "^5.0.12",
+    "vitest": "^2.1.9"
   }
 }

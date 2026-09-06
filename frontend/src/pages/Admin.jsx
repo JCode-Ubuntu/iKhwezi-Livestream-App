@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Key, Radio, Upload, Users, BarChart3, FileText, LogOut,
   RefreshCw, Play, Square, Eye, EyeOff, Copy, Check, Trash2,
-  Ban, UserCheck, Star, Video, TrendingUp, Clock, Shield, Megaphone
+  UserCheck, Star, Video, TrendingUp, Clock, Shield, Megaphone
 } from 'lucide-react';
 
 import { resolveMediaUrl, getApiBase } from '../config/appConfig';
