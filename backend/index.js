@@ -498,6 +498,55 @@ const meetingsModule = require('./meetings').mount({
   groups: groupsModule,
   env: process.env,
 });
+
+// ==================== MEDIA PIPELINE (PHASE 2: STORAGE + TRANSCODE) ====================
+// Object-storage provider (local disk by default; S3/R2 when S3_* env set —
+// see backend/storage-v2/). Fire-and-forget only: a provider copy failure is
+// logged, the LOCAL file stays canonical and the upload itself NEVER fails.
+// Transcode queue: BullMQ when REDIS_URL is set, in-process fallback
+// otherwise (the default until Redis lands in compose — never blocks boot).
+const mediaPipeline = (() => {
+  try {
+    const { buildStorageProviderFromEnv } = require('./storage-v2');
+    const storageProvider = buildStorageProviderFromEnv({ env: process.env });
+    const { buildTranscodeService } = require('./services/transcode');
+    const transcode = buildTranscodeService({ env: process.env });
+    const { buildTranscodeQueueFromEnv } = require('./queues');
+    const transcodeQueue = buildTranscodeQueueFromEnv({
+      processor: (job) => transcode.process(job),
+      env: process.env,
+    });
+    return { storageProvider, transcode, transcodeQueue };
+  } catch (err) {
+    console.warn('Media pipeline could not initialize (non-fatal; uploads stay local-only):', err?.message || err);
+    return null;
+  }
+})();
+
+/** Copy an uploaded file to object storage in the background. Never throws,
+ *  never blocks the HTTP response; local file remains the source of truth. */
+function persistUploadToStorage(filename) {
+  if (!mediaPipeline || !filename) return;
+  const filePath = path.join(__dirname, 'storage', 'uploads', filename);
+  Promise.resolve()
+    .then(() => mediaPipeline.storageProvider.put(`uploads/${filename}`, filePath))
+    .catch((err) => console.error(`storage-v2: background copy failed for ${filename} (local file stays canonical):`, err?.message || err));
+}
+
+/** Enqueue transcode profiles for an uploaded video. Runs only after the
+ *  response is sent (never in the request path); best-effort, never throws. */
+function enqueueTranscode(filename) {
+  if (!mediaPipeline || !filename) return;
+  try {
+    mediaPipeline.transcodeQueue.add('transcode', {
+      filename,
+      uploadsDir: path.join(__dirname, 'storage', 'uploads'),
+    }).catch?.((err) => console.error('transcode enqueue failed:', err?.message || err));
+  } catch (err) {
+    console.error('transcode enqueue failed:', err?.message || err);
+  }
+}
+
 // ==================== AUTH ROUTES ====================
 
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
@@ -792,6 +841,11 @@ app.post('/api/videos', authenticate, requireRegistered, upload.single('video'),
       }
     }
     
+    // Media pipeline (fire-and-forget, never blocks/fails the response):
+    // object-storage copy + transcode enqueue for this video.
+    persistUploadToStorage(req.file.filename);
+    enqueueTranscode(req.file.filename);
+
     res.json(video);
   } catch (err) {
     console.error('Upload error:', err);
@@ -1181,8 +1235,14 @@ app.patch('/api/users/me', authenticate, requireRegistered, imageUpload.fields([
     const { displayName, bio } = req.body;
     if (displayName !== undefined) req.user.displayName = displayName.trim().slice(0, 60);
     if (bio !== undefined) req.user.bio = bio.trim().slice(0, 200);
-    if (req.files?.avatar?.[0]) req.user.avatar = `/storage/uploads/${req.files.avatar[0].filename}`;
-    if (req.files?.cover?.[0]) req.user.coverImage = `/storage/uploads/${req.files.cover[0].filename}`;
+    if (req.files?.avatar?.[0]) {
+      req.user.avatar = `/storage/uploads/${req.files.avatar[0].filename}`;
+      persistUploadToStorage(req.files.avatar[0].filename);
+    }
+    if (req.files?.cover?.[0]) {
+      req.user.coverImage = `/storage/uploads/${req.files.cover[0].filename}`;
+      persistUploadToStorage(req.files.cover[0].filename);
+    }
     await req.user.save();
 
     res.json({
@@ -1666,6 +1726,9 @@ app.post('/api/stories', authenticate, requireRegistered, storyUpload.single('st
       caption: caption || '',
       expiresAt,
     });
+
+    // Media pipeline (fire-and-forget, never blocks/fails the response).
+    persistUploadToStorage(req.file.filename);
 
     const full = await Story.findByPk(story.id, {
       include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName', 'avatar'] }],
@@ -2263,6 +2326,9 @@ app.post('/api/admin/ads', requireAdmin, adUpload.single('media'), async (req, r
       priority: parseInt(priority, 10) || 0,
       isActive: isActive !== 'false',
     });
+
+    // Media pipeline (fire-and-forget, never blocks/fails the response).
+    persistUploadToStorage(req.file.filename);
 
     await logAudit('AD_CREATED', { adId: ad.id, title: ad.title }, req.ip);
     res.json(ad);
