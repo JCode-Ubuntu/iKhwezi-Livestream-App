@@ -38,7 +38,45 @@ function createFakeIo() {
   return io;
 }
 
-async function createHarness() {
+/**
+ * A/V provider configured like production LiveKit but with zero network I/O.
+ * livekit-server-sdk mints tokens with pure local crypto (jose), so the JWTs
+ * produced here are real and verifiable — tests assert the actual claims.
+ * `deletedRooms` records force-close calls made by the meetings service.
+ */
+function createFakeLiveKit() {
+  const { AccessToken } = require('livekit-server-sdk');
+  const apiKey = 'testlk';
+  const apiSecret = 'test_livekit_secret_test_livekit_secret_32';
+  const url = 'http://livekit:7880';
+  const publicUrl = 'wss://ikhwezi.site/livekit';
+  const deletedRooms = [];
+
+  const provider = {
+    enabled: true,
+    capabilities: {
+      presence: true, scheduling: true, chat: 'group',
+      audio: true, video: true, screenShare: true,
+      moderation: 'host', sfu: 'livekit',
+    },
+    async mintJoinToken({ meeting, user }) {
+      const at = new AccessToken(apiKey, apiSecret, {
+        identity: user.id,
+        name: user.displayName || user.username,
+        ttl: '4h',
+      });
+      at.addGrant({ roomJoin: true, room: `meeting_${meeting.id}`, canPublish: true, canSubscribe: true });
+      return { token: await at.toJwt(), url: publicUrl, room: `meeting_${meeting.id}` };
+    },
+    async onMeetingEnded(meetingId) {
+      deletedRooms.push(`meeting_${meetingId}`);
+    },
+  };
+
+  return { provider, apiKey, apiSecret, url, publicUrl, deletedRooms };
+}
+
+async function createHarness(opts = {}) {
   const sequelize = new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
   const core = defineCoreModels(sequelize, DataTypes);
   const { User, DirectMessage } = core;
@@ -60,6 +98,11 @@ async function createHarness() {
     interactionRateLimit: passthrough,
     logAudit,
   });
+  // Deterministic A/V provider for tests: acts like a configured LiveKit SFU
+  // without network I/O. Token minting is pure crypto, so we verify real JWTs
+  // (signed with real material) without running livekit-server.
+  // opts.av overrides (e.g. buildNullProvider() for the "unconfigured" case).
+  const livekit = createFakeLiveKit();
   const meetings = require('../meetings').mount({
     app, io, sequelize, User, DataTypes,
     authenticate: auth.authenticate,
@@ -67,6 +110,7 @@ async function createHarness() {
     interactionRateLimit: passthrough,
     logAudit,
     groups,
+    av: opts.av || livekit.provider,
   });
   require('../routes/messages').buildMessageRoutes({
     app, io, sequelize, Op, User, DirectMessage,
@@ -127,7 +171,7 @@ async function createHarness() {
   }
 
   return {
-    app, server, base, sequelize, io, auditLog,
+    app, server, base, sequelize, io, auditLog, livekit,
     models: { ...core, ...groups.models, ...meetings.models },
     groups, meetings, auth,
     createUser, api, close,

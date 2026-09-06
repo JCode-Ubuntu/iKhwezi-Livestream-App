@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, Play, Eye, TrendingUp, Hash, Radio, ChevronRight } from 'lucide-react';
+import { Search, X, Eye, TrendingUp, Hash, Radio, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import { resolveMediaUrl } from '../config/appConfig';

@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createHarness } = require('./harness');
+const { buildNullProvider } = require('../meetings/av');
 
 let h;
 test.before(async () => { h = await createHarness(); });
@@ -47,7 +48,7 @@ test('only group members can create/see meetings; guests blocked', async () => {
   const meeting = r.data;
   assert.equal(meeting.status, 'scheduled');
   assert.equal(meeting.hostId, owner.user.id);
-  assert.equal(meeting.capabilities.video, false, 'capabilities must honestly report no video');
+  assert.equal(meeting.capabilities.video, true, 'capabilities must reflect the configured A/V provider');
   assert.equal(meeting.capabilities.presence, true);
 
   r = await h.api('GET', `/api/meetings/${meeting.id}`, { token: stranger.token });
@@ -195,4 +196,110 @@ test('deleting a group cascades its meetings and participants', async () => {
   assert.deepEqual(r.data, { deleted: true });
   assert.equal(await h.models.Meeting.count({ where: { groupId: group.id } }), 0);
   assert.equal(await h.models.MeetingParticipant.count({ where: { meetingId: m.id } }), 0);
+});
+
+// ==================== A/V join tokens (LiveKit) ====================
+// The harness mounts a fake-but-real LiveKit provider (real JWTs, no network).
+// These tests verify the security gates: who can mint, when, and what claims
+// the resulting credential actually carries. Do not re-export the token value
+// into logs anywhere — it is scoped, short-lived material for a real room.
+
+async function createLiveMeeting() {
+  const { owner, member, stranger, group } = await setup();
+  const r = await h.api('POST', '/api/meetings', {
+    token: owner.token, body: { groupId: group.id, title: 'AV Room', startNow: true },
+  });
+  assert.equal(r.status, 201);
+  return { owner, member, stranger, group, meeting: r.data };
+}
+
+test('media-token: rejects non-members, guests, non-live meetings; mints for live members', async () => {
+  const { owner, member, stranger, meeting } = await createLiveMeeting();
+
+  // Non-member cannot mint.
+  let r = await h.api('POST', `/api/meetings/${meeting.id}/media-token`, { token: stranger.token });
+  assert.equal(r.status, 403);
+
+  // Guest cannot mint (requireRegistered check in guards).
+  const guest = await h.createUser({ isGuest: true });
+  await h.api('POST', `/api/groups/${meeting.groupId}/members`, { token: owner.token, body: { userId: guest.user.id } }).catch(() => {});
+  r = await h.api('POST', `/api/meetings/${meeting.id}/media-token`, { token: guest.token });
+  assert.equal(r.status, 403);
+
+  // Scheduled (not live) meeting: no tokens.
+  const sched = (await h.api('POST', '/api/meetings', {
+    token: owner.token, body: { groupId: meeting.groupId, title: 'Later' },
+  })).data;
+  r = await h.api('POST', `/api/meetings/${sched.id}/media-token`, { token: member.token });
+  assert.equal(r.status, 409);
+
+  // Live + member: mint succeeds with material scoped to this member+room.
+  r = await h.api('POST', `/api/meetings/${meeting.id}/media-token`, { token: member.token });
+  assert.equal(r.status, 200);
+  assert.ok(r.data.token, 'token present');
+  assert.equal(r.data.url, h.livekit.publicUrl);
+  assert.equal(r.data.room, `meeting_${meeting.id}`);
+  assert.ok(r.data.meeting.viewer.isJoined !== undefined, 'viewer block present');
+});
+
+test('media-token: minted JWT carries single-room claims for the requesting user', async () => {
+  const { member, meeting } = await createLiveMeeting();
+  const r = await h.api('POST', `/api/meetings/${meeting.id}/media-token`, { token: member.token });
+  assert.equal(r.status, 200);
+
+  // Decode the middle segment (claims) without verifying — the minter is our
+  // own provider with known material, verified structurally below.
+  const claims = JSON.parse(Buffer.from(r.data.token.split('.')[1], 'base64').toString());
+  assert.equal(claims.sub, member.user.id, 'identity = requesting user');
+  assert.equal(claims.video.room, `meeting_${meeting.id}`);
+  assert.equal(claims.video.roomJoin, true);
+  assert.ok(claims.video.canPublish);
+  assert.ok(claims.video.canSubscribe);
+  assert.ok(claims.exp > Date.now() / 1000, 'token is forward-dated');
+  // livekit-server-sdk v2 emits nbf (not iat); TTL is exp − nbf.
+  assert.ok(claims.nbf, 'nbf present (SDK v2)');
+  assert.ok(claims.exp - claims.nbf <= 4 * 3600 + 60, 'TTL bounded (4h)');
+});
+
+test('media-token: unconfigured server answers 501 and capabilities stay honest', async () => {
+  // Second harness with the NULL provider = operator did not set LIVEKIT_*.
+  const h2 = await createHarness({ av: buildNullProvider() });
+  try {
+    const owner = await h2.createUser();
+    const member = await h2.createUser();
+    const g = await h2.api('POST', '/api/groups', {
+      token: owner.token, body: { name: 'No-AV group', memberIds: [member.user.id] },
+    });
+    assert.equal(g.status, 201);
+
+    // Capabilities must still report presence/scheduling, but no A/V.
+    const created = await h2.api('POST', '/api/meetings', {
+      token: owner.token, body: { groupId: g.data.id, title: 'Presence only', startNow: true },
+    });
+    assert.equal(created.status, 201);
+    assert.equal(created.data.capabilities.audio, false, 'null provider → audio:false');
+    assert.equal(created.data.capabilities.video, false, 'null provider → video:false');
+    assert.equal(created.data.capabilities.presence, true);
+
+    // Token minting is a 501 feature-off, not a 500 error.
+    const r = await h2.api('POST', `/api/meetings/${created.data.id}/media-token`, { token: member.token });
+    assert.equal(r.status, 501);
+    assert.match(r.data.error, /not enabled/i);
+  } finally {
+    await h2.close();
+  }
+});
+
+test('ending a meeting force-closes its SFU room', async () => {
+  const { owner, meeting } = await createLiveMeeting();
+  const before = h.livekit.deletedRooms.length;
+  const r = await h.api('POST', `/api/meetings/${meeting.id}/end`, { token: owner.token });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.status, 'ended');
+  // The provider's onMeetingEnded hook runs fire-and-forget; poll briefly.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.ok(
+    h.livekit.deletedRooms.includes(`meeting_${meeting.id}`),
+    'SFU room force-closed after end',
+  );
 });

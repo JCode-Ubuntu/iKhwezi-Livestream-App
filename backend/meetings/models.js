@@ -7,10 +7,11 @@
  * of the group is the access boundary: only members can see, join or manage
  * the group's meetings.
  *
- * This is the persistence + presence foundation only. Real-time audio/video
- * is intentionally NOT modelled here yet — when it lands it must be an SFU
- * (mediasoup/LiveKit-style) with TURN, and it will attach to these rows via
- * a separate `MeetingSession`/media-server record rather than changing them.
+ * Meeting lifecycle stays the record of truth. Real-time audio/video rides on
+ * a separate SFU (LiveKit + embedded TURN via backend/meetings/av.js): clients
+ * obtain per-meeting, per-user signed join tokens from the backend, so media
+ * access inherits the exact same membership + live-status checks as presence.
+ * No media state is stored on these rows — relay/room state lives in the SFU.
  *
  * Lifecycle: scheduled → live → ended, or scheduled → cancelled.
  */

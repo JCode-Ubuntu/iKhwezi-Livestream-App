@@ -45,5 +45,11 @@ jobs:
             # recreated alongside the app services.
             $COMPOSE build --no-cache frontend backend nginx-rtmp
             $COMPOSE up -d --force-recreate frontend backend nginx-rtmp
+
+            # Meeting A/V SFU (prebuilt image). Boot order does not matter to
+            # the app: the backend tolerates a missing/unreachable SFU and the
+            # meetings degrade to presence-only. LIVEKIT_* values in .env decide
+            # whether the backend mints tokens at all.
+            $COMPOSE up -d livekit || echo "WARN: livekit SFU failed to start; meetings stay presence-only"
             docker image prune -f
             echo "✅ Deployed $(git rev-parse --short HEAD) at $(date)"

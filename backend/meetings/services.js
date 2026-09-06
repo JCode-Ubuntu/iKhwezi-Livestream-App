@@ -21,27 +21,21 @@ const { isUuid } = require('./validation');
 const USER_ATTRS = ['id', 'username', 'displayName', 'avatar'];
 const RECENT_ENDED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-const CAPABILITIES = Object.freeze({
-  presence: true,        // join/leave + live participant list
-  scheduling: true,      // scheduledAt, start/end/cancel lifecycle
-  chat: 'group',         // conversation happens in the group chat
-  audio: false,
-  video: false,
-  screenShare: false,
-  raiseHand: false,
-  moderation: 'host',    // host / group admins control lifecycle
-});
-
 function httpError(message, status) {
   const err = new Error(message);
   err.status = status;
   return err;
 }
 
-function buildMeetingService({ Meeting, MeetingParticipant, User, groups }) {
+function buildMeetingService({ Meeting, MeetingParticipant, User, groups, av }) {
   const { models: groupModels, service: groupService } = groups;
   const { Group, GroupMessage } = groupModels;
   const sequelize = Meeting.sequelize;
+
+  // Server-driven capability reporting: the A/V provider decides what is real.
+  const CAPABILITIES = av?.capabilities || (() => {
+    throw new Error('buildMeetingService requires an av provider (see backend/meetings/av.js)');
+  })();
 
   const ROLE_RANK = { member: 0, admin: 1, owner: 2 };
 
@@ -265,6 +259,13 @@ function buildMeetingService({ Meeting, MeetingParticipant, User, groups }) {
       await MeetingParticipant.update({ leftAt: now }, { where: { meetingId: meeting.id, leftAt: null }, transaction });
       await postSystemMessage(meeting.groupId, actor.id, `Meeting ended: ${meeting.title}`, transaction);
     });
+    // DB is the record of truth; tearing down the SFU room is best-effort so
+    // voices can't linger after lifecycle flip. Never awaited in the request
+    // path — a slow/unreachable SFU must not fail the "end" that already
+    // committed.
+    if (av?.enabled) {
+      Promise.resolve(av.onMeetingEnded(meeting.id)).catch(() => {});
+    }
     return present(meeting, actor.id, membership);
   }
 
@@ -323,12 +324,33 @@ function buildMeetingService({ Meeting, MeetingParticipant, User, groups }) {
     return activeParticipants(meeting.id);
   }
 
+  /**
+   * Mint a single-room, short-lived SFU join credential for a member of a
+   * LIVE meeting. Every check that gates joining also gates media access —
+   * membership, registered (non-guest) and status==live. The client ends up
+   * with { token, url, room }; the API secret never leaves this process.
+   */
+  async function grantMediaAccess(meetingId, user) {
+    if (!av?.enabled) throw httpError('FEATURE_DISABLED', 501);
+    const meeting = await loadMeeting(meetingId);
+    await requireMembership(meeting.groupId, user.id);
+    if (meeting.status !== 'live') throw httpError('NOT_LIVE', 409);
+    const grant = await av.mintJoinToken({ meeting, user });
+    return { meeting: await present(meeting, user.id, null), ...grant };
+  }
+
   /** Cascade used when a group is deleted. */
   async function deleteForGroup(groupId, transaction) {
     const ids = (await Meeting.findAll({ where: { groupId }, attributes: ['id'], transaction })).map((m) => m.id);
     if (!ids.length) return 0;
     await MeetingParticipant.destroy({ where: { meetingId: ids }, transaction });
     await Meeting.destroy({ where: { id: ids }, transaction });
+    // Best-effort SFU cleanup of any live rooms (never fails the group delete).
+    if (av?.enabled) {
+      for (const id of ids) {
+        Promise.resolve(av.onMeetingEnded(id)).catch(() => {});
+      }
+    }
     return ids.length;
   }
 
@@ -350,9 +372,10 @@ function buildMeetingService({ Meeting, MeetingParticipant, User, groups }) {
     joinMeeting,
     leaveMeeting,
     listParticipants,
+    grantMediaAccess,
     deleteForGroup,
     groupMemberIds,
   };
 }
 
-module.exports = { buildMeetingService, CAPABILITIES };
+module.exports = { buildMeetingService };

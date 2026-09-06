@@ -35,6 +35,19 @@ services:
       - RTMP_PUBLIC_SERVER=rtmp://ikhwezi.site:1935/live
       - HLS_HOST=https://ikhwezi.site/hls
       - HLS_URL=https://ikhwezi.site/hls
+      # ==================== MEETING A/V (LiveKit SFU) ====================
+      # When all four are set, meetings get real audio/video (tokens are
+      # minted server-side after membership+live checks; capabilities report
+      # A/V as available). When ANY is missing, the app degrades to
+      # presence-only meetings and the token route answers 501 — the honest,
+      # stable behaviour. LIVEKIT_URL is the backend→SFU REST address
+      # (docker service name is fine); LIVEKIT_PUBLIC_URL is the address the
+      # web/native client connects to (wss:// via the frontend nginx
+      # /livekit proxy, or wss://livekit.your-domain for direct DNS setups).
+      - LIVEKIT_URL=${LIVEKIT_URL:-}
+      - LIVEKIT_PUBLIC_URL=${LIVEKIT_PUBLIC_URL:-}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
     volumes:
       - backend-storage:/app/storage
     depends_on:
@@ -70,6 +83,45 @@ services:
       - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
     volumes:
       - hls-storage:/tmp/hls
+    restart: unless-stopped
+    networks:
+      - ikhwezi-network
+
+  # ==================== MEETING A/V — LiveKit SFU ====================
+  # Self-hosted selective forwarding unit + embedded TURN (UDP) for group
+  # meeting calls. Entry is token-gated by the backend (POST
+  # /api/meetings/:id/media-token → membership + live-status checks); the SFU
+  # accepts no other form of client. Ports must be open on the VPS firewall
+  # (Lightsail networking): TCP 7880/7881 + UDP 3478 and 50000-60000.
+  #
+  # The full config is passed inline via LIVEKIT_CONFIG (livekit-server reads
+  # that env var directly — no file mount). keys: MUST equal the backend's
+  # LIVEKIT_API_KEY / LIVEKIT_API_SECRET from .env, so every minted token
+  # validates. Until the operator sets real values in .env, a placeholder pair
+  # keeps the container bootable but the backend stays unconfigured → the app
+  # degrades to presence-only meetings (token route 501, capabilities false).
+  livekit:
+    image: livekit/livekit-server:v1.13.5
+    container_name: ikhwezi-livekit
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 60000
+          use_external_ip: true
+        turn:
+          enabled: true
+          udp_port: 3478
+          domain: ikhwezi.site
+        keys:
+          ${LIVEKIT_API_KEY:-devplaceholderkey}: ${LIVEKIT_API_SECRET:-devplaceholdersecret-change-me}
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "3478:3478/udp"
+      - "50000-60000:50000-60000/udp"
     restart: unless-stopped
     networks:
       - ikhwezi-network

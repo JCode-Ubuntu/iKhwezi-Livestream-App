@@ -1,17 +1,23 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, Play, Square, LogIn, LogOut, Ban, Users, CalendarClock, Radio, Info, Crown } from 'lucide-react';
+import { X, Play, Square, LogIn, LogOut, Ban, Users, CalendarClock, Radio, Info, Crown, PhoneCall } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { useMeetingsApi } from '../../hooks/useMeetingsApi';
 import { resolveMediaUrl } from '../../config/appConfig';
+
+// LiveKit drags the whole WebRTC stack (~400 kB) into the bundle. It is only
+// needed once a member actually opens a call, so it is code-split: the chunk
+// downloads on first "Join call" instead of bloating every Messages-page load.
+const MeetingRoom = React.lazy(() => import('./MeetingRoom'));
 
 /**
  * MeetingDetails — bottom sheet for one meeting.
  *
  * Renders exactly what the server says is possible (`meeting.capabilities` +
  * `meeting.viewer`): presence (join/leave), lifecycle (start/end/cancel for
- * host or group admins), participant list. It never shows an audio/video
- * surface because the backend reports `audio: false, video: false`.
+ * host or group admins), participant list. When the server reports A/V
+ * available (LiveKit configured), "Join call" opens the MeetingRoom surface;
+ * otherwise the sheet stays presence-only and says so honestly.
  *
  * Realtime: refetches on meeting-updated / meeting-participant for this id.
  */
@@ -46,6 +52,7 @@ function MeetingDetails({ meetingId, onClose, onChanged }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [inCall, setInCall] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -86,6 +93,37 @@ function MeetingDetails({ meetingId, onClose, onChanged }) {
       setBusy('');
     }
   };
+
+  // If the meeting stops being live while a member is in the call (host
+  // ended / cancelled), close the call surface. The SFU force-close also
+  // disconnects the room, but the UI must follow the authoritative DB state.
+  useEffect(() => {
+    if (inCall && meeting && meeting.status !== 'live') setInCall(false);
+  }, [inCall, meeting]);
+
+  // A full-screen call replaces the sheet while in the call.
+  if (inCall && meeting && meeting.status === 'live') {
+    return (
+      <React.Suspense
+        fallback={(
+          <div className="fixed inset-0 z-[500] flex items-center justify-center bg-[#0b0d12]">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-pink-400 border-t-transparent" />
+          </div>
+        )}
+      >
+        <MeetingRoom
+          meeting={meeting}
+          onLeave={() => {
+            setInCall(false);
+            // Leaving the call surface also leaves presence if we had joined,
+            // then refresh either way.
+            if (meeting.viewer?.isJoined) api.leave(meeting.id).catch(() => {});
+            load();
+          }}
+        />
+      </React.Suspense>
+    );
+  }
 
   const viewer = meeting?.viewer || {};
   const caps = meeting?.capabilities || {};
@@ -166,20 +204,40 @@ function MeetingDetails({ meetingId, onClose, onChanged }) {
               )}
             </div>
 
-            {/* Honest capability notice */}
+            {/* Honest capability notice — only when A/V is NOT available */}
             {(caps.audio === false || caps.video === false) && (
               <div className="mb-4 flex items-start gap-2 rounded-2xl border border-white/8 bg-white/4 p-3 text-xs text-white/50">
                 <Info size={14} className="mt-0.5 shrink-0 text-gold-300" />
                 <p>
-                  Audio and video conferencing are not available in this release. Joining marks you present
+                  Audio and video are not enabled on this server. Joining marks you present
                   and the conversation continues in the group chat.
                 </p>
               </div>
             )}
 
-            {/* Actions — driven by viewer + status */}
+            {/* Actions — driven by viewer + status + capabilities */}
             <div className="flex flex-wrap gap-2">
-              {meeting.status === 'live' && caps.presence && !viewer.isJoined && (
+              {caps.audio && caps.video && meeting.status === 'live' && (
+                <button
+                  type="button"
+                  disabled={!!busy}
+                  onClick={() => {
+                    // Opening the call also marks presence, so the roster
+                    // matches who is actually in the room.
+                    if (!viewer.isJoined) {
+                      api.join(meeting.id)
+                        .then((m) => { setMeeting(m); onChanged?.(m); })
+                        .catch(() => { /* presence is best-effort */ });
+                    }
+                    setInCall(true);
+                  }}
+                  className="ik-btn ik-btn-primary ik-btn-pill flex items-center gap-2 px-5 py-2.5 text-sm font-bold disabled:opacity-40"
+                  data-testid="join-call"
+                >
+                  <PhoneCall size={15} /> {viewer.isJoined ? 'Return to call' : 'Join call'}
+                </button>
+              )}
+              {meeting.status === 'live' && caps.presence && !viewer.isJoined && !(caps.audio && caps.video) && (
                 <button type="button" disabled={!!busy} onClick={() => run('join', api.join, 'You joined the meeting')} className="ik-btn ik-btn-primary ik-btn-pill flex items-center gap-2 px-5 py-2.5 text-sm font-bold disabled:opacity-40">
                   <LogIn size={15} /> Join
                 </button>

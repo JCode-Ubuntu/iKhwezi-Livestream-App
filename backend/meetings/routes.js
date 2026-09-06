@@ -13,6 +13,8 @@
  *   POST   /api/meetings/:id/join         (meeting must be live)
  *   POST   /api/meetings/:id/leave
  *   GET    /api/meetings/:id/participants
+ *   POST   /api/meetings/:id/media-token  (SFU join credential; 501 when A/V
+ *                                          is not configured on this server)
  *
  * Realtime (Socket.IO, emitted to the group room `group_{groupId}` and, for
  * notification-worthy events, to each member's `user_{id}` room):
@@ -32,6 +34,7 @@ function mapError(res, err, fallback) {
     NOT_LIVE: [409, 'This meeting is not live'],
     INVALID_STATE: [409, 'Meeting is not in a state that allows this action'],
     NOT_EDITABLE: [409, 'Only scheduled meetings can be edited'],
+    FEATURE_DISABLED: [501, 'Audio/video is not enabled on this server'],
   };
   const hit = map[err?.message];
   if (hit) return res.status(hit[0]).json({ error: hit[1] });
@@ -171,6 +174,25 @@ function buildMeetingRoutes({ app, io, service, groups, authenticate, requireReg
       return res.json(await service.listParticipants(req.params.id, req.user));
     } catch (err) {
       return mapError(res, err, 'Failed to load participants');
+    }
+  });
+
+  /**
+   * Join credential for the SFU (LiveKit). Authz is fully server-side: only a
+   * registered member of the meeting's group, for a LIVE meeting, may mint.
+   * 501 when the operator has not configured LiveKit — the client then keeps
+   * the presence-only UX (capabilities already said audio/video unavailable).
+   */
+  app.post('/api/meetings/:id/media-token', ...guards, interactionRateLimit, async (req, res) => {
+    try {
+      const grant = await service.grantMediaAccess(req.params.id, req.user);
+      await logAudit('MEETING_MEDIA_TOKEN', { meetingId: req.params.id }, req.ip);
+      return res.json(grant);
+    } catch (err) {
+      if (err?.message === 'FEATURE_DISABLED') {
+        return res.status(501).json({ error: 'Audio/video is not enabled on this server' });
+      }
+      return mapError(res, err, 'Failed to join meeting media');
     }
   });
 }

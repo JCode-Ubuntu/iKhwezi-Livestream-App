@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Trash2, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { resolveMediaUrl } from '../config/appConfig';
 

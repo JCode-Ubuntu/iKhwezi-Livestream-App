@@ -8,7 +8,8 @@ import { parseJsonResponse } from '../utils/apiFetch';
  * `useMeetingsApi()` (memoized) rather than calling this in a component body.
  *
  * Every meeting payload carries `capabilities` — the client must read that to
- * decide what to render (presence/scheduling are real; audio/video are not).
+ * decide what to render. A/V appears ONLY when the server says so (the SFU is
+ * configured); otherwise meetings are presence-only.
  */
 function buildMeetingsApi(fetchWithAuth) {
   async function call(path, options = {}) {
@@ -55,6 +56,17 @@ function buildMeetingsApi(fetchWithAuth) {
     return data;
   };
 
+  /**
+   * Mint a join credential from the backend. Server-side authz: membership +
+   * live-status are checked there; the API secret never reaches this code.
+   * 501 = A/V not configured on this server → the caller keeps presence-only UX.
+   */
+  async function mediaToken(id) {
+    const { res, data } = await call(`/meetings/${id}/media-token`, { method: 'POST' });
+    if (!res.ok) throw fail(data, 'Failed to join meeting media');
+    return data; // { token, url, room, meeting }
+  }
+
   return {
     create,
     list,
@@ -65,6 +77,7 @@ function buildMeetingsApi(fetchWithAuth) {
     cancel: lifecycle('cancel', 'Failed to cancel meeting'),
     join: lifecycle('join', 'Failed to join meeting'),
     leave: lifecycle('leave', 'Failed to leave meeting'),
+    mediaToken,
   };
 }
 

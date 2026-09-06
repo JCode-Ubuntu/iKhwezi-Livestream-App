@@ -487,14 +487,17 @@ const groupsModule = require('./groups').mount({
 });
 
 // ==================== MEETINGS ====================
-// Group meetings (scheduling + presence foundation). Depends on the groups
-// module for membership checks; REST under /api/meetings. See backend/meetings.
-require('./meetings').mount({
+// Group meetings (scheduling + presence + LiveKit A/V when configured).
+// Depends on the groups module for membership checks; REST under
+// /api/meetings. A/V is server-gated: tokens are minted only for live
+// meetings to group members (see backend/meetings/av.js). When LIVEKIT_* env
+// vars are absent, meetings stay presence-only and capabilities say so.
+const meetingsModule = require('./meetings').mount({
   app, io, sequelize, User, DataTypes,
   authenticate, requireRegistered, interactionRateLimit, logAudit,
   groups: groupsModule,
+  env: process.env,
 });
-
 // ==================== AUTH ROUTES ====================
 
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
@@ -3207,6 +3210,23 @@ const initialize = async () => {
     await sequelize.sync();
     if (isSqlite) await enforceInteractionUniqueness();
     console.log(`Database synchronized (${sequelize.getDialect()})`);
+
+    // Guest-account hygiene: purge stale @guest.local rows (inactive 14+ days,
+    // no owned content) with their Wallet/Points companions, or idle rows
+    // accumulate forever — one triplet per install that ever opened the app.
+    // Runs once now, then daily (unref'd timer, never blocks shutdown).
+    try {
+      const { buildGuestCleanupJob } = require('./jobs/guestCleanup');
+      const cleanup = buildGuestCleanupJob({
+        sequelize,
+        models: { ...coreModels, ...groupsModule.models, ...meetingsModule.models },
+      });
+      cleanup.start({
+        idleDays: parseInt(process.env.GUEST_IDLE_DAYS, 10) || 14,
+      });
+    } catch (err) {
+      console.warn('Guest cleanup could not start (non-fatal):', err.message);
+    };
     
     // Ensure storage directories exist
     const dirs = ['storage/videos', 'storage/uploads', 'storage/hls'];
