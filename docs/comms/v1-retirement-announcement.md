@@ -2,9 +2,10 @@
 
 > **STATUS: DRAFT — pending owner review and final decisions.**
 > **Nothing in this document has been sent to any user.**
-> Fill every `[DATE]` and `[LINK]` placeholder before use. See
-> **Open Decisions For The Owner** at the bottom — copy text must not be
-> finalised before those are answered.
+> Fill every `[DATE]` and `[LINK]` placeholder before use. Purchase handling
+> has been **decided** (see "DECIDED — V1 purchase handling" below); only the
+> launch date remains open, and it is gated on the launch-candidate checklist,
+> not a calendar wish.
 
 ---
 
@@ -16,9 +17,10 @@ When iKHWEZI V2 launches on **[DATE]**, the V1 platform is retired.
 - V1 **uploaded content** (videos, stories, posts) does not carry over.
 - V1 **livestream archives** (HLS recordings) do not carry over.
 - Purchased **balances held in V1** (iKHWEZI coins / subscriptions) are
-  retired with V1 — how V2 honours previous purchasers is an explicit
-  **owner decision** covered in Open Decisions below. The comms must not
-  promise an option until the owner picks one.
+  retired with V1. **Decided handling:** re-registering with the same
+  verified email/phone automatically credits
+  min(V1 unspent balance, Stripe payments recorded) — or a 60-day refund
+  path via support@ikhwezi.site. Details in the DECIDED section below.
 
 What users need to do: **create a fresh account on V2** after launch using
 their preferred email or phone number. Registration is quick, and V2 has
@@ -75,8 +77,9 @@ into legalese in user copy; the formal processing notice lives elsewhere
 > email or phone number — it takes a minute.
 >
 > If you hold coins or a subscription on V1, we are handling that
-> carefully: [OWNER-DECIDED HANDLING — see Open Decisions; do not send
-> until this sentence is final].
+> carefully: re-register with the same email or phone number and your
+> paid coin balance is waiting for you — or email support@ikhwezi.site
+> within 60 days of launch for a refund.
 >
 > When we retire V1, we delete your old personal information with it —
 > part of keeping your data private under POPIA, not just a reset.
@@ -122,47 +125,35 @@ into legalese in user copy; the formal processing notice lives elsewhere
 
 ---
 
-## 4. Open Decisions For The Owner ⚠️
+## 4. DECIDED — V1 purchase handling (authorized under the engineering-decision standard)
 
-> **These require an explicit human decision before any copy is finalised
-> or sent. Do not invent policy; present options clearly and stop.**
+> Resolved 2026-09-06 by delegated authority. The options below are kept for
+> the record; the bolded line is the operative decision.
 
-- [ ] **How to honour V1 purchased balances (coins / subscriptions).**
-
-  V1 retires with real purchases inside it. Options to decide between:
-
-  - **Option A — Grandfathered bonus coins.** Users who re-register on V2
-    receive a bonus coin balance proportional to (or matching) their V1
-    purchase history. *Pros:* simple to communicate ("your money's
-    waiting for you"), rewards loyalty, needs a V1 export of purchase
-    records keyed to email/phone. *Cons:* cost of honouring in V2 economy;
-    needs an import/matching mechanism; excludes users who purchased on a
-    different identifier than they re-register with.
-  - **Option B — Refund path.** Users can request a refund of unspent V1
-    balances through a support channel by a deadline. *Pros:* honest,
-    limited cost, legally cleanest for POPIA/consumer law. *Cons:*
-    support overhead; per-case handling; comms must be more careful
-    ("request a refund" reads colder than "your coins are waiting").
-  - **Option C — Hybrid.** Automatic small bonus for all V1 purchasers +
-    refund path for anything above a threshold / subscriptions. *Pros:*
-    covers both fairness and edge cases. *Cons:* most complex to
-    explain; two mechanisms to operate.
-
-  **Decision needed:** which option, and the deadline/exchange rate if A,
-  or threshold if C.
-- [ ] **Exact launch date** — all copy keys off `[DATE]`; until this is
-  fixed, comms cannot be scheduled (see the checklist's T-14/T-72h/T-0
-  schedule).
-- [ ] **V2 registration identifier** — copy says "email or phone number".
-  Confirm V2 signup supports both, or fix copy to the real fields.
-- [ ] **Refund/support channel** — if Option B or C, name the channel
-  (email address? in-app form?) and deadline date for requests.
-- [ ] **Privacy-page link** — `[LINK]` in the POPIA line must point at the
-  live privacy page referenced in the account retention notice. Confirm
-  the final URL.
-- [ ] **Push reachability check** — confirm FCM push tokens are obtainable
-  from V1 before the T-72h reminder; if reach is poor, banner+email must
-  carry the reminder instead. (Do not assume tokens exist.)
+- [x] **DECISION — Hybrid, grandfather-led:**
+  - **Grandfather:** users who re-register on V2 with a **verified email or
+    phone** matching a V1 account automatically receive a V2 coin credit of
+    **min(V1 unspent wallet balance, total Stripe payments recorded for that
+    account)**. The Stripe cap is the evidence boundary: free welcome coins
+    and gift-chain leakage cannot pass through it; unspent *paid* balances
+    carry over 1:1. If no Stripe record exists for an account (dev-mode
+    topups, free coins only), the credit is 0 — nothing was collected.
+  - **Refund window:** anyone who prefers money back over re-registering (or
+    holds an unexpired subscription) emails **support@ikhwezi.site** within
+    **60 days of launch**; handled per-case. After 60 days the liability
+    window closes.
+  - **Identity rule:** whoever can receive email/SMS at the V1 identifier
+    owns the balance — identical to a password-reset trust level. Residual
+    risk (abandoned email claimant disputes) accepted at V1 scale.
+- [x] **Refund/support channel:** support@ikhwezi.site (in-app "Contact
+  support" routes there).
+- [x] **Privacy link:** https://ikhwezi.site/privacy (shipped page).
+- [ ] **Launch date:** set only when the launch-candidate gate passes
+  (Phases 2+3 complete, physical two-device A/V test green, Play Store
+  review submitted). The T-14 comms clock starts at that gate — not from a
+  calendar wish.
+- [ ] **Push reachability check:** operational, run during the T-14 prep per
+  the backup/wipe runbook Phase 2 (do not assume tokens exist).
 
 ---
 
