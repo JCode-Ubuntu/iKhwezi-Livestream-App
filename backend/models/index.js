@@ -27,7 +27,24 @@ function defineCoreModels(sequelize, DataTypes) {
     isAdmin: { type: DataTypes.BOOLEAN, defaultValue: false },
     isBanned: { type: DataTypes.BOOLEAN, defaultValue: false },
     isGuest: { type: DataTypes.BOOLEAN, defaultValue: false },
+    // RBAC (Phase 3A). 'user' is the default for everyone — all role checks
+    // must fail closed. ENUM matches migrations/20260906-0002-*.js
+    // (PostgreSQL: native enum; SQLite: TEXT). The legacy isAdmin BOOLEAN is
+    // kept in sync with role==='admin' during transition so existing readers
+    // (live-host resolution, FE admin-panel hints) stay truthful.
+    role: { type: DataTypes.ENUM('user', 'moderator', 'admin'), allowNull: false, defaultValue: 'user' },
     lastActive: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+  });
+
+  // Server-side FCM push-token registry (Phase 3A — registry only; SENDING
+  // pushes needs firebase-admin + owner credentials, deliberately deferred).
+  // One row per (user, token); user deletion cascade-removes devices.
+  const Device = sequelize.define('Device', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    userId: { type: DataTypes.UUID, allowNull: false },
+    token: { type: DataTypes.STRING(512), allowNull: false },
+    platform: { type: DataTypes.STRING(32), allowNull: true },
+    lastSeenAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   });
 
   const Video = sequelize.define('Video', {
@@ -274,6 +291,9 @@ function defineCoreModels(sequelize, DataTypes) {
   User.hasOne(Wallet, { foreignKey: 'userId', as: 'wallet' });
   Wallet.belongsTo(User, { foreignKey: 'userId' });
 
+  User.hasMany(Device, { foreignKey: 'userId', as: 'devices' });
+  Device.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
   User.hasMany(Subscription, { foreignKey: 'subscriberId', as: 'subscriptions' });
   User.hasMany(Subscription, { foreignKey: 'creatorId', as: 'subscribers' });
   Subscription.belongsTo(User, { foreignKey: 'subscriberId', as: 'subscriber' });
@@ -283,7 +303,7 @@ function defineCoreModels(sequelize, DataTypes) {
     User, Video, Like, VideoSave, VideoRepost, Comment, Follow, Story, StoryView,
     StoryComment, Challenge, Star, DirectMessage,
     TextPost, PostLike, Points, Wallet, Subscription, GiftLog, LiveStatus, AuditLog,
-    ProcessedStripeEvent, Ad,
+    ProcessedStripeEvent, Ad, Device,
   };
 }
 

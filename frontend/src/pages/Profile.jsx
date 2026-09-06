@@ -42,7 +42,10 @@ function Profile() {
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const [muted, setMuted] = useState(true);
 
-  const isAppAdmin = !!user?.isAdmin;
+  // Phase 3A RBAC: isAdmin stays the compatible projection; role is
+  // authoritative server-side. A moderator here sees no admin powers
+  // (moderator scope = ban/unban in the admin panel only).
+  const isAppAdmin = !!user?.isAdmin || user?.role === 'admin';
   // Profile is reused (not remounted) when navigating between users' profiles
   // via links/back-nav, so an in-flight fetch for the previous `id` can
   // resolve after a newer one starts. Without checking this ref at resolve

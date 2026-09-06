@@ -20,6 +20,19 @@
  *   3. Deletes FK-safe, children before the User, inside ONE transaction per
  *      batch, using direct model references (no table-name guessing).
  *
+ * PHASE 3A notes (guest identity evolution — roadmap:
+ * "Guest Database Accounts ➜ Ephemeral Guest JWT Sessions"):
+ * Full ephemerality (JWT-only guests, no User row) was evaluated and is
+ * NOT safe today: guests participate in FK-bearing features the product
+ * relies on — Likes/Follows/StoryViews/DM receipts (guest rows are FK
+ * targets with composite unique indexes), group membership, and the
+ * wallet/gift economy. Chosen path = (b) incremental bloat reduction:
+ * the job stays the purge authority and Devices rows (FCM registry, also
+ * FK'd to Users) are purged with their guest. TODO(ephemeral-guests):
+ * once guest Likes/Follows/StoryViews are either blocked or moved to a
+ * slim presence table, drop the User row for guests entirely; until then
+ * this job is the guardrail that keeps the Users table bounded.
+ *
  * Idempotent: run as often as you like; only stale rows disappear.
  * Dialect-agnostic: Sequelize calls only — SQLite today, PostgreSQL ready.
  */
@@ -33,6 +46,7 @@ function buildGuestCleanupJob({ sequelize, models, logger = console }) {
     PostLike, DirectMessage, Follow, GiftLog,
     Subscription, Star, Video, Story, TextPost, Points, Wallet,
     GroupMember, GroupBan, GroupMessage, MeetingParticipant,
+    Device,
   } = models;
 
   const log = (...args) => { (logger.info || logger.log).apply(logger, args); };
@@ -60,6 +74,8 @@ function buildGuestCleanupJob({ sequelize, models, logger = console }) {
     [GroupBan, 'userId'],
     [GroupMessage, 'senderId'],
     [MeetingParticipant, 'userId'],
+    // FCM device registry (Phase 3A) — also FK'd to Users; purge with owner.
+    [Device, 'userId'],
   ].filter(([Model]) => !!Model);
 
   /** Content ownership protects a guest from the purge. */

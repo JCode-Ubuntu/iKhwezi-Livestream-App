@@ -72,9 +72,12 @@ function AppShell() {
   const goLive = useCallback(() => {
     // Production live is a single operator broadcast (OBS → RTMP → HLS).
     // Operators land on the streaming console; everyone else joins as a viewer.
-    if (user?.isAdmin) navigate('/admin', { state: { tab: 'streaming' } });
+    // Phase 3A: role is authoritative (RBAC); isAdmin kept as the transition
+    // projection for older sessions issued before the role column existed.
+    const isOperator = user?.role === 'admin' || ((user?.role == null || user?.role === 'user') && user?.isAdmin);
+    if (isOperator) navigate('/admin', { state: { tab: 'streaming' } });
     else navigate('/live');
-  }, [user?.isAdmin, navigate]);
+  }, [user?.role, user?.isAdmin, navigate]);
 
   /** Open one hub action directly (used by the sheet and by contextual buttons). */
   const openCreate = useCallback((action, options = {}) => {
@@ -200,8 +203,13 @@ function App() {
     import('@capacitor/splash-screen').then(({ SplashScreen }) => {
       if (!cancelled) SplashScreen.hide().catch(() => {});
     }).catch(() => {});
-    import('./native/pushNotifications').then(({ initPushNotifications }) => {
-      if (!cancelled) initPushNotifications().catch(() => {});
+    // Push: init FCM and (when a session exists) hand the token to the
+    // server device registry (Phase 3A). Later token/server syncs run from
+    // AuthContext on login/register/logout.
+    import('./native/pushNotifications').then(async (mod) => {
+      if (cancelled) return;
+      await mod.initPushNotifications().catch(() => {});
+      if (mod.syncPushTokenOnAuth) mod.syncPushTokenOnAuth().catch(() => {});
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [isNative, loading, showSplash]);

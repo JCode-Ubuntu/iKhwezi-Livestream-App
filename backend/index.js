@@ -123,7 +123,7 @@ const {
   User, Video, Like, VideoSave, VideoRepost, Comment, Follow, Story, StoryView,
   StoryComment, Challenge, Star, DirectMessage,
   TextPost, PostLike, Points, Wallet, Subscription, GiftLog, LiveStatus, AuditLog,
-  ProcessedStripeEvent, Ad,
+  ProcessedStripeEvent, Ad, Device,
 } = coreModels;
 
 // Public HLS playback URL — safe to expose (watch-only). Never expose streamKey/RTMP on public routes.
@@ -154,10 +154,17 @@ function buildRtmpIngestInfo(streamKey) {
 }
 
 // RTMP webhook auth — see ./middleware/rtmpWebhook.js.
+// internalOnly: source allow-list (Layer 1) — default ON in production, can
+// be forced with RTMP_WEBHOOK_INTERNAL_ONLY=true/false.
+const RTMP_WEBHOOK_INTERNAL_ONLY = process.env.RTMP_WEBHOOK_INTERNAL_ONLY === 'true'
+  || process.env.RTMP_WEBHOOK_INTERNAL_ONLY === 'false'
+    ? process.env.RTMP_WEBHOOK_INTERNAL_ONLY === 'true'
+    : undefined;
 const { requireRtmpWebhook } = require('./middleware/rtmpWebhook').buildRtmpWebhookGuard({
   secret: RTMP_WEBHOOK_SECRET,
   isProduction: IS_PRODUCTION,
   trustInternal: TRUST_INTERNAL_RTMP_WEBHOOK,
+  internalOnly: RTMP_WEBHOOK_INTERNAL_ONLY,
 });
 
 function emitLiveStarted(liveStatus) {
@@ -295,8 +302,15 @@ function detectAdMediaType(filename) {
 // Auth middleware — see ./middleware/auth.js (extracted, behaviour unchanged).
 const { buildAuthMiddleware } = require('./middleware/auth');
 const {
-  authenticate, requireAuth, requireRegistered, requireAdmin, requireAdminAccess, socketAuth,
+  authenticate, requireAuth, requireRegistered, socketAuth,
 } = buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY });
+
+// ==================== RBAC (Phase 3A) ====================
+// ADMIN_KEY disposition: demoted to a transition/ops key. Default
+// enabled for the transition window; ADMIN_KEY_ENABLED=false hard-disables
+// every remaining key path (V2-launch intent — documented in the final
+// report). Built fully below once logAudit exists (needs it for auditing).
+const ADMIN_KEY_ENABLED = process.env.ADMIN_KEY_ENABLED !== 'false'; // default true: transition
 
 // Socket.IO JWT handshake — populates socket.user (null for anonymous/banned).
 // Registered here, before any feature module attaches `io.on('connection')`
@@ -312,6 +326,17 @@ const logAudit = async (action, details, ip) => {
     await AuditLog.destroy({ where: { id: oldest.map(l => l.id) } });
   }
 };
+
+// ==================== RBAC MIDDLEWARE (Phase 3A) ====================
+// Defined after logAudit so every legacy ADMIN_KEY use is audited.
+// See ./middleware/rbac.js for the full design notes (fail-closed,
+// DB-authoritative role checks; moderator = ban/unban only).
+const { buildRbacMiddleware } = require('./middleware/rbac');
+const {
+  requireRole, requireModerationAccess, adminKeyMatches,
+} = buildRbacMiddleware({
+  User, JWT_SECRET, ADMIN_KEY, logAudit, adminKeyEnabled: ADMIN_KEY_ENABLED,
+});
 
 const normalizeCommentContent = (raw) => String(raw || '').trim().replace(/\s+/g, ' ');
 
@@ -476,6 +501,14 @@ function createRateLimiter(windowMs, max, message) {
 const authRateLimit = createRateLimiter(15 * 60 * 1000, 20, 'Too many auth attempts. Try again in 15 minutes.');
 const commentRateLimit = createRateLimiter(60 * 1000, 10, 'Posting too fast. Please wait a moment.');
 const interactionRateLimit = createRateLimiter(60 * 1000, 60, 'Too many actions. Please slow down.');
+// RTMP webhooks are unauthenticated-by-nature (secret-bearing but
+// attacker-reachable); rate-limit separately so abusers can't spam the
+// DB writes / live-status flips even with a valid secret, and can't
+// brute-force the secret by volume. nginx-rtmp fires one callback per
+// publish/stop — generous for real traffic, tight for abuse.
+const webhookRateLimit = createRateLimiter(60 * 1000, 30, 'Too many webhook calls.');
+// FCM device registry: per-user device cap (roadmap "~5").
+const MAX_DEVICES_PER_USER = 5;
 
 // ==================== GROUP CHAT ====================
 // Modular feature mounted as its own package. Defines its own Sequelize
@@ -602,6 +635,7 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
         avatar: user.avatar,
         isCreator: user.isCreator,
         isAdmin: user.isAdmin,
+        role: user.role,
         isGuest: user.isGuest
       }
     });
@@ -648,6 +682,7 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
         avatar: user.avatar,
         isCreator: user.isCreator,
         isAdmin: user.isAdmin,
+        role: user.role,
         isGuest: user.isGuest
       }
     });
@@ -670,12 +705,80 @@ app.get('/api/auth/me', authenticate, requireAuth, async (req, res) => {
       bio: req.user.bio,
       isCreator: req.user.isCreator,
       isAdmin: req.user.isAdmin,
+      role: req.user.role,
       isGuest: req.user.isGuest,
       points: points?.totalPoints || 0
     });
   } catch (err) {
     console.error('Auth me error:', err);
     res.status(500).json({ error: 'Failed to load profile' });
+  }
+});
+
+// ==================== FCM DEVICE REGISTRY (Phase 3A) ====================
+// Server-side push-token registry: POST/DELETE /api/devices. Registry ONLY —
+// SENDING pushes requires firebase-admin + the owner's service credentials
+// (deliberately out of scope; documented in the final report). Owner-only:
+// a device row belongs to the authenticated user; there is no admin device
+// access, and tokens are never returned to any client (creator's or admin's).
+// Guests: excluded (requireRegistered) — pushes target real accounts.
+
+// Upsert a push token for the caller: same (userId, token) refreshes
+// lastSeenAt; new tokens are capped at MAX_DEVICES_PER_USER (lowest-priority
+// = oldest lastSeenAt pruned first) so reinstalled phones can't balloon the
+// table.
+app.post('/api/devices', authenticate, requireRegistered, interactionRateLimit, async (req, res) => {
+  try {
+    const { token, platform } = req.body || {};
+    if (!token || typeof token !== 'string' || token.length < 20 || token.length > 512) {
+      return res.status(400).json({ error: 'Valid device token required' });
+    }
+    const userId = req.user.id;
+
+    const [device, created] = await Device.findOrCreate({
+      where: { userId, token },
+      defaults: { userId, token, platform: typeof platform === 'string' ? platform.slice(0, 32) : null },
+    });
+    if (!created) {
+      // Re-registration: mark fresh.
+      await device.update({ lastSeenAt: new Date() });
+    }
+
+    // Cap: keep the freshest MAX_DEVICES_PER_USER, evict the stalest.
+    const count = await Device.count({ where: { userId } });
+    let evicted = 0;
+    if (count > MAX_DEVICES_PER_USER) {
+      const stale = await Device.findAll({
+        where: { userId },
+        order: [['lastSeenAt', 'ASC']],
+        limit: count - MAX_DEVICES_PER_USER,
+      });
+      if (stale.length) {
+        await Device.destroy({ where: { id: stale.map((d) => d.id) } });
+        evicted = stale.length;
+      }
+    }
+
+    res.json({ registered: true, deviceId: device.id, evicted });
+  } catch (err) {
+    console.error('Device registration error:', err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// Logout / sign-out: remove THIS device token only (the one the client
+// holds). Idempotent — deleting an already-deleted token is a 200.
+app.delete('/api/devices', authenticate, requireRegistered, async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Device token required' });
+    }
+    const destroyed = await Device.destroy({ where: { userId: req.user.id, token } });
+    res.json({ removed: destroyed > 0 });
+  } catch (err) {
+    console.error('Device removal error:', err);
+    res.status(500).json({ error: 'Removal failed' });
   }
 });
 
@@ -1740,7 +1843,11 @@ app.post('/api/stories', authenticate, requireRegistered, storyUpload.single('st
   }
 });
 
-app.post('/api/stories/:id/view', authenticate, requireAuth, async (req, res) => {
+app.post('/api/stories/:id/view', authenticate, requireRegistered, async (req, res) => {
+  // Phase 3A guest bloat reduction: story view-count rows are FK-bearing
+  // writes; guests were the last un-gated writers. Now a registered-only
+  // mutation (403 + 'Sign in to continue' for guests — the FE already
+  // surfaces this). Viewers without a StoryView no longer inflate counts.
   try {
     const story = await Story.findByPk(req.params.id);
     if (!story) return res.status(404).json({ error: 'Story not found' });
@@ -1909,17 +2016,60 @@ app.post('/api/challenges', authenticate, requireRegistered, async (req, res) =>
 });
 
 // ==================== ADMIN ROUTES ====================
+// Phase 3A: these routes authorize via per-user roles (RBAC) — a logged-in
+// admin account's JWT. The old shared x-admin-key flow is retired from the
+// frontend; the key survives ONLY in the bootstrap grant + the ban-toggle
+// transition guard during the migration window (see middleware/rbac.js).
 
-app.post('/api/admin/verify', requireAdmin, async (req, res) => {
+// Session probe for the admin panel: confirms the caller's JWT carries an
+// admin/moderator role (DB-checked). Response includes the role so the FE
+// can render moderator-appropriate UI.
+app.post('/api/admin/verify', authenticate, requireRole('admin', 'moderator'), async (req, res) => {
   try {
-    await logAudit('ADMIN_LOGIN', { success: true }, req.ip);
+    await logAudit('ADMIN_LOGIN', { success: true, role: req.user.role, userId: req.user.id }, req.ip);
   } catch (err) {
     console.error('Admin audit log failed:', err);
   }
-  res.json({ valid: true });
+  res.json({ valid: true, role: req.user.role });
 });
 
-app.get('/api/admin/stream-key', requireAdmin, async (req, res) => {
+// ONE-TIME ADMIN BOOTSTRAP (Phase 3A). The only remaining privileged use of
+// the shared ADMIN_KEY: promote the FIRST accountable admin account.
+// Operators run this once (curl with x-admin-key), log in as that admin,
+// then set ADMIN_KEY_ENABLED=false - after which this route 501s and the
+// key is dead code. No session needed: deliberate ops-key auth.
+// Rate-limited: the key is checked here, so volume brute-force must not be
+// possible even though the comparison is constant-time.
+app.post('/api/admin/bootstrap/grant', authRateLimit, async (req, res) => {
+  if (!ADMIN_KEY_ENABLED) {
+    return res.status(501).json({ error: 'Admin key disabled - bootstrap via an existing admin account' });
+  }
+  if (!adminKeyMatches(req.headers['x-admin-key'])) {
+    // Constant-time compare (rbac adminKeyMatches) + rate limit above.
+    return res.status(403).json({ error: 'Bootstrap key rejected' });
+  }
+  try {
+    const { userId } = req.body || {};
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'userId required' });
+    }
+    const user = await User.findByPk(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.isBanned) return res.status(400).json({ error: 'Cannot grant admin to a banned account' });
+    if (user.role === 'admin') {
+      return res.json({ alreadyAdmin: true, userId: user.id });
+    }
+    await user.update({ role: 'admin', isAdmin: true });
+    await logAudit('ADMIN_BOOTSTRAP_GRANT', { userId: user.id, username: user.username }, req.ip);
+    console.warn('[ADMIN BOOTSTRAP] granted admin role via shared key - now set ADMIN_KEY_ENABLED=false.');
+    res.json({ granted: true, userId: user.id });
+  } catch (err) {
+    console.error('Bootstrap grant error:', err);
+    res.status(500).json({ error: 'Bootstrap failed' });
+  }
+});
+
+app.get('/api/admin/stream-key', authenticate, requireRole('admin'), async (req, res) => {
   try {
     let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
     if (!liveStatus) {
@@ -1938,7 +2088,7 @@ app.get('/api/admin/stream-key', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/stream-key/rotate', requireAdmin, async (req, res) => {
+app.post('/api/admin/stream-key/rotate', authenticate, requireRole('admin'), async (req, res) => {
   try {
     let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
     if (!liveStatus) {
@@ -2093,7 +2243,7 @@ app.delete('/api/videos/:id', authenticate, requireRegistered, async (req, res) 
 });
 
 // Auto-triggered by nginx-rtmp when OBS starts streaming
-app.post('/api/live/on-publish', async (req, res) => {
+app.post('/api/live/on-publish', webhookRateLimit, async (req, res) => {
   if (!requireRtmpWebhook(req, res)) return;
   try {
     const publishedName = (req.body?.name || req.query?.name || '').trim();
@@ -2134,7 +2284,7 @@ app.post('/api/live/on-publish', async (req, res) => {
 });
 
 // Auto-triggered by nginx-rtmp when OBS stops streaming
-app.post('/api/live/on-publish-done', async (req, res) => {
+app.post('/api/live/on-publish-done', webhookRateLimit, async (req, res) => {
   if (!requireRtmpWebhook(req, res)) return;
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
@@ -2152,7 +2302,7 @@ app.post('/api/live/on-publish-done', async (req, res) => {
   }
 });
 
-app.post('/api/admin/live/start', requireAdmin, async (req, res) => {
+app.post('/api/admin/live/start', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const { title } = req.body;
     let liveStatus = await LiveStatus.findOne({ order: [['createdAt', 'DESC']] });
@@ -2193,7 +2343,7 @@ app.post('/api/admin/live/start', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/live/stop', requireAdmin, async (req, res) => {
+app.post('/api/admin/live/stop', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
     if (liveStatus) {
@@ -2210,7 +2360,7 @@ app.post('/api/admin/live/stop', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/videos', requireAdmin, upload.single('video'), async (req, res) => {
+app.post('/api/admin/videos', authenticate, requireRole('admin'), upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Video file required' });
@@ -2248,7 +2398,7 @@ app.post('/api/admin/videos', requireAdmin, upload.single('video'), async (req, 
   }
 });
 
-app.get('/api/admin/videos', requireAdmin, async (req, res) => {
+app.get('/api/admin/videos', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const videos = await Video.findAll({
       include: [{ model: User, as: 'creator', attributes: ['id', 'username', 'displayName'] }],
@@ -2260,7 +2410,7 @@ app.get('/api/admin/videos', requireAdmin, async (req, res) => {
   }
 });
 
-app.patch('/api/admin/videos/:id', requireAdmin, async (req, res) => {
+app.patch('/api/admin/videos/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -2281,7 +2431,7 @@ app.patch('/api/admin/videos/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/videos/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/videos/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -2299,7 +2449,7 @@ app.delete('/api/admin/videos/:id', requireAdmin, async (req, res) => {
 
 // ==================== ADMIN TAILORED ADS ====================
 
-app.get('/api/admin/ads', requireAdmin, async (req, res) => {
+app.get('/api/admin/ads', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const ads = await Ad.findAll({ order: [['priority', 'DESC'], ['createdAt', 'DESC']] });
     res.json(ads);
@@ -2308,7 +2458,7 @@ app.get('/api/admin/ads', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/ads', requireAdmin, adUpload.single('media'), async (req, res) => {
+app.post('/api/admin/ads', authenticate, requireRole('admin'), adUpload.single('media'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Ad media file required' });
 
@@ -2338,7 +2488,7 @@ app.post('/api/admin/ads', requireAdmin, adUpload.single('media'), async (req, r
   }
 });
 
-app.patch('/api/admin/ads/:id', requireAdmin, async (req, res) => {
+app.patch('/api/admin/ads/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const ad = await Ad.findByPk(req.params.id);
     if (!ad) return res.status(404).json({ error: 'Ad not found' });
@@ -2360,7 +2510,7 @@ app.patch('/api/admin/ads/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/ads/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/ads/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const ad = await Ad.findByPk(req.params.id);
     if (!ad) return res.status(404).json({ error: 'Ad not found' });
@@ -2376,20 +2526,23 @@ app.delete('/api/admin/ads/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/admin/users', requireAdmin, async (req, res) => {
+app.get('/api/admin/users', authenticate, requireRole('admin', 'moderator'), async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'email', 'phone', 'username', 'displayName', 'isCreator', 'isAdmin', 'isBanned', 'lastActive', 'createdAt'],
+      attributes: ['id', 'email', 'phone', 'username', 'displayName', 'isCreator', 'isAdmin', 'role', 'isBanned', 'lastActive', 'createdAt'],
       include: [{ model: Points, as: 'points', attributes: ['totalPoints', 'lifetimePoints'] }],
       order: [['createdAt', 'DESC']]
     });
-    res.json(users);
+    // Moderators get PII-free listings — email/phone are contact channels used
+    // for account ops (admin-only), not ban decisions. Honest least-privilege.
+    const redact = (u) => (req.user.role === 'admin' ? u : { ...u, email: null, phone: null });
+    res.json(users.map((u) => ({ ...u.toJSON(), ...redact({ email: u.email, phone: u.phone }) })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to load users' });
   }
 });
 
-app.patch('/api/admin/users/:id/ban', authenticate, requireAdminAccess, async (req, res) => {
+app.patch('/api/admin/users/:id/ban', authenticate, requireModerationAccess, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -2398,39 +2551,57 @@ app.patch('/api/admin/users/:id/ban', authenticate, requireAdminAccess, async (r
       return res.status(400).json({ error: 'Cannot block your own account' });
     }
 
-    if (user.isAdmin && !req.headers['x-admin-key']) {
-      return res.status(403).json({ error: 'Use admin panel to block another admin account' });
+    // Only a full admin (not a moderator) may ban another admin; the legacy
+    // operator key keeps that power during transition (it always had it).
+    if (user.role === 'admin' && req.user?.role !== 'admin' && !adminKeyMatches(req.headers['x-admin-key'])) {
+      return res.status(403).json({ error: 'Only an admin can block another admin account' });
     }
 
     user.isBanned = !user.isBanned;
     await user.save();
 
-    await logAudit(user.isBanned ? 'USER_BANNED' : 'USER_UNBANNED', { userId: user.id, username: user.username }, req.ip);
+    await logAudit(user.isBanned ? 'USER_BANNED' : 'USER_UNBANNED', {
+      userId: user.id,
+      username: user.username,
+      by: req.user?.id || 'legacy_admin_key',
+    }, req.ip);
     res.json({ isBanned: user.isBanned });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
-// Grant/revoke broadcast (Go Live) rights — the app's single-admin model:
-// only users flagged isAdmin are permitted to broadcast, gated here behind
-// the same secret ADMIN_KEY used for the rest of the admin panel.
-app.patch('/api/admin/users/:id/admin', requireAdmin, async (req, res) => {
+// Grant/revoke broadcast (Go Live) rights - the app's single-admin model:
+// only the RBAC 'admin' role may broadcast. Phase 3A: gated by per-user
+// role (logged-in admin), no longer the shared ADMIN_KEY. The legacy isAdmin
+// BOOLEAN is kept in sync with role==='admin' so live-host resolution
+// (resolveLiveHostUser/assignLiveHost) and older FE builds stay truthful.
+app.patch('/api/admin/users/:id/admin', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    user.isAdmin = !user.isAdmin;
-    await user.save();
+    if (user.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot change your own admin role here - ask another admin' });
+    }
+    if (user.isBanned) {
+      return res.status(400).json({ error: 'Cannot grant admin to a banned account' });
+    }
 
-    await logAudit(user.isAdmin ? 'USER_MADE_ADMIN' : 'USER_REVOKED_ADMIN', { userId: user.id, username: user.username }, req.ip);
-    res.json({ isAdmin: user.isAdmin });
+    const nextRole = user.role === 'admin' ? 'user' : 'admin';
+    // Single atomic update keeps role/isAdmin consistent even on crash.
+    await user.update({ role: nextRole, isAdmin: nextRole === 'admin' });
+
+    await logAudit(user.isAdmin ? 'USER_MADE_ADMIN' : 'USER_REVOKED_ADMIN', {
+      userId: user.id, username: user.username, by: req.user.id,
+    }, req.ip);
+    res.json({ isAdmin: user.isAdmin, role: user.role });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
-app.get('/api/admin/analytics', requireAdmin, async (req, res) => {
+app.get('/api/admin/analytics', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const now = new Date();
     const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
@@ -2481,7 +2652,7 @@ app.get('/api/admin/analytics', requireAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/admin/audit-log', requireAdmin, async (req, res) => {
+app.get('/api/admin/audit-log', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const logs = await AuditLog.findAll({
       order: [['createdAt', 'DESC']],
@@ -2697,7 +2868,7 @@ app.get('/api/v3/feed', authenticate, async (req, res) => {
 });
 
 // V3 LIVESTREAM CONTROL (ADMIN ONLY)
-app.post('/api/v3/livestream/start', requireAdmin, async (req, res) => {
+app.post('/api/v3/livestream/start', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const { title = 'iKHWEZI Live' } = req.body;
     
@@ -2753,7 +2924,7 @@ app.post('/api/v3/livestream/start', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/v3/livestream/stop', requireAdmin, async (req, res) => {
+app.post('/api/v3/livestream/stop', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const liveStatus = await LiveStatus.findOne({ where: { isLive: true } });
     

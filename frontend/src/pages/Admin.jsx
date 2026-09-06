@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Key, Radio, Upload, Users, BarChart3, FileText, LogOut,
+  Radio, Upload, Users, BarChart3, FileText, LogOut,
   RefreshCw, Play, Square, Eye, EyeOff, Copy, Check, Trash2,
   UserCheck, Star, Video, TrendingUp, Clock, Shield, Megaphone
 } from 'lucide-react';
 
 import { resolveMediaUrl, getApiBase } from '../config/appConfig';
+import { useAuth } from '../context/AuthContext';
 import UltimaField from '../ultima/UltimaField';
 import '../ultima/admin.css';
 
@@ -63,8 +64,13 @@ function AdminTabBar({ tabs, activeTab, onChange }) {
 function Admin() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [adminKey, setAdminKey] = useState('');
+  const { user, token, fetchWithAuth } = useAuth();
+  // RBAC (Phase 3A): the admin panel now authorizes with the logged-in
+  // account's JWT — no shared admin key is stored or typed anywhere in the
+  // FE. Server checks the caller's role column per request; this flag is
+  // only UX state (which view to render), driven by a verified probe.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [adminRole, setAdminRole] = useState(null); // 'admin' | 'moderator'
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(location.state?.tab || 'streaming');
   const fileInputRef = useRef(null);
@@ -106,34 +112,27 @@ function Admin() {
   });
   const [adUploading, setAdUploading] = useState(false);
 
+  // All admin calls now carry the logged-in user's JWT; the backend checks
+  // the role on every request (fail-closed). 401/403 → bounce to the gate.
   const fetchAdmin = async (endpoint, options = {}) => {
-    return fetch(`${getApiBase()}${endpoint}`, {
-      ...options,
-      headers: {
-        ...options.headers,
-        'X-Admin-Key': adminKey,
-      },
-    });
+    return fetchWithAuth(endpoint, options);
   };
 
+  // Session probe: server verifies the JWT, checks the DB role, and returns
+  // it. No secret is typed or stored — the account itself is the credential.
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const res = await fetch(`${getApiBase()}/admin/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Key': adminKey,
-        },
-      });
-
+      const res = await fetchWithAuth('/admin/verify', { method: 'POST' });
       if (res.ok) {
+        const data = await res.json();
+        setAdminRole(data.role || null);
         setIsAuthenticated(true);
         loadStreamKey();
       } else {
-        alert('Invalid admin key');
+        alert('This account does not have admin privileges');
       }
     } catch (err) {
       alert('Authentication failed');
@@ -257,9 +256,11 @@ function Admin() {
     formData.append('isTrending', uploadForm.isTrending);
 
     try {
+      // FormData must set its own Content-Type (multipart boundary) — the
+      // JSON-auth helper would corrupt it; pass only the Bearer token.
       const res = await fetch(`${getApiBase()}/admin/videos`, {
         method: 'POST',
-        headers: { 'X-Admin-Key': adminKey },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
@@ -395,9 +396,11 @@ function Admin() {
     formData.append('isActive', adUploadForm.isActive ? 'true' : 'false');
 
     try {
+      // FormData must set its own Content-Type (multipart boundary) — the
+      // JSON-auth helper would corrupt it; pass only the Bearer token.
       const res = await fetch(`${getApiBase()}/admin/ads`, {
         method: 'POST',
-        headers: { 'X-Admin-Key': adminKey },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       if (!res.ok) throw new Error('Upload failed');
@@ -444,7 +447,29 @@ function Admin() {
     }
   }, [isAuthenticated]);
 
+  // Auto-verify once we have a session — the owner normally arrives already
+  // signed in from the app. Guests probe too and are denied server-side;
+  // the SERVER is the authorizer (router-guard + every route's requireRole),
+  // so no client-side role claim can open the panel.
+  useEffect(() => {
+    if (!isAuthenticated && !!user && !loading) {
+      handleLogin({ preventDefault: () => {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!user, user?.id]);
+
   if (!isAuthenticated) {
+    if (loading) {
+      return (
+        <div className="admin-login">
+          <UltimaField intensity={0.9} fixed />
+          <div className="admin-login-card">
+            <p className="admin-eyebrow text-center">Control center</p>
+            <p className="mt-3 text-center text-sm text-white/45">Verifying your account…</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="admin-login">
         <UltimaField intensity={0.9} fixed />
@@ -454,44 +479,40 @@ function Admin() {
           </div>
           <p className="admin-eyebrow text-center">Control center</p>
           <h1 className="mb-2 text-center font-display text-2xl font-black text-white">Admin Access</h1>
-          <p className="mb-6 text-center text-sm text-white/45">Enter your admin key to continue</p>
-
-          <form onSubmit={handleLogin}>
-            <div className="admin-field mb-4">
-              <Key size={18} className="shrink-0 text-gold-400/75" />
-              <input
-                type="password"
-                value={adminKey}
-                onChange={(e) => setAdminKey(e.target.value)}
-                placeholder="Admin key"
-                required
-              />
-            </div>
-            <button type="submit" disabled={loading} className="admin-btn-primary">
-              {loading ? 'Verifying…' : 'Access admin panel'}
-            </button>
-          </form>
+          <p className="mb-6 text-center text-sm text-white/45">
+            {user
+              ? 'This account does not have admin privileges.'
+              : 'Sign in with an admin account to continue.'}
+          </p>
 
           <button
             type="button"
-            onClick={() => navigate('/')}
-            className="mt-5 w-full text-center text-sm font-semibold text-white/45 transition hover:text-white/70"
+            onClick={() => navigate(user ? '/' : '/login')}
+            className="admin-btn-primary"
           >
-            Back to app
+            {user ? 'Back to app' : 'Go to sign in'}
           </button>
         </div>
       </div>
     );
   }
 
+  // Moderator scope (Phase 3A): a moderator sees ONLY the Users tab — their
+  // honest, existing power is ban/unban. Everything else is admin-only.
   const tabs = [
-    { id: 'streaming', icon: Radio, label: 'Streaming' },
-    { id: 'videos', icon: Video, label: 'Videos' },
-    { id: 'ads', icon: Megaphone, label: 'Tailored Ads' },
+    { id: 'streaming', icon: Radio, label: 'Streaming', adminOnly: true },
+    { id: 'videos', icon: Video, label: 'Videos', adminOnly: true },
+    { id: 'ads', icon: Megaphone, label: 'Tailored Ads', adminOnly: true },
     { id: 'users', icon: Users, label: 'Users' },
-    { id: 'analytics', icon: BarChart3, label: 'Analytics' },
-    { id: 'audit', icon: FileText, label: 'Audit Log' },
-  ];
+    { id: 'analytics', icon: BarChart3, label: 'Analytics', adminOnly: true },
+    { id: 'audit', icon: FileText, label: 'Audit Log', adminOnly: true },
+  ].filter((tab) => (adminRole === 'admin' ? true : !tab.adminOnly));
+
+  // A moderator landing with a stale (admin-tab) deep link should land on
+  // their permitted tab rather than an empty panel. Derived (not setState-in-
+  // render) to avoid re-render loops.
+  const visibleTabIds = tabs.map((tab) => tab.id);
+  const effectiveActiveTab = visibleTabIds.includes(activeTab) ? activeTab : visibleTabIds[0];
 
   return (
     <div className="admin-shell">
@@ -509,7 +530,7 @@ function Admin() {
         </div>
         <button
           type="button"
-          onClick={() => { setIsAuthenticated(false); setAdminKey(''); }}
+          onClick={() => { setIsAuthenticated(false); setAdminRole(null); }}
           className="admin-icon-btn"
           aria-label="Sign out"
         >
@@ -517,10 +538,10 @@ function Admin() {
         </button>
       </header>
 
-      <AdminTabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      <AdminTabBar tabs={tabs} activeTab={effectiveActiveTab} onChange={setActiveTab} />
 
       <div className="admin-body">
-        {activeTab === 'streaming' && (
+        {effectiveActiveTab === 'streaming' && (
           <div className="admin-panel">
             <AdminCard eyebrow="Broadcast" title="Stream Status">
               <div className={`admin-live-pill ${isLive ? 'admin-live-pill--on' : 'admin-live-pill--off'}`}>
@@ -628,7 +649,7 @@ function Admin() {
           </div>
         )}
 
-        {activeTab === 'videos' && (
+        {effectiveActiveTab === 'videos' && (
           <div className="admin-panel">
             <AdminCard eyebrow="Library" title="Upload Video">
               <form onSubmit={handleUpload} className="flex flex-col gap-3">
@@ -730,7 +751,7 @@ function Admin() {
           </div>
         )}
 
-        {activeTab === 'ads' && (
+        {effectiveActiveTab === 'ads' && (
           <div className="admin-panel">
             <AdminCard
               eyebrow="Monetization"
@@ -876,7 +897,7 @@ function Admin() {
           </div>
         )}
 
-        {activeTab === 'users' && (
+        {effectiveActiveTab === 'users' && (
           <div className="admin-panel">
             <AdminCard
               eyebrow="Community"
@@ -902,14 +923,18 @@ function Admin() {
                         {u.email || u.phone} • {u.points?.totalPoints || 0} pts
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleAdmin(u.id)}
-                      title={u.isAdmin ? 'Revoke broadcast rights' : 'Grant broadcast rights'}
-                      className={`admin-chip-btn ${u.isAdmin ? 'admin-chip-btn--gold' : ''}`}
-                    >
-                      Admin
-                    </button>
+                    {adminRole === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => toggleAdmin(u.id)}
+                        title={u.isAdmin ? 'Revoke broadcast rights' : 'Grant broadcast rights'}
+                        // Moderators cannot mint admins (admin-only power),
+                        // so the button is not rendered at all for them.
+                        className={`admin-chip-btn ${u.isAdmin ? 'admin-chip-btn--gold' : ''}`}
+                      >
+                        Admin
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => toggleBan(u)}
@@ -925,14 +950,14 @@ function Admin() {
           </div>
         )}
 
-        {activeTab === 'analytics' && (
+        {effectiveActiveTab === 'analytics' && (
           <div className="admin-panel">
             {analyticsLoading && (
               <p className="admin-empty">Loading analytics…</p>
             )}
             {analyticsError && !analyticsLoading && (
               <AdminCard eyebrow="Insights" title="Analytics unavailable">
-                <p className="admin-empty">Could not load analytics. Check your connection and admin key.</p>
+                <p className="admin-empty">Could not load analytics. Check your connection and sign in with an admin account.</p>
                 <button type="button" onClick={loadAnalytics} className="admin-btn-ghost mt-3">
                   <RefreshCw size={16} />
                   Retry
@@ -989,7 +1014,7 @@ function Admin() {
           </div>
         )}
 
-        {activeTab === 'audit' && (
+        {effectiveActiveTab === 'audit' && (
           <div className="admin-panel">
             <AdminCard
               eyebrow="Activity"

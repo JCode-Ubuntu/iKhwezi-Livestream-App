@@ -34,14 +34,19 @@ test('migrator builds the full V2 schema on a fresh database', async (t) => {
 
   const result = await migrate({ sequelize, logger: silentLogger });
   assert.equal(result.adoptedBaseline, false, 'fresh DB must not hit the adopt path');
-  assert.equal(result.executed.length, 1, 'the initial migration should execute');
+  assert.equal(result.executed.length, 2, 'both migrations execute on a fresh DB');
   assert.match(result.executed[0], /initial-v2-schema\.js$/);
+  assert.match(result.executed[1], /roles-and-devices\.js$/);
 
   const tables = await sequelize.getQueryInterface().showAllTables();
   const lower = tables.map((t) => String(t).toLowerCase());
-  for (const expected of ['Users', 'Videos', 'Groups', 'Meetings', 'LiveStatuses', 'Wallets']) {
+  for (const expected of ['Users', 'Videos', 'Groups', 'Meetings', 'LiveStatuses', 'Wallets', 'Devices']) {
     assert.ok(lower.includes(expected.toLowerCase()), `${expected} table must exist`);
   }
+
+  // Phase 3A shape: Users.role ENUM + Devices FK cascade live at SQL level.
+  const usersCols = await sequelize.getQueryInterface().describeTable('Users');
+  assert.ok(Object.prototype.hasOwnProperty.call(usersCols, 'role'), 'Users.role column must exist');
 });
 
 test('Watch Party tables are deferred to V3 — not created by migrations', async (t) => {
@@ -134,7 +139,9 @@ test('BASELINE-ADOPT: legacy V1 database is recorded, not re-created', async (t)
 
   const result = await migrate({ sequelize, logger: silentLogger });
   assert.equal(result.adoptedBaseline, true, 'V1 DB must adopt, not execute');
-  assert.equal(result.executed.length, 1, 'the initial migration must be recorded into meta');
+  assert.equal(result.executed.length, 2, 'baseline recorded + 0002 executed for real');
+  assert.ok(result.recordedBaselines.includes('20260906-0001-initial-v2-schema.js'),
+    'the initial migration must be RECORDED only (its DDL must not re-run)');
 
   // The legacy DB is NOT rebuilt: legacy column + V1-era leftovers survive.
   const [rows] = await sequelize.query('SELECT legacyColumn FROM Users');
@@ -142,10 +149,52 @@ test('BASELINE-ADOPT: legacy V1 database is recorded, not re-created', async (t)
   const tables = (await qi.showAllTables()).map((x) => String(x).toLowerCase());
   assert.ok(tables.includes('watchparties'), 'V1 leftover table survives an adopt (cleanup happens at the planned V2 wipe)');
 
+  // PHASE 3A: the post-baseline migration EXECUTED on the adopted DB —
+  // role column added (defensive backfill skipped: no isAdmin column in
+  // this legacy shape) and Devices table created for real.
+  const usersCols = await qi.describeTable('Users');
+  assert.ok(Object.prototype.hasOwnProperty.call(usersCols, 'role'),
+    'adopted DB must gain Users.role from migration 0002');
+  assert.ok(tables.includes('devices'), 'adopted DB must gain the Devices table from migration 0002');
+  const [roleRows] = await sequelize.query('SELECT role FROM Users');
+  assert.equal(roleRows[0].role, 'user', 'defensive backfill leaves role=user when isAdmin column is absent');
+
   // And a second run over the adopted DB is a plain no-op.
   const second = await migrate({ sequelize, logger: silentLogger });
   assert.equal(second.adoptedBaseline, false, 'adopted DB has meta — no adopt on second run');
   assert.equal(second.executed.length, 0);
+});
+
+test('BASELINE-ADOPT with legacy admins: isAdmin=true backfills to role=admin, others user', async (t) => {
+  const sequelize = freshSqlite();
+  t.after(() => sequelize.close());
+  const qi = sequelize.getQueryInterface();
+  // Legacy shape WITH the isAdmin flag (the real V1 dev DB has it).
+  await qi.createTable('Users', {
+    id: { type: DataTypes.UUID, primaryKey: true },
+    username: { type: DataTypes.STRING, allowNull: false },
+    isAdmin: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  });
+  await sequelize.query("INSERT INTO Users (id, username, isAdmin) VALUES ('21111111-1111-1111-1111-111111111111', 'owner', 1)");
+  await sequelize.query("INSERT INTO Users (id, username, isAdmin) VALUES ('31111111-1111-1111-1111-111111111111', 'member', 0)");
+
+  const result = await migrate({ sequelize, logger: silentLogger });
+  assert.equal(result.adoptedBaseline, true);
+
+  const [rows] = await sequelize.query('SELECT username, role FROM Users ORDER BY username');
+  assert.equal(rows.length, 2);
+  const byName = {};
+  for (const r of rows) byName[r.username] = r.role;
+  assert.equal(byName.owner, 'admin', 'isAdmin=1 must backfill to admin');
+  assert.equal(byName.member, 'user', 'isAdmin=0 stays user');
+
+  // Idempotent on re-run.
+  const second = await migrate({ sequelize, logger: silentLogger });
+  assert.equal(second.executed.length, 0);
+  const [rows2] = await sequelize.query('SELECT username, role FROM Users ORDER BY username');
+  for (const r of rows2) {
+    assert.equal(r.role, r.username === 'owner' ? 'admin' : 'user');
+  }
 });
 
 test('migrate CLI runner works against a real sqlite file (SQLITE_PATH)', async (t) => {
@@ -162,9 +211,10 @@ test('migrate CLI runner works against a real sqlite file (SQLITE_PATH)', async 
 
   const sequelize = require('../config/database').createSequelize({ logging: false });
   const result = await migrate({ sequelize, logger: silentLogger });
-  assert.equal(result.executed.length, 1);
+  assert.equal(result.executed.length, 2);
   const tables = await sequelize.getQueryInterface().showAllTables();
   assert.ok(tables.includes('SequelizeMeta'), 'SequelizeMeta bookkeeping table created');
   assert.ok(tables.includes('Users'));
+  assert.ok(tables.includes('Devices'), 'Phase 3A Devices table comes from 0002');
   await sequelize.close();
 });

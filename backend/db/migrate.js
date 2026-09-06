@@ -28,6 +28,12 @@ const { SequelizeMetaName } = require('./migration-meta');
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 const LEGACY_BASELINE_TABLE = 'Users';
+// Only the INITIAL schema migration is "the baseline" for a legacy V1
+// database: its tables already exist, so its DDL must NOT re-run. Every
+// LATER migration (0002+ roles/devices, and anything after) expresses real
+// schema changes the legacy DB never had — those must EXECUTE normally on
+// an adopted database, exactly like on a fresh one.
+const BASELINE_MIGRATION_NAME = '20260906-0001-initial-v2-schema.js';
 
 function createUmzug({ sequelize, logger = console } = {}) {
   // `logger: false` = quiet mode (tests): give umzug inert sinks instead of
@@ -76,20 +82,25 @@ async function migrate({ sequelize, logger = console } = {}) {
   if (await needsBaselineAdoption(sequelize)) {
     adoptedBaseline = true;
     const pending = await umzug.pending();
-    if (pending.length) {
+    const baseline = pending.filter((m) => m.name === BASELINE_MIGRATION_NAME);
+    if (baseline.length) {
       console.warn('\n' + '='.repeat(78));
       console.warn('⚠️  LEGACY DATABASE DETECTED — adopting the existing schema as baseline.');
-      console.warn('⚠️  Migrations already present are RECORDED but their DDL is NOT re-run');
+      console.warn('⚠️  The INITIAL V2 schema migration is RECORDED but its DDL is NOT re-run');
       console.warn('⚠️  (the tables already exist from the pre-migration era).');
       console.warn('⚠️  Adopted schema may differ from the clean V2 schema (e.g. orphaned');
       console.warn('⚠️  WatchParty tables from deferred features may remain).');
       console.warn('⚠️  A database WIPE is required for a clean V2 schema adoption —');
       console.warn('⚠️  allowed by the roadmap (clean-slate V2, no data migration).');
+      console.warn('⚠️  Later migrations (0002+) still EXECUTE here: they carry real');
+      console.warn('⚠️  changes the legacy DB never had (e.g. Users.role, Devices).');
       console.warn('='.repeat(78) + '\n');
-      // Record without executing: mark each as done, then up() runs nothing.
+      // Record WITHOUT executing: mark the baseline as done so the DDL for
+      // tables that already exist never re-runs. Everything else (0002+)
+      // falls through to up() and executes for real on the adopted DB.
       const storage = umzug.storage;
       await storage.syncModel();
-      for (const m of pending) {
+      for (const m of baseline) {
         await storage.logMigration({ name: m.name });
         recorded.push(m.name);
       }

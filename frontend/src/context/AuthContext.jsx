@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { getApiBase } from '../config/appConfig';
 import { postJson } from '../utils/apiFetch';
+import { syncPushTokenOnAuth, removePushTokenFromServer } from '../native/pushNotifications';
 
 const AuthContext = createContext(null);
 
@@ -161,6 +162,8 @@ export function AuthProvider({ children }) {
       setIsGuest(false);
       setGuestInteractions(0);
       showToast('Welcome back!', 'success');
+      // Signed-in now: hand any waiting FCM token to the server registry.
+      syncPushTokenOnAuth().catch(() => {});
       return { success: true };
     } catch (err) {
       const message =
@@ -191,6 +194,8 @@ export function AuthProvider({ children }) {
       setIsGuest(false);
       setGuestInteractions(0);
       showToast('Welcome to iKHWEZI!', 'success');
+      // Signed-in now: hand any waiting FCM token to the server registry.
+      syncPushTokenOnAuth().catch(() => {});
       return { success: true };
     } catch (err) {
       const message =
@@ -204,6 +209,14 @@ export function AuthProvider({ children }) {
   };
 
   const logout = useCallback(async () => {
+    // Device registry (Phase 3A): remove this device's push token before the
+    // session token is dropped — after local logout the server call would be
+    // 401. Then re-create the guest session (existing behaviour).
+    try {
+      await removePushTokenFromServer();
+    } catch {
+      /* best-effort: stale token rows are pruned server-side anyway */
+    }
     localStorage.removeItem('ikhwezi_token');
     setToken(null);
     setIsGuest(false);

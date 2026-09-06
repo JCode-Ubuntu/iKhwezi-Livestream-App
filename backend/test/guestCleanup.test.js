@@ -160,3 +160,37 @@ test('idle window is configurable (GUEST_IDLE_DAYS), boundary respected', async 
     await ctx.sequelize.close();
   }
 });
+
+test('PHASE 3A: stale guest devices are purged with their owner (registry coherence)', async () => {
+  const ctx = await boot();
+  try {
+    const guest = await mkUser(ctx, { isGuest: true, lastActive: ago(30), username: 'deviceguest' });
+    const real = await mkUser(ctx, { lastActive: ago(1), username: 'realdev' });
+    await ctx.Device.create({ userId: guest.id, token: 'guest-fcm-token-aaaaaaaaaaaaaaaaaaaa' });
+
+    const job = buildGuestCleanupJob({ sequelize: ctx.sequelize, models: ctx, logger: { info() {} } });
+    const result = await job.runOnce();
+
+    assert.equal(result.purged, 1);
+    assert.equal(await ctx.Device.count({ where: { userId: guest.id } }), 0,
+      'stale guest device rows must not outlive their user');
+  } finally {
+    await ctx.sequelize.close();
+  }
+});
+
+test('PHASE 3A: zero guest rows → honest no-op (no crash, purged=0)', async () => {
+  // Guest-identity evolution safety net: if future work ever removes guest
+  // User rows entirely, this job must degrade to a no-op, never a crash.
+  const ctx = await boot();
+  try {
+    await mkUser(ctx, { username: 'only-real' }); // registered users only
+    const job = buildGuestCleanupJob({ sequelize: ctx.sequelize, models: ctx, logger: { info() {} } });
+    const result = await job.runOnce();
+    assert.equal(result.purged, 0);
+    // A second no-op run stays a no-op (idempotent).
+    assert.equal((await job.runOnce()).purged, 0);
+  } finally {
+    await ctx.sequelize.close();
+  }
+});

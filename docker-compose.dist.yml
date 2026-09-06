@@ -13,7 +13,13 @@ services:
       - PORT=3001
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_KEY=${ADMIN_KEY}
+      # Phase 3A RBAC transition: ADMIN_KEY_ENABLED=false hard-disables all
+      # remaining shared-key paths (bootstrap grant + ban fallback) once the
+      # first admin account exists. Default true during transition.
+      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-true}
       - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
+      # Webhook source allow-list: production keeps internal-only ON.
+      - RTMP_WEBHOOK_INTERNAL_ONLY=${RTMP_WEBHOOK_INTERNAL_ONLY:-true}
       - RTMP_SERVER=${RTMP_SERVER:-rtmp://nginx-rtmp-prod:1935/live}
       - HLS_URL=${HLS_URL:-http://localhost:8081/hls}
       # ==================== DATABASE (PostgreSQL) ====================

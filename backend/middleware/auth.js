@@ -10,6 +10,14 @@
  *  - `requireAdmin`   x-admin-key header only (constant-time compare)
  *  - `requireAdminAccess` x-admin-key OR req.user.isAdmin
  *
+ * PHASE 3A (RBAC): requireAdmin/requireAdminAccess are DEPRECATED — no route
+ * mounts them any more. Admin authorization now flows through
+ * ./middleware/rbac.js (DB-checked per-user roles). The shared ADMIN_KEY
+ * survives only in rbac.js's narrow transition guard (ban route) and the
+ * one-time bootstrap grant, both under ADMIN_KEY_ENABLED. These two
+ * functions stay exported for one transition release; delete them when the
+ * key is disabled at V2 launch.
+ *
  * The JWT identity is authoritative everywhere; nothing here trusts a
  * client-supplied userId.
  */
