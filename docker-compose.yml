@@ -188,6 +188,15 @@ services:
   # validates. Until the operator sets real values in .env, a placeholder pair
   # keeps the container bootable but the backend stays unconfigured → the app
   # degrades to presence-only meetings (token route 501, capabilities false).
+  #
+  # EXTERNAL TURN (coturn service below): livekit-server embeds any
+  # rtc.turn_servers entries into every client's JoinResponse ice_servers
+  # (verified from livekit pkg/config/config.go TURNServer{host, port,
+  # protocol, username, credential} + livekit.proto JoinResponse).
+  # Compose interpolation cannot CONDITIONALLY append that YAML block, and
+  # an always-on entry with empty host would make livekit-server reject its
+  # config (not fail-open) — so it is deliberately NOT wired inline here.
+  # See the coturn service notes for the single remaining operator step.
   livekit:
     image: livekit/livekit-server:v1.13.5
     container_name: ikhwezi-livekit
@@ -210,6 +219,76 @@ services:
       - "7881:7881"
       - "3478:3478/udp"
       - "50000-60000:50000-60000/udp"
+    restart: unless-stopped
+    networks:
+      - ikhwezi-network
+
+  # ==================== EXTERNAL TURN RELAY — coturn ====================
+  # WHY: LiveKit's EMBEDDED turn (above) only covers the UDP/3478 + TLS-domain
+  # path; clients behind hostile NATs (mobile carriers, strict hotel/company
+  # firewalls) often need a full TURN relay with static credentials to get
+  # meeting media through at all. LiveKit server, when handed
+  # rtc.turn_servers (host/port/protocol/username/credential), embeds the
+  # TURN endpoint into every client's signaling JoinResponse ice_servers —
+  # the web/native frontend needs ZERO changes (shape verified against
+  # livekit pkg/config/config.go TURNServer + livekit.proto JoinResponse).
+  #
+  # WIRING (the single remaining operator step): compose interpolation
+  # cannot conditionally append a YAML block, so the turn_servers entry in
+  # LIVEKIT_CONFIG (livekit service above) is NOT included here — an empty
+  # host string would make livekit-server reject the whole config and take
+  # meetings down (not fail-open). To activate the relay for clients, add
+  # to LIVEKIT_CONFIG in .env-style deployment:
+  #     rtc:
+  #       turn_servers:
+  #         - host: <host clients can reach>   # e.g. ikhwezi.site
+  #           port: ${COTURN_PORT:-3478}
+  #           protocol: udp
+  #           username: ${TURN_USER}
+  #           credential: ${TURN_SECRET}
+  #   ...merged with this file's base config. Until that block is added,
+  #   coturn runs but LiveKit does not hand it to clients — meetings behave
+  #   exactly as today (honest, fail-open).
+  #
+  # AUTH: --lt-cred-mech with static TURN_USER/TURN_SECRET from .env —
+  # coturn-over-UDP with static creds needs no domain and no TLS, so it is
+  # fully functional TODAY. (tls-listener/5349 is the documented future
+  # step: it requires the owner's domain + certificate, which this public
+  # repo cannot ship.)
+  #
+  # RELAY PORTS: 49160-49169 UDP — deliberately SMALL. Each relayed PEER
+  # eats one port per allocation (typically 2 allocations per
+  # participant: audio+video); ~10 ports ≈ a handful of NATed
+  # participants. WIDEN THE RANGE with scale and keep the firewall +
+  # ports: list in sync (COTURN_RELAY_PORT_START/END).
+  #
+  # FAIL-OPEN: with TURN_USER/TURN_SECRET unset, coturn still boots with
+  # --lt-cred-mech and simply authenticates nobody (it idles); no other
+  # service depends on it. Meetings cannot break because of it.
+  coturn:
+    image: coturn/coturn:alpine
+    container_name: ikhwezi-coturn
+    command:
+      - -n
+      - --log-file=stdout
+      - --fingerprint
+      - --lt-cred-mech
+      - --realm=ikhwezi.site
+      - --listening-port=3478
+      - --min-port=${COTURN_RELAY_PORT_START:-49160}
+      - --max-port=${COTURN_RELAY_PORT_END:-49169}
+    # NOTE: --user cannot be conditionally appended (compose interpolation
+    # has no ${VAR:+...} form). When TURN_USER/TURN_SECRET are set, the
+    # operator appends them via .env merging or docker-compose.override.yml
+    # (documented in .env.dist). Without --user, --lt-cred-mech + empty
+    # userdb = nobody can authenticate — the fail-open idle state.
+    ports:
+      # Dev file maps to the host for native Android emulator/device tests
+      # following the existing REDIS_HOST_PORT pattern; host 3479 avoids
+      # colliding with the livekit container's 3478 mapping above.
+      - "${COTURN_HOST_PORT:-3479}:3478/udp"
+      - "${COTURN_HOST_PORT:-3479}:3478/tcp"
+      - "49160-49169:49160-49169/udp"
     restart: unless-stopped
     networks:
       - ikhwezi-network

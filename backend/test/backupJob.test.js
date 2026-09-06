@@ -19,6 +19,10 @@ const { buildBackupJob, fileTimestamp, DB_FAMILY_RX, MEDIA_FAMILY_RX } = require
  *      .UNENCRYPTED suffix (openssl detection is injected/monkeypatched).
  *   4. Postgres dialect → no DB file is written; an honest skip is reported.
  *   5. Media tar: produced when uploads exists, skipped cleanly when not.
+ *   6. Off-site upload (injected fake provider): success uploads BOTH
+ *      artifacts with backups/<filename> keys; skipped DB run uploads
+ *      nothing; local/absent provider records an honest skip; a throwing
+ *      put() NEVER fails the run (fail-open, error recorded).
  *
  * Runs are fully sandboxed: each test gets its own tmp dir (DB + backups),
  * nothing under backend/storage is ever touched, and env mutations are
@@ -27,7 +31,7 @@ const { buildBackupJob, fileTimestamp, DB_FAMILY_RX, MEDIA_FAMILY_RX } = require
 
 // ---- harness ---------------------------------------------------------------
 
-const ENV_KEYS = ['BACKUP_KEEP', 'BACKUP_ENCRYPTION_KEY', 'BACKUP_INCLUDE_MEDIA', 'BACKUP_INTERVAL_HOURS', 'BACKUP_DIR'];
+const ENV_KEYS = ['BACKUP_KEEP', 'BACKUP_ENCRYPTION_KEY', 'BACKUP_INCLUDE_MEDIA', 'BACKUP_INTERVAL_HOURS', 'BACKUP_DIR', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_REGION', 'S3_ENDPOINT'];
 
 function snapshotEnv() {
   const snap = {};
@@ -57,13 +61,14 @@ async function bootFreshDb() {
   return { dir, dbPath, sequelize, core };
 }
 
-function mkJob({ sequelize, backupDir, resolveOpenSSL, opensslCommand, mediaRoot, logger } = {}) {
+function mkJob({ sequelize, backupDir, resolveOpenSSL, opensslCommand, mediaRoot, logger, offsiteProvider } = {}) {
   return buildBackupJob({
     sequelize, backupDir,
     resolveOpenSSL: resolveOpenSSL || (() => false), // default: "no openssl" (deterministic)
     opensslCommand,
     mediaRoot,
     logger: logger || { info() {}, warn() {}, error() {} },
+    offsiteProvider,
   });
 }
 
@@ -450,6 +455,195 @@ test('BACKUP_KEEP is lower-bound clamped to 1 (no misconfigured zero wipe)', asy
       const files = filesMatching(backupDir, DB_FAMILY_RX);
       assert.equal(files.length, 1, 'keep=0 clamps to 1 — never zero');
       assert.ok(fs.existsSync(path.join(backupDir, files[0].name)));
+    } finally {
+      await ctx.sequelize.close();
+      fs.rmSync(ctx.dir, { recursive: true, force: true });
+    }
+  } finally {
+    restoreEnv(env);
+  }
+});
+
+// ---- off-site upload (Task A) -----------------------------------------------
+//
+// All of these use an INJECTED fake provider — never a real network call.
+// The fake mirrors the storage-v2 contract: capabilities.objectStorage is
+// the gate, put(key, absoluteLocalPath) resolves { key }.
+
+/** In-memory fake object-storage provider (storage-v2 shaped). */
+function fakeOffsiteProvider({ failPut = false } = {}) {
+  const uploads = [];
+  return {
+    type: 's3',
+    capabilities: Object.freeze({ type: 's3', objectStorage: true, presigned: false }),
+    putCalls: uploads,
+    async put(key, absoluteLocalPath) {
+      if (failPut) throw new Error('simulated network failure');
+      uploads.push({ key, absoluteLocalPath, bytes: fs.statSync(absoluteLocalPath).size });
+      return { key, bytes: uploads[uploads.length - 1].bytes };
+    },
+    async get() { throw new Error('get not expected in off-site tests'); },
+    async remove() { throw new Error('remove must NEVER be called by the backup job'); },
+    publicUrl() { return null; },
+  };
+}
+
+/** A local-disk provider (objectStorage:false) — must be treated as NOT off-site. */
+function fakeLocalProvider() {
+  return {
+    type: 'local',
+    capabilities: Object.freeze({ type: 'local', objectStorage: false, presigned: false }),
+    async put() { throw new Error('local provider must never be called for off-site'); },
+    async get() { throw new Error('get not expected'); },
+    async remove() { throw new Error('remove not expected'); },
+    publicUrl() { return null; },
+  };
+}
+
+test('offsite: successful run uploads BOTH artifacts (db + media) under backups/ keys', async () => {
+  const env = snapshotEnv();
+  delete process.env.BACKUP_ENCRYPTION_KEY;
+  try {
+    const ctx = await bootFreshDb();
+    try {
+      const backupDir = path.join(ctx.dir, 'backups');
+      const uploads = path.join(ctx.dir, 'uploads');
+      fs.mkdirSync(uploads, { recursive: true });
+      fs.writeFileSync(path.join(uploads, 'a.txt'), 'offsite media probe');
+
+      const provider = fakeOffsiteProvider();
+      const job = mkJob({ sequelize: ctx.sequelize, backupDir, resolveOpenSSL: () => false, mediaRoot: ctx.dir, offsiteProvider: provider });
+      const r = await job.runBackup();
+
+      // DB artifact uploaded with the right key, and the local file it came from exists.
+      assert.ok(r.db && r.db.file, 'db file produced');
+      assert.equal(r.db.offsite.uploaded, true, 'db offsite uploaded: ' + JSON.stringify(r.db.offsite));
+      assert.equal(r.db.offsite.key, `backups/${r.db.file}`);
+      assert.ok(fs.existsSync(r.db.offsite && path.join(backupDir, r.db.file)), 'uploaded source file exists locally');
+
+      // Media artifact uploaded with the right key.
+      assert.ok(r.media && r.media.file, 'media tar produced');
+      assert.equal(r.media.offsite.uploaded, true, 'media offsite uploaded');
+      assert.equal(r.media.offsite.key, `backups/${r.media.file}`);
+
+      // Exactly two puts total: DB + media (no duplicates, no stray keys).
+      assert.equal(provider.putCalls.length, 2, 'exactly db + media uploaded');
+      assert.deepEqual(provider.putCalls.map((c) => c.key).sort(), [r.db.offsite.key, r.media.offsite.key].sort());
+      // The put() source paths point at the FINAL (renamed) local artifacts.
+      for (const c of provider.putCalls) {
+        assert.ok(fs.existsSync(c.absoluteLocalPath), `provider received an existing local path: ${c.absoluteLocalPath}`);
+      }
+    } finally {
+      await ctx.sequelize.close();
+      fs.rmSync(ctx.dir, { recursive: true, force: true });
+    }
+  } finally {
+    restoreEnv(env);
+  }
+});
+
+test('offsite: failed/skipped DB run makes NO DB upload attempt', async () => {
+  const env = snapshotEnv();
+  delete process.env.BACKUP_ENCRYPTION_KEY;
+  try {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ikhwezi-backup-offsite-skip-'));
+    try {
+      // Ghost source path → honest skip (db-file-missing): no artifact, and
+      // the provider must not see a single put for the DB leg.
+      const ghost = new Sequelize({ dialect: 'sqlite', storage: path.join(dir, 'vanished.db'), logging: false });
+      const provider = fakeOffsiteProvider();
+
+      const backupDir = path.join(dir, 'backups');
+      fs.mkdirSync(backupDir, { recursive: true });
+      fs.mkdirSync(path.join(dir, 'uploads'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'uploads', 'b.txt'), 'data');
+
+      const job = mkJob({ sequelize: ghost, backupDir, resolveOpenSSL: () => false, mediaRoot: dir, offsiteProvider: provider });
+      const r = await job.runBackup();
+
+      assert.equal(r.db.skipped, 'db-file-missing', 'db run honestly skipped');
+      assert.ok(!r.db.offsite, 'no DB offsite record on a skipped run: ' + JSON.stringify(r.db));
+      assert.ok(!provider.putCalls.some((c) => c.key.includes('ikhwezi-')), 'NO ikhwezi-* DB key uploaded on a skipped run');
+      // The media leg IS still uploaded (files, not rows — independent).
+      assert.ok(r.media && r.media.offsite && r.media.offsite.uploaded === true, 'media leg still uploads when the DB skipped');
+      await ghost.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } finally {
+    restoreEnv(env);
+  }
+});
+
+test('offsite: local-disk provider and absent provider both record an honest skip, no crash', async () => {
+  const env = snapshotEnv();
+  delete process.env.BACKUP_ENCRYPTION_KEY;
+  try {
+    const ctx = await bootFreshDb();
+    try {
+      const backupDir = path.join(ctx.dir, 'backups');
+      fs.mkdirSync(path.join(ctx.dir, 'uploads'), { recursive: true });
+      fs.writeFileSync(path.join(ctx.dir, 'uploads', 'a.txt'), 'x');
+
+      // 1. A LOCAL-disk provider (objectStorage: false) is NOT off-site.
+      const jobLocal = mkJob({ sequelize: ctx.sequelize, backupDir, resolveOpenSSL: () => false, mediaRoot: ctx.dir, offsiteProvider: fakeLocalProvider() });
+      const rLocal = await jobLocal.runBackup({ now: new Date(Date.now() - 2000) });
+      assert.ok(rLocal.db && rLocal.db.file, 'backup still produced');
+      assert.deepEqual(rLocal.db.offsite, { skipped: 'no-object-storage' }, 'local provider → honest skip');
+      assert.deepEqual(rLocal.media.offsite, { skipped: 'no-object-storage' }, 'media leg also honest');
+
+      // 2. No provider option at all AND no S3_* env → skip for db, media.
+      delete process.env.S3_BUCKET;
+      delete process.env.S3_ACCESS_KEY_ID;
+      delete process.env.S3_SECRET_ACCESS_KEY;
+      const infoLines = [];
+      const logger = { info: (...a) => infoLines.push(a.join(' ')), warn() {}, error() {} };
+      const jobNone = mkJob({ sequelize: ctx.sequelize, backupDir, resolveOpenSSL: () => false, mediaRoot: ctx.dir, logger });
+      const rNone = await jobNone.runBackup();
+      assert.deepEqual(rNone.db.offsite, { skipped: 'no-object-storage' }, 'absent provider → honest skip');
+      assert.deepEqual(rNone.media.offsite, { skipped: 'no-object-storage' });
+      // ONE honest info log per RUN (not per artifact).
+      const skipLines = infoLines.filter((l) => l.includes('no object storage configured'));
+      assert.equal(skipLines.length, 1, 'exactly one skip log line per run');
+    } finally {
+      await ctx.sequelize.close();
+      fs.rmSync(ctx.dir, { recursive: true, force: true });
+    }
+  } finally {
+    restoreEnv(env);
+  }
+});
+
+test('offsite: provider.put THROWS → run still succeeds and reports db.file + offsite.error', async () => {
+  const env = snapshotEnv();
+  delete process.env.BACKUP_ENCRYPTION_KEY;
+  try {
+    const ctx = await bootFreshDb();
+    try {
+      const backupDir = path.join(ctx.dir, 'backups');
+      fs.mkdirSync(path.join(ctx.dir, 'uploads'), { recursive: true });
+      fs.writeFileSync(path.join(ctx.dir, 'uploads', 'a.txt'), 'x');
+
+      const provider = fakeOffsiteProvider({ failPut: true });
+      const job = mkJob({ sequelize: ctx.sequelize, backupDir, resolveOpenSSL: () => false, mediaRoot: ctx.dir, offsiteProvider: provider });
+      const r = await job.runBackup();
+
+      // THE CONTRACT: upload failure NEVER fails the run — the local
+      // artifact exists, verified, and the error is recorded honestly.
+      assert.ok(r.db && r.db.file, 'db.file must still be reported');
+      assert.equal(r.db.verified, true, 'db backup still verified');
+      assert.ok(fs.existsSync(path.join(backupDir, r.db.file)), 'local db artifact intact on disk');
+      assert.equal(r.db.offsite.uploaded, false, 'offsite.uploaded false');
+      assert.ok(r.db.offsite.error && r.db.offsite.error.includes('simulated network failure'), 'error recorded: ' + JSON.stringify(r.db.offsite));
+
+      // Media leg too — same fail-open contract.
+      assert.ok(r.media && r.media.file, 'media artifact still produced');
+      assert.equal(r.media.offsite.uploaded, false);
+      assert.ok(r.media.offsite.error, 'media offsite error recorded');
+
+      // Retention still ran normally (never blocked by the upload failure).
+      assert.ok(r.retention.db && typeof r.retention.db.kept === 'number', 'db retention ran');
+      assert.ok(r.retention.media && typeof r.retention.media.kept === 'number', 'media retention ran');
     } finally {
       await ctx.sequelize.close();
       fs.rmSync(ctx.dir, { recursive: true, force: true });

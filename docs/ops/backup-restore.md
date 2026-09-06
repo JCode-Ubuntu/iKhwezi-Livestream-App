@@ -33,6 +33,29 @@ read-only and must pass `PRAGMA integrity_check` with a readable
   production always encrypts when the key is set.
 - Key unset → plain file + info log (dev default).
 
+### Off-site copy (automatic when object storage is configured)
+
+- **`S3_*` set** (the same variables as the media pipeline — `S3_BUCKET` +
+  `S3_ACCESS_KEY_ID` + `S3_SECRET_ACCESS_KEY`, see `.env.dist`) → after
+  **every** backup run, each finalized artifact (`.enc` or honest
+  `.UNENCRYPTED`) is ALSO uploaded to the bucket under `backups/<filename>`,
+  in addition to the docker volume. Nothing to schedule — it rides along
+  with the boot + interval runs, including `npm run backup`.
+- **Uploads fail open**: an unreachable bucket never fails a backup run or
+  blocks retention — the error is logged loudly (`off-site upload FAILED`)
+  and recorded in the result object (`offsite: { uploaded: false, error }`).
+  The next run retries automatically.
+- **No `S3_*` set** → one honest log line per run
+  (`off-site sync skipped — no object storage configured`) and
+  `offsite: { skipped: 'no-object-storage' }` in the result.
+- **`RETENTION STAYS LOCAL-ONLY**: local `BACKUP_KEEP` pruning never
+  deletes off-site copies — the bucket is the disaster-recovery copy.
+  Prune it with bucket lifecycle rules (e.g. R2/S3 lifecycle: expire
+  `backups/` objects after 90 days), never from the app.
+- Off-site upload requires the S3-backed driver
+  (`capabilities.objectStorage === true`); a local-disk storage config is
+  never treated as "off-site".
+
 ### Retention (never-delete-to-zero)
 
 - Keeps the newest `BACKUP_KEEP` files per family (DB / media), default 7.
@@ -149,9 +172,14 @@ Media (uploads tar) still applies — §4 unchanged.
 - **Key custody**: losing `BACKUP_ENCRYPTION_KEY` = losing every `.enc`
   artifact. Store it in a password manager / secrets store — never in the
   repo, never in plain env files committed anywhere.
-- **Off-site copy (schedule it)**: `backup-storage` is a docker volume, not
-  off-site storage. Sync the encrypted contents out of the host on an
-  interval, e.g. a nightly cron on the host:
+- **Off-site copy (automatic with object storage)**: when `S3_*` is
+  configured (§ "Off-site copy" in §1), every run pushes each finalized
+  artifact to the bucket under `backups/` — no scheduling, no cron.
+  Restore from the bucket by downloading the object and following §3/§4.
+  Remember: local retention NEVER deletes bucket copies — prune the
+  bucket with its own lifecycle rules.
+- **Off-site copy (no object storage)**: sync the encrypted contents out
+  of the host on an interval, e.g. a nightly rsync cron on the host:
 
 ```bash
 0 3 * * *  rsync -a --delete /var/lib/docker/volumes/ikhwezi_backup-storage-prod/_data/ \
@@ -166,9 +194,10 @@ Media (uploads tar) still applies — §4 unchanged.
 |---|---|---|
 | `BACKUP_DIR` | `backend/storage/backups` | Output directory (compose: `/app/storage/backups`) |
 | `BACKUP_ENCRYPTION_KEY` | *(empty)* | Set → encrypt artifacts; empty → plain, honestly named |
-| `BACKUP_KEEP` | `7` | Retention per family; **min-clamped to 1** |
+| `BACKUP_KEEP` | `7` | Retention per family; **min-clamped to 1**; **LOCAL ONLY** — never deletes bucket copies |
 | `BACKUP_INCLUDE_MEDIA` | `true` | Tar `uploads/` alongside the DB backup |
 | `BACKUP_INTERVAL_HOURS` | `24` | Cadence after the boot-time run |
+| `S3_BUCKET` + `S3_ACCESS_KEY_ID` + `S3_SECRET_ACCESS_KEY` (`S3_ENDPOINT`, `S3_REGION`) | *(empty)* | Set → every run ALSO uploads each finalized artifact to the bucket under `backups/` (see §1 “Off-site copy”); empty → honest skip, one log line per run. Local retention never deletes bucket copies. |
 
 Related docs:
 

@@ -37,7 +37,20 @@
  *      one that isn't. The compose containers (node:20-alpine) ship
  *      openssl, so production always encrypts. The key travels via
  *      environment (`-pass env:`), never in argv (kept out of `ps`).
- *   4. Retention: keep the newest BACKUP_KEEP files per family
+ *   4. Off-site upload: when object storage is configured (S3_* — the SAME
+ *      env the media pipeline already uses), each FINAL artifact (post-
+ *      encryption / `.UNENCRYPTED` — exactly what retention would keep)
+ *      is uploaded to object storage under `backups/<filename>`. Gated on
+ *      capabilities.objectStorage === true, so the local-disk driver is
+ *      NEVER mistaken for off-site. Upload failure NEVER fails the run:
+ *      caught, logged loudly, recorded as offsite:{uploaded:false, error}.
+ *      No object storage → ONE honest info log per run plus
+ *      result.*.offsite = { skipped: 'no-object-storage' }.
+ *      RETENTION STAYS LOCAL-ONLY: this job NEVER deletes off-site copies
+ *      (deliberate — the bucket is the disaster-recovery copy; prune it
+ *      with bucket lifecycle rules, never from the app. Documented in
+ *      docs/ops/backup-restore.md §6).
+ *   5. Retention: keep the newest BACKUP_KEEP files per family
  *      (ikhwezi-*.db* / uploads-*.tar*, default 7), delete older — but
  *      ONLY deletions happen after this run produced a VERIFIED newest
  *      file, and that file is never a deletion candidate. A failed run
@@ -238,7 +251,7 @@ function uniquePath(dir, base) {
 
 /**
  * buildBackupJob({ sequelize, logger, backupDir, mediaRoot, resolveOpenSSL,
- *                  opensslCommand }) — mirrors jobs/guestCleanup.js.
+ *                  opensslCommand, offsiteProvider }) — mirrors jobs/guestCleanup.js.
  *
  *  sequelize      live app connection (dialect dispatch; SQLite source path)
  *  backupDir      BACKUP_DIR override (default backend/storage/backups)
@@ -248,7 +261,63 @@ function uniquePath(dir, base) {
  *                 that derived dir has no uploads/, the app default
  *                 backend/storage/uploads is the fallback candidate.
  *  resolveOpenSSL / opensslCommand — test injection points.
+ *  offsiteProvider storage-v2 provider with capabilities.objectStorage === true
+ *                 (test injection). OMITTED → resolved lazily from S3_* env
+ *                 via storage-v2; anything else (including the local-disk
+ *                 driver) means off-site sync is honestly skipped.
  */
+/**
+ * Resolve the off-site provider ONCE per job (not per run — building the
+ * S3 client is the expensive part). storage-v2's env builder already
+ * implements the exact fail-open semantics we need (bad/missing S3_* →
+ * local driver + loud warning, never throws), so we defer to it and then
+ * apply the ONE extra policy this job requires: `objectStorage === true`
+ * or it is NOT off-site. A local-disk provider would silently "upload"
+ * backups onto the same host — the opposite of off-site — so it is
+ * treated the same as no configuration at all.
+ * Injectable for tests via the buildBackupJob option `offsiteProvider`.
+ * A false-y injection means "no provider" (explicit); omit the option to
+ * build lazily from the real environment.
+ */
+const NO_OFFSITE = { skipped: 'no-object-storage' };
+
+function resolveOffsiteProviderFromEnv({ env = process.env, log, buildStorageProviderFromEnv }) {
+  try {
+    const provider = buildStorageProviderFromEnv({ env, log });
+    if (provider && provider.capabilities && provider.capabilities.objectStorage === true) {
+      return { provider };
+    }
+    return null;
+  } catch (err) {
+    // storage-v2 never throws on config problems (it degrades to local),
+    // but defense in depth: even a bug there must not take backups down.
+    log.warn?.(`backup: off-site provider resolution failed (${err?.message || err}) — off-site sync disabled`);
+    return null;
+  }
+}
+
+/**
+ * Upload ONE finalized artifact to object storage under `backups/<filename>`.
+ * NEVER throws: failure is caught, logged loudly, and returned as
+ * { uploaded: false, error } so the run result always tells the truth.
+ * The provider's put() itself resolves { key } on success — we surface it
+ * as { uploaded: true, key }.
+ */
+async function uploadArtifactOffsite({ provider, backupDir, filename, log }) {
+  const key = `backups/${filename}`;
+  try {
+    const res = await provider.put(key, path.join(backupDir, filename));
+    log(`backup: off-site copy uploaded → ${key}`);
+    return { uploaded: true, key: (res && res.key) || key };
+  } catch (err) {
+    warnLoud(log, `backup: off-site upload FAILED for ${filename} (${err?.message || err}) — the LOCAL backup is intact; next run will retry`);
+    return { uploaded: false, error: err?.message || String(err) };
+  }
+}
+
+/** Local warn() shim for helpers defined outside buildBackupJob scope. */
+function warnLoud(log, msg) { const fn = log?.warn || log?.error || log?.log; if (fn) fn.call(log, msg); }
+
 function buildBackupJob({
   sequelize,
   logger = console,
@@ -256,9 +325,47 @@ function buildBackupJob({
   mediaRoot = path.dirname(backupDir),
   resolveOpenSSL = createOpenSSLResolver(),
   opensslCommand = 'openssl',
+  offsiteProvider,
 } = {}) {
   const log = (...a) => { const fn = logger.info || logger.log; if (fn) fn.apply(logger, a); };
   const warn = (...a) => { const fn = logger.warn || logger.error || logger.log; if (fn) fn.apply(logger, a); };
+
+  // ---- off-site sync (Task A) --------------------------------------------
+  // Injection beats env: a test or embedder may pass a provider explicitly.
+  // Otherwise resolve ONCE, lazily, from the real environment via
+  // storage-v2 — the same S3_* variables the media pipeline already
+  // consumes, so there is NO new env knob to miss. Resolution failures
+  // are impossible by contract (storage-v2 degrades to local, we then
+  // reject local as "not off-site") — but every access below still
+  // degrades to an honest skip, so a bug can never fail a backup run.
+  let offsite = null;       // 'absent' | { provider } — memoized resolution
+  if (typeof offsiteProvider !== 'undefined') {
+    offsite = (offsiteProvider && offsiteProvider.capabilities &&
+               offsiteProvider.capabilities.objectStorage === true)
+      ? { provider: offsiteProvider }
+      : 'absent';
+  }
+  const offsiteSync = () => {
+    if (offsite !== null) return offsite; // memoized (injected or resolved)
+    const resolved = resolveOffsiteProviderFromEnv({
+      log: logger,
+      buildStorageProviderFromEnv: require('../storage-v2').buildStorageProviderFromEnv,
+    });
+    offsite = resolved || 'absent';
+    return offsite;
+  };
+
+  /** Off-site copy of ONE finalized artifact — never throws, never blocks. */
+  const uploadOffsite = async (filename) => {
+    if (!filename) return NO_OFFSITE; // no finalized artifact this run
+    const sync = offsiteSync();
+    if (sync === 'absent') {
+      // One honest line per RUN is emitted by runBackup (not per artifact),
+      // so this branch records the skip without spamming the log twice.
+      return NO_OFFSITE;
+    }
+    return uploadArtifactOffsite({ provider: sync.provider, backupDir, filename, log });
+  };
 
   // The default media root = backupDir's PARENT (storage/backups → storage),
   // so an explicit BACKUP_DIR override keeps sibling-uploads discovery. A
@@ -364,6 +471,15 @@ function buildBackupJob({
     fs.mkdirSync(c.backupDir, { recursive: true });
     const decision = await encryptionDecision();
 
+    // Off-site sync state for THIS run: one honest info log when no object
+    // storage is configured (per run, not per artifact — silence per artifact
+    // would hide the skip; noise per artifact would double-log it).
+    const sync = offsiteSync();
+    const offsiteConfigured = sync !== 'absent';
+    if (!offsiteConfigured) {
+      log('backup: off-site sync skipped — no object storage configured (set S3_*)');
+    }
+
     // ---- database ---------------------------------------------------------
     if (result.dialect === 'sqlite') {
       const sourcePath = sequelize.options && sequelize.options.storage;
@@ -384,10 +500,16 @@ function buildBackupJob({
             kind: 'DB', plainPath, plainName,
             wanted: decision.wanted, encrypt: decision.encrypt, key: c.encryptionKey, failureNotes: notes,
           });
+          // Off-site copy of the FINAL artifact (post-encryption /
+          // .UNENCRYPTED rename — upload exactly what retention keeps).
+          // Awaited BEFORE retention so a slow upload can never race the
+          // prune scan; failure is recorded, never thrown (fail-open).
+          const offsiteRes = await uploadOffsite(final.file);
           result.db = {
             file: final.file, encrypted: !!final.encrypted,
             unencrypted: !!final.unencrypted, plaintext: !!final.plaintext,
             verified: true, integrity: verify.integrity, tables: verify.tables, notes,
+            offsite: offsiteRes,
           };
           log(`backup: DB backup ${final.file} verified (integrity ok, ${verify.tables} tables${final.encrypted ? ', encrypted' : ''})`);
         } catch (e) {
@@ -442,9 +564,13 @@ function buildBackupJob({
             kind: 'media', plainPath: plainTar, plainName: plainTarName,
             wanted: decision.wanted, encrypt: decision.encrypt, key: c.encryptionKey, failureNotes: notes,
           });
+          // Off-site copy of the FINAL tar, same contract as the DB leg:
+          // awaited before retention, never allowed to fail the run.
+          const offsiteRes = await uploadOffsite(final.file);
           result.media = {
             file: final.file, encrypted: !!final.encrypted,
             unencrypted: !!final.unencrypted, plaintext: !!final.plaintext, notes,
+            offsite: offsiteRes,
           };
           log(`backup: media backup ${final.file} written (${(fs.statSync(path.join(c.backupDir, final.file)).size / 1024).toFixed(1)} KiB)`);
           result.retention.media = applyRetention({

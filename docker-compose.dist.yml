@@ -200,6 +200,13 @@ services:
   # Meeting A/V — same SFU as docker-compose.yml; see notes there. TLS for
   # wss:// and TURN/TLS is terminated by the site's outer reverse proxy
   # (ikhwezi.site → livekit:7880), which is how the site already fronts 8080.
+  #
+  # EXTERNAL TURN: see the coturn service below and the extended notes in
+  # docker-compose.yml. The rtc.turn_servers block is NOT inlined here:
+  # compose cannot conditionally append YAML, and an empty-host entry would
+  # make livekit-server reject its config (not fail-open). dist deployments
+  # activate the relay by appending the turn_servers block to LIVEKIT_CONFIG
+  # at deployment (documented in .env.dist + compose notes).
   livekit:
     image: livekit/livekit-server:v1.13.5
     container_name: ikhwezi-livekit-prod
@@ -222,6 +229,38 @@ services:
       - "7881:7881"
       - "3478:3478/udp"
       - "50000-60000:50000-60000/udp"
+    restart: always
+    networks:
+      - ikhwezi-network-prod
+
+  # ==================== EXTERNAL TURN RELAY — coturn ====================
+  # Same relay as docker-compose.yml — see the extended design notes there.
+  # Dist differences, mirroring the redis/postgres pattern:
+  #   • NO host port mapping (3478/relay range stay private to the compose
+  #     network; the public path is the outer reverse proxy / firewall).
+  #   • TURN_USER/TURN_SECRET are REQUIRED in this file — the dist
+  #     deployment is production: a TURN relay without credentials would
+  #     be an open relay, so compose refuses to start the service without
+  #     them (:?err interpolation, same as POSTGRES_PASSWORD above).
+  #   • rtp-range 49160-49169: relay ports must ALSO be open on the VPS
+  #     firewall for external clients; widen with scale.
+  # The rtc.turn_servers hand-off to LIVEKIT_CONFIG is the single remaining
+  # deployment-time step — see notes in docker-compose.yml + .env.dist (an
+  # inlined empty-host entry would make livekit-server reject its config,
+  # which is not fail-open, so it is deliberately not inlined).
+  coturn:
+    image: coturn/coturn:alpine
+    container_name: ikhwezi-coturn-prod
+    command:
+      - -n
+      - --log-file=stdout
+      - --fingerprint
+      - --lt-cred-mech
+      - --realm=ikhwezi.site
+      - --listening-port=3478
+      - --min-port=${COTURN_RELAY_PORT_START:-49160}
+      - --max-port=${COTURN_RELAY_PORT_END:-49169}
+      - --user=${TURN_USER:?TURN_USER must be set in .env (or remove this service)}:${TURN_SECRET:?TURN_SECRET must be set in .env (or remove this service)}
     restart: always
     networks:
       - ikhwezi-network-prod
