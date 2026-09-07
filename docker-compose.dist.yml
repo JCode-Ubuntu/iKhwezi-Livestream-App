@@ -6,8 +6,14 @@ services:
       args:
         NODE_ENV: production
     container_name: ikhwezi-backend-prod
-    ports:
-      - "3001:3001"
+    # PRODUCTION POSTURE: backend is intentionally NOT exposed on the host
+    # port. All traffic flows through the frontend nginx / storage proxy on
+    # the internal compose network (ikhwezi-network-prod). This prevents
+    # direct access that would bypass nginx layer-1 webhook allow-lists and
+    # rate limits. If you need direct backend access for debugging, use the
+    # `backend-debug` profiled service below (`docker compose --profile debug
+    # up backend-debug`).
+    # No host ports here.
     environment:
       - NODE_ENV=production
       - PORT=3001
@@ -288,6 +294,57 @@ services:
   #   restart: always
   #   networks:
   #     - ikhwezi-network-prod
+
+  # Debug profile: direct backend port access. ONLY for troubleshooting;
+  # do not run this in production. Activate with:
+  #   docker compose --profile debug up backend-debug
+  backend-debug:
+    profiles:
+      - debug
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    container_name: ikhwezi-backend-debug
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_KEY=${ADMIN_KEY}
+      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-true}
+      - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
+      - RTMP_WEBHOOK_INTERNAL_ONLY=${RTMP_WEBHOOK_INTERNAL_ONLY:-true}
+      - RTMP_SERVER=${RTMP_SERVER:-rtmp://nginx-rtmp-prod:1935/live}
+      - HLS_URL=${HLS_URL:-http://localhost:8081/hls}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ikhwezi}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-ikhwezi}
+      - DATABASE_SSL=false
+      - REDIS_URL=redis://redis:6379
+      - BACKUP_DIR=/app/storage/backups
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:-}
+      - BACKUP_KEEP=${BACKUP_KEEP:-7}
+      - BACKUP_INCLUDE_MEDIA=${BACKUP_INCLUDE_MEDIA:-true}
+      - BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-24}
+      - LIVEKIT_URL=${LIVEKIT_URL:-}
+      - LIVEKIT_PUBLIC_URL=${LIVEKIT_PUBLIC_URL:-}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      - LOG_LEVEL=info
+    volumes:
+      - backend-storage-prod:/app/storage
+      - backup-storage-prod:/app/storage/backups
+      - backend-logs-prod:/app/logs
+    depends_on:
+      nginx-rtmp:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ikhwezi-network-prod
 
 volumes:
   backend-storage-prod:

@@ -33,7 +33,7 @@ function buildTranscodeQueueFromEnv(opts = {}) {
   const {
     processor,
     env = process.env,
-    log = console,
+    log = opts.log || require('../lib/logger').createLogger(),
     queueName = 'ikhwezi-transcode',
   } = opts;
 

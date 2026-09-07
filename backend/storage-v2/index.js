@@ -34,7 +34,7 @@ function buildStorageProviderFromEnv(opts = {}) {
   const {
     env = process.env,
     localRoot,
-    log = console,
+    log = opts.log || require('../lib/logger').createLogger(),
     buildS3 = require('./s3').buildS3StorageProvider,
   } = opts;
 

@@ -320,7 +320,7 @@ function warnLoud(log, msg) { const fn = log?.warn || log?.error || log?.log; if
 
 function buildBackupJob({
   sequelize,
-  logger = console,
+  logger = require('../lib/logger').createLogger(),
   backupDir = process.env.BACKUP_DIR || path.join(__dirname, '..', 'storage', 'backups'),
   mediaRoot = path.dirname(backupDir),
   resolveOpenSSL = createOpenSSLResolver(),

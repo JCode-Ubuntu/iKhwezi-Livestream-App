@@ -40,7 +40,7 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_IDLE_DAYS = 14;
 
-function buildGuestCleanupJob({ sequelize, models, logger = console }) {
+function buildGuestCleanupJob({ sequelize, models, logger = require('../lib/logger').createLogger() }) {
   const {
     User, Like, VideoSave, VideoRepost, Comment, StoryView, StoryComment,
     PostLike, DirectMessage, Follow, GiftLog,

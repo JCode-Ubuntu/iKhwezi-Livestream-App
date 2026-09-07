@@ -11,6 +11,12 @@ const { Sequelize, DataTypes, Op, QueryTypes } = require('sequelize');
 const http = require('http');
 const { Server } = require('socket.io');
 
+// Phase 3B: centralized structured logger. Used throughout boot and wiring
+// so console.* calls can be replaced with a log record that carries service
+// context and can redact secrets.
+const { createLogger, bindCorrelationId } = require('./lib/logger');
+const appLogger = createLogger();
+
 // SECURITY: this repository is public on GitHub. Previous versions of this
 // file hardcoded real-looking fallback values for JWT_SECRET and ADMIN_KEY
 // directly in source (e.g. 'ikhwezi_jwt_secret_2026_super_secure'), which
@@ -31,15 +37,13 @@ function requireSecretOrGenerate(envVarName, { minLength = 32 } = {}) {
   const fromEnv = process.env[envVarName];
   if (fromEnv && fromEnv.length >= minLength) return fromEnv;
   if (fromEnv) {
-    console.warn(`⚠️  ${envVarName} is set but shorter than ${minLength} characters — treating as insecure and generating a random one instead.`);
+    appLogger.warn(`${envVarName} is set but shorter than ${minLength} characters — treating as insecure and generating a random one instead.`);
   }
   const generated = crypto.randomBytes(48).toString('hex');
-  console.warn('\n' + '='.repeat(78));
-  console.warn(`⚠️  SECURITY WARNING: ${envVarName} is not set (or too short) in the environment.`);
-  console.warn(`⚠️  Generated a random value for THIS PROCESS ONLY — it will change on restart.`);
-  console.warn(`⚠️  Set a persistent ${envVarName} environment variable on the server ASAP.`);
-  // Never log generated secrets — they end up in persistent logs/CI output.
-  console.warn('='.repeat(78) + '\n');
+  appLogger.warn('SECURITY WARNING: ' + envVarName + ' is not set (or too short) in the environment.', {
+    envVar: envVarName,
+    disposition: 'Generated a random value for THIS PROCESS ONLY — it will change on restart. Set a persistent environment variable on the server ASAP.',
+  });
   return generated;
 }
 
@@ -72,6 +76,15 @@ require('./utils/processGuards').installProcessGuards();
 
 const app = express();
 const server = http.createServer(app);
+
+// Phase 3B: Sentry error monitoring (fail-open; no DSN = no-op).
+const { createSentryHub } = require('./lib/sentry');
+const sentryHub = createSentryHub({ env: process.env, logger: appLogger });
+
+// Phase 3B: alerting hooks (fail-open; no webhook URL = loud log only).
+const { createAlerter } = require('./lib/alerts');
+const alerter = createAlerter({ env: process.env, logger: appLogger });
+
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
@@ -183,6 +196,11 @@ function emitLiveStopped() {
 
 
 // Middleware
+// Request context FIRST so every downstream route/middleware can use
+// req.id + req.logger (Phase 3B observability slice).
+const { buildRequestContextMiddleware } = require('./middleware/requestContext');
+app.use(buildRequestContextMiddleware({ logger: appLogger, env: process.env }));
+
 app.use(cors({
   origin: (origin, callback) => {
     callback(null, isAllowedCorsOrigin(origin));
@@ -198,7 +216,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   try {
     event = stripeClient.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error('Stripe webhook signature verification failed:', err.message);
+    req.logger?.error('Stripe webhook signature verification failed', { error: err.message });
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -224,7 +242,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         io.to(`user_${userId}`).emit('wallet-updated', { coins: wallet.coins });
         await logAudit('WALLET_TOPUP_STRIPE', { userId, coins, sessionId: session.id }, null);
       } catch (err) {
-        console.error('Stripe webhook wallet credit failed:', err);
+        req.logger?.error('Stripe webhook wallet credit failed', { error: err.message });
         return res.status(500).json({ error: 'Webhook processing failed' });
       }
     }
@@ -541,20 +559,30 @@ const meetingsModule = require('./meetings').mount({
 const mediaPipeline = (() => {
   try {
     const { buildStorageProviderFromEnv } = require('./storage-v2');
-    const storageProvider = buildStorageProviderFromEnv({ env: process.env });
+    const storageProvider = buildStorageProviderFromEnv({ env: process.env, log: appLogger });
     const { buildTranscodeService } = require('./services/transcode');
-    const transcode = buildTranscodeService({ env: process.env });
+    const transcode = buildTranscodeService({ env: process.env, log: appLogger });
     const { buildTranscodeQueueFromEnv } = require('./queues');
     const transcodeQueue = buildTranscodeQueueFromEnv({
       processor: (job) => transcode.process(job),
       env: process.env,
+      log: appLogger,
     });
     return { storageProvider, transcode, transcodeQueue };
   } catch (err) {
-    console.warn('Media pipeline could not initialize (non-fatal; uploads stay local-only):', err?.message || err);
+    appLogger.warn('Media pipeline could not initialize (non-fatal; uploads stay local-only)', { error: err?.message || String(err) });
     return null;
   }
 })();
+
+// Phase 3B: health/readiness service with dependency checks and short cache.
+const { createHealthService } = require('./lib/health');
+const healthService = createHealthService({
+  sequelize,
+  storageProvider: mediaPipeline?.storageProvider || null,
+  env: process.env,
+  logger: appLogger,
+});
 
 /** Copy an uploaded file to object storage in the background. Never throws,
  *  never blocks the HTTP response; local file remains the source of truth. */
@@ -563,7 +591,7 @@ function persistUploadToStorage(filename) {
   const filePath = path.join(__dirname, 'storage', 'uploads', filename);
   Promise.resolve()
     .then(() => mediaPipeline.storageProvider.put(`uploads/${filename}`, filePath))
-    .catch((err) => console.error(`storage-v2: background copy failed for ${filename} (local file stays canonical):`, err?.message || err));
+    .catch((err) => appLogger.error('storage-v2: background copy failed (local file stays canonical)', { filename, error: err?.message || String(err) }));
 }
 
 /** Enqueue transcode profiles for an uploaded video. Runs only after the
@@ -574,9 +602,9 @@ function enqueueTranscode(filename) {
     mediaPipeline.transcodeQueue.add('transcode', {
       filename,
       uploadsDir: path.join(__dirname, 'storage', 'uploads'),
-    }).catch?.((err) => console.error('transcode enqueue failed:', err?.message || err));
+    }).catch?.((err) => appLogger.error('transcode enqueue failed', { filename, error: err?.message || String(err) }));
   } catch (err) {
-    console.error('transcode enqueue failed:', err?.message || err);
+    appLogger.error('transcode enqueue failed', { filename, error: err?.message || String(err) });
   }
 }
 
@@ -640,7 +668,7 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Register error:', err);
+    req.logger?.error('Register error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -687,7 +715,7 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Login error:', err);
+    req.logger?.error('Login error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -710,7 +738,7 @@ app.get('/api/auth/me', authenticate, requireAuth, async (req, res) => {
       points: points?.totalPoints || 0
     });
   } catch (err) {
-    console.error('Auth me error:', err);
+    req.logger?.error('Auth me error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load profile' });
   }
 });
@@ -761,7 +789,7 @@ app.post('/api/devices', authenticate, requireRegistered, interactionRateLimit, 
 
     res.json({ registered: true, deviceId: device.id, evicted });
   } catch (err) {
-    console.error('Device registration error:', err);
+    req.logger?.error('Device registration error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -777,7 +805,7 @@ app.delete('/api/devices', authenticate, requireRegistered, async (req, res) => 
     const destroyed = await Device.destroy({ where: { userId: req.user.id, token } });
     res.json({ removed: destroyed > 0 });
   } catch (err) {
-    console.error('Device removal error:', err);
+    req.logger?.error('Device removal error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Removal failed' });
   }
 });
@@ -854,7 +882,7 @@ app.get('/api/videos/feed', authenticate, async (req, res) => {
       hasMore: randomVideos.length === randomCount,
     });
   } catch (err) {
-    console.error('Feed error:', err);
+    req.logger?.error('Feed error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load feed' });
   }
 });
@@ -911,7 +939,7 @@ app.get('/api/videos/:id', authenticate, async (req, res) => {
     const [enriched] = await attachVideoMeta([video], req.user?.id || null);
     res.json(enriched);
   } catch (err) {
-    console.error('Video error:', err);
+    req.logger?.error('Video error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load video' });
   }
 });
@@ -951,7 +979,7 @@ app.post('/api/videos', authenticate, requireRegistered, upload.single('video'),
 
     res.json(video);
   } catch (err) {
-    console.error('Upload error:', err);
+    req.logger?.error('Upload error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Upload failed' });
   }
 });
@@ -979,7 +1007,7 @@ app.post('/api/videos/:id/like', authenticate, requireRegistered, interactionRat
       const likeCount = await Like.count({ where: { videoId: req.params.id } });
       return res.json({ liked: true, likeCount });
     }
-    console.error('Like error:', err);
+    req.logger?.error('Like error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Like failed' });
   }
 });
@@ -1001,7 +1029,7 @@ app.post('/api/videos/:id/save', authenticate, requireRegistered, interactionRat
     if (err?.name === 'SequelizeUniqueConstraintError') {
       return res.json({ saved: true });
     }
-    console.error('Save error:', err);
+    req.logger?.error('Save error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Save failed' });
   }
 });
@@ -1026,7 +1054,7 @@ app.post('/api/videos/:id/repost', authenticate, requireRegistered, interactionR
       const repostCount = await VideoRepost.count({ where: { videoId: req.params.id } });
       return res.json({ reposted: true, repostCount });
     }
-    console.error('Repost error:', err);
+    req.logger?.error('Repost error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Repost failed' });
   }
 });
@@ -1133,7 +1161,7 @@ app.post('/api/videos/:id/star', authenticate, requireRegistered, interactionRat
       const starCount = await Star.sum('amount', { where: { videoId: req.params.id } }) || 0;
       return res.status(400).json({ error: 'Already starred this video', starCount });
     }
-    console.error('Star error:', err);
+    req.logger?.error('Star error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Star failed' });
   }
 });
@@ -1165,7 +1193,7 @@ app.post('/api/users/:id/follow', authenticate, requireRegistered, interactionRa
       const followerCount = await Follow.count({ where: { followingId: req.params.id } });
       return res.json({ following: true, followerCount });
     }
-    console.error('Follow error:', err);
+    req.logger?.error('Follow error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Follow failed' });
   }
 });
@@ -1189,7 +1217,7 @@ app.get('/api/videos/:id/comments', authenticate, async (req, res) => {
     
     res.json(comments);
   } catch (err) {
-    console.error('Comments error:', err);
+    req.logger?.error('Comments error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load comments' });
   }
 });
@@ -1246,7 +1274,7 @@ app.post('/api/videos/:id/comments', authenticate, requireRegistered, commentRat
     
     res.json(commentWithAuthor);
   } catch (err) {
-    console.error('Comment error:', err);
+    req.logger?.error('Comment error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to post comment' });
   }
 });
@@ -1274,7 +1302,7 @@ app.get('/api/users/search', authenticate, async (req, res) => {
     });
     res.json(users);
   } catch (err) {
-    console.error('User search error:', err);
+    req.logger?.error('User search error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Search failed' });
   }
 });
@@ -1324,7 +1352,7 @@ app.get('/api/users/:id', authenticate, async (req, res) => {
 
     res.json(payload);
   } catch (err) {
-    console.error('User error:', err);
+    req.logger?.error('User error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load user' });
   }
 });
@@ -1357,7 +1385,7 @@ app.patch('/api/users/me', authenticate, requireRegistered, imageUpload.fields([
       bio: req.user.bio,
     });
   } catch (err) {
-    console.error('Profile update error:', err);
+    req.logger?.error('Profile update error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });
@@ -1427,7 +1455,7 @@ app.post('/api/wallet/topup', authenticate, requireRegistered, async (req, res) 
     await wallet.save();
     res.json({ coins: wallet.coins, devMode: true });
   } catch (err) {
-    console.error('Wallet topup error:', err);
+    req.logger?.error('Wallet topup error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to top up wallet' });
   }
 });
@@ -1499,7 +1527,7 @@ app.post('/api/wallet/gift', authenticate, requireRegistered, interactionRateLim
 
     res.json({ sent: true, coinsRemaining: wallet.coins, ...payload });
   } catch (err) {
-    console.error('Gift error:', err);
+    req.logger?.error('Gift error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to send gift' });
   }
 });
@@ -1570,7 +1598,7 @@ app.post('/api/live/gift', authenticate, requireRegistered, interactionRateLimit
 
     res.json({ sent: true, coinsRemaining: wallet.coins, ...payload });
   } catch (err) {
-    console.error('Live gift error:', err);
+    req.logger?.error('Live gift error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to send gift' });
   }
 });
@@ -1657,7 +1685,7 @@ app.post('/api/users/:id/subscribe', authenticate, requireRegistered, async (req
 
     res.json({ subscribed: true, expiresAt: sub.expiresAt, coinsRemaining: wallet.coins });
   } catch (err) {
-    console.error('Subscribe error:', err);
+    req.logger?.error('Subscribe error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to subscribe' });
   }
 });
@@ -1673,7 +1701,7 @@ app.get('/api/users/:id/videos', authenticate, async (req, res) => {
     const videosWithMeta = await attachVideoMeta(videos, req.user?.id || null);
     res.json(videosWithMeta);
   } catch (err) {
-    console.error('User videos error:', err);
+    req.logger?.error('User videos error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load videos' });
   }
 });
@@ -1700,7 +1728,7 @@ app.get('/api/live/status', async (req, res) => {
       hlsUrl: liveStatus.isLive ? buildPublicHlsUrl(liveStatus.streamKey) : null,
     });
   } catch (err) {
-    console.error('Live status error:', err);
+    req.logger?.error('Live status error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to get live status' });
   }
 });
@@ -1806,7 +1834,7 @@ app.get('/api/stories', authenticate, async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    console.error('Stories fetch error:', err);
+    req.logger?.error('Stories fetch error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to fetch stories' });
   }
 });
@@ -1838,7 +1866,7 @@ app.post('/api/stories', authenticate, requireRegistered, storyUpload.single('st
     });
     res.json(full);
   } catch (err) {
-    console.error('Story creation error:', err);
+    req.logger?.error('Story creation error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to create story' });
   }
 });
@@ -1867,7 +1895,7 @@ app.post('/api/stories/:id/view', authenticate, requireRegistered, async (req, r
       const viewCount = await StoryView.count({ where: { storyId: req.params.id } });
       return res.json({ viewed: true, viewCount });
     }
-    console.error('Story view error:', err);
+    req.logger?.error('Story view error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to record view' });
   }
 });
@@ -1893,7 +1921,7 @@ app.get('/api/stories/:id/comments', authenticate, async (req, res) => {
 
     res.json(comments);
   } catch (err) {
-    console.error('Story comments error:', err);
+    req.logger?.error('Story comments error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load comments' });
   }
 });
@@ -1951,7 +1979,7 @@ app.post('/api/stories/:id/comments', authenticate, requireRegistered, commentRa
 
     res.json(commentWithAuthor);
   } catch (err) {
-    console.error('Story comment error:', err);
+    req.logger?.error('Story comment error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to post comment' });
   }
 });
@@ -1971,7 +1999,7 @@ app.delete('/api/stories/:id', authenticate, requireRegistered, async (req, res)
     await story.destroy();
     res.json({ deleted: true });
   } catch (err) {
-    console.error('Story delete error:', err);
+    req.logger?.error('Story delete error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to delete story' });
   }
 });
@@ -1987,7 +2015,7 @@ app.get('/api/challenges', authenticate, async (req, res) => {
     });
     res.json(challenges);
   } catch (err) {
-    console.error('Challenges fetch error:', err);
+    req.logger?.error('Challenges fetch error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to fetch challenges' });
   }
 });
@@ -2010,7 +2038,7 @@ app.post('/api/challenges', authenticate, requireRegistered, async (req, res) =>
     
     res.json(challenge);
   } catch (err) {
-    console.error('Challenge creation error:', err);
+    req.logger?.error('Challenge creation error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to create challenge' });
   }
 });
@@ -2028,7 +2056,7 @@ app.post('/api/admin/verify', authenticate, requireRole('admin', 'moderator'), a
   try {
     await logAudit('ADMIN_LOGIN', { success: true, role: req.user.role, userId: req.user.id }, req.ip);
   } catch (err) {
-    console.error('Admin audit log failed:', err);
+    req.logger?.error('Admin audit log failed', { error: err?.message || String(err) });
   }
   res.json({ valid: true, role: req.user.role });
 });
@@ -2061,10 +2089,10 @@ app.post('/api/admin/bootstrap/grant', authRateLimit, async (req, res) => {
     }
     await user.update({ role: 'admin', isAdmin: true });
     await logAudit('ADMIN_BOOTSTRAP_GRANT', { userId: user.id, username: user.username }, req.ip);
-    console.warn('[ADMIN BOOTSTRAP] granted admin role via shared key - now set ADMIN_KEY_ENABLED=false.');
+    req.logger?.warn('[ADMIN BOOTSTRAP] granted admin role via shared key - now set ADMIN_KEY_ENABLED=false.');
     res.json({ granted: true, userId: user.id });
   } catch (err) {
-    console.error('Bootstrap grant error:', err);
+    req.logger?.error('Bootstrap grant error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Bootstrap failed' });
   }
 });
@@ -2167,7 +2195,7 @@ app.post('/api/posts/:id/like', authenticate, requireRegistered, interactionRate
       const post = await TextPost.findByPk(req.params.id);
       return res.json({ liked: true, likeCount: post?.likeCount || 0 });
     }
-    console.error('Post like error:', err);
+    req.logger?.error('Post like error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Like failed' });
   }
 });
@@ -2260,7 +2288,7 @@ app.post('/api/live/on-publish', webhookRateLimit, async (req, res) => {
       await liveStatus.save();
     } else {
       if (publishedName && liveStatus.streamKey !== publishedName) {
-        console.warn(`Rejected RTMP publish: key mismatch (expected ${liveStatus.streamKey}, got ${publishedName})`);
+        req.logger?.warn('Rejected RTMP publish: key mismatch', { expected: liveStatus.streamKey, got: publishedName });
         // nginx-rtmp treats non-2xx as publish rejection — 403 stops wrong-key ingest
         return res.status(403).send('Invalid stream key');
       }
@@ -2275,10 +2303,10 @@ app.post('/api/live/on-publish', webhookRateLimit, async (req, res) => {
       await liveStatus.save();
     }
     emitLiveStarted(liveStatus);
-    console.log(`Stream started via on_publish (${liveStatus.streamKey})`);
+    req.logger?.info('Stream started via on_publish', { streamKey: liveStatus.streamKey });
     res.status(200).send('OK');
   } catch (err) {
-    console.error('on_publish error:', err);
+    req.logger?.error('on_publish error', { error: err?.message || String(err) });
     res.status(200).send('OK'); // Always 200 or nginx-rtmp will reject the stream
   }
 });
@@ -2294,10 +2322,10 @@ app.post('/api/live/on-publish-done', webhookRateLimit, async (req, res) => {
       await liveStatus.save();
     }
     emitLiveStopped();
-    console.log('Stream ended via on_publish_done');
+    req.logger?.info('Stream ended via on_publish_done');
     res.status(200).send('OK');
   } catch (err) {
-    console.error('on_publish_done error:', err);
+    req.logger?.error('on_publish_done error', { error: err?.message || String(err) });
     res.status(200).send('OK');
   }
 });
@@ -2393,7 +2421,7 @@ app.post('/api/admin/videos', authenticate, requireRole('admin'), upload.single(
     await logAudit('VIDEO_UPLOADED', { videoId: video.id, title }, req.ip);
     res.json(video);
   } catch (err) {
-    console.error('Admin upload error:', err);
+    req.logger?.error('Admin upload error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Upload failed' });
   }
 });
@@ -2483,7 +2511,7 @@ app.post('/api/admin/ads', authenticate, requireRole('admin'), adUpload.single('
     await logAudit('AD_CREATED', { adId: ad.id, title: ad.title }, req.ip);
     res.json(ad);
   } catch (err) {
-    console.error('Admin ad upload error:', err);
+    req.logger?.error('Admin ad upload error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Ad upload failed' });
   }
 });
@@ -2647,7 +2675,7 @@ app.get('/api/admin/analytics', authenticate, requireRole('admin'), async (req, 
       hourlyActivity
     });
   } catch (err) {
-    console.error('Analytics error:', err);
+    req.logger?.error('Analytics error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load analytics' });
   }
 });
@@ -2664,10 +2692,39 @@ app.get('/api/admin/audit-log', authenticate, requireRole('admin'), async (req, 
   }
 });
 
-// ==================== HEALTH CHECK ====================
+// ==================== HEALTH CHECKS (Phase 3B) ====================
+// Liveness: always returns 200 with dependency status JSON.
+app.get('/api/health', async (req, res) => {
+  try {
+    const result = await healthService.health();
+    res.json(result);
+  } catch (err) {
+    req.logger?.error('health check failed', { error: err?.message || String(err) });
+    // Never let the probe itself 500; report degraded honestly.
+    res.status(503).json({ status: 'degraded', healthy: false, timestamp: new Date().toISOString(), error: 'health probe internal error' });
+  }
+});
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Readiness: 200 only when all required dependencies are healthy.
+app.get('/api/ready', async (req, res) => {
+  try {
+    const { ok, result } = await healthService.ready();
+    res.status(ok ? 200 : 503).json(result);
+  } catch (err) {
+    req.logger?.error('readiness check failed', { error: err?.message || String(err) });
+    res.status(503).json({ status: 'degraded', healthy: false, timestamp: new Date().toISOString(), error: 'readiness probe internal error' });
+  }
+});
+
+// Detailed dependency probe (same data, explicit URL for operators).
+app.get('/api/health/dependencies', async (req, res) => {
+  try {
+    const result = await healthService.health();
+    res.json(result);
+  } catch (err) {
+    req.logger?.error('dependency check failed', { error: err?.message || String(err) });
+    res.status(503).json({ status: 'degraded', healthy: false, timestamp: new Date().toISOString(), error: 'dependency probe internal error' });
+  }
 });
 
 // ==================== V3 INSTAGRAM ROUTES ====================
@@ -2696,7 +2753,7 @@ app.post('/api/v3/posts', authenticate, requireRegistered, imageUpload.single('i
     
     res.json(enriched);
   } catch (err) {
-    console.error('Post creation error:', err);
+    req.logger?.error('Post creation error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to create post' });
   }
 });
@@ -2729,7 +2786,7 @@ app.post('/api/v3/auth/login', authRateLimit, async (req, res) => {
       user: { id: user.id, username: user.username, displayName: user.displayName, avatar: user.avatar, isCreator: user.isCreator }
     });
   } catch (err) {
-    console.error('V3 Login error:', err);
+    req.logger?.error('V3 Login error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -2768,7 +2825,7 @@ app.post('/api/v3/auth/register', authRateLimit, async (req, res) => {
       user: { id: user.id, username: user.username, displayName: user.displayName, avatar: user.avatar, isCreator: user.isCreator }
     });
   } catch (err) {
-    console.error('V3 Register error:', err);
+    req.logger?.error('V3 Register error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -2834,7 +2891,7 @@ app.get('/api/v3/debug/seed', async (req, res) => {
 
     res.json({ message: `Seeded ${posts.length} posts`, userId: user.id });
   } catch (err) {
-    console.error('Seed error:', err);
+    req.logger?.error('Seed error', { error: err?.message || String(err) });
     res.status(500).json({ error: err.message });
   }
 });
@@ -2862,7 +2919,7 @@ app.get('/api/v3/feed', authenticate, async (req, res) => {
       hasMore: videos.length === limit
     });
   } catch (err) {
-    console.error('V3 Feed error:', err);
+    req.logger?.error('V3 Feed error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to load feed' });
   }
 });
@@ -2919,7 +2976,7 @@ app.post('/api/v3/livestream/start', authenticate, requireRole('admin'), async (
         : null,
     });
   } catch (err) {
-    console.error('Livestream start error:', err);
+    req.logger?.error('Livestream start error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to start livestream' });
   }
 });
@@ -2948,7 +3005,7 @@ app.post('/api/v3/livestream/stop', authenticate, requireRole('admin'), async (r
       totalViewers: liveStatus.viewerCount
     });
   } catch (err) {
-    console.error('Livestream stop error:', err);
+    req.logger?.error('Livestream stop error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to stop livestream' });
   }
 });
@@ -2973,7 +3030,7 @@ app.get('/api/v3/livestream/status', async (req, res) => {
       hlsUrl: liveStatus.isLive ? buildPublicHlsUrl(liveStatus.streamKey) : null,
     });
   } catch (err) {
-    console.error('V3 Livestream status error:', err);
+    req.logger?.error('V3 Livestream status error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to get livestream status' });
   }
 });
@@ -3014,7 +3071,7 @@ const isValidSocketRoomId = (roomId) => {
 };
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  socket.logger?.info('User connected', { socketId: socket.id });
 
   // Every authenticated socket is placed in its personal room straight away so
   // DM / group / wallet notifications reach the user wherever they are in the
@@ -3034,7 +3091,7 @@ io.on('connection', (socket) => {
   socket.on('join-room', (roomId) => {
     if (!socket.user || socket.user.isBanned || !isValidSocketRoomId(roomId)) return;
     socket.join(String(roomId).trim());
-    console.log(`User ${socket.user.id} joined room ${roomId}`);
+    socket.logger?.info('User joined room', { userId: socket.user.id, roomId });
   });
 
   // Leave a room
@@ -3112,7 +3169,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+    socket.logger?.info('User disconnected', { socketId: socket.id });
   });
 });
 
@@ -3134,7 +3191,7 @@ const ensureLiveStatusColumns = async () => {
   const existing = new Set(columns.map((col) => String(col.name || '').toLowerCase()));
   if (!existing.has('hostuserid')) {
     await sequelize.query('ALTER TABLE LiveStatuses ADD COLUMN hostUserId VARCHAR(255)');
-    console.log('Schema migration: added LiveStatuses.hostUserId');
+    appLogger.info('Schema migration: added LiveStatuses.hostUserId');
   }
 };
 
@@ -3192,7 +3249,7 @@ const deduplicateUsernames = async () => {
       }
     }
   } catch (err) {
-    console.warn('Username deduplication skipped:', err.message);
+    appLogger.warn('Username deduplication skipped', { error: err?.message || String(err) });
   }
 };
 
@@ -3303,7 +3360,10 @@ app.use((err, req, res, next) => {
     return res.status(413).json({ error: 'Request body too large' });
   }
   const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
-  if (status >= 500) console.error('[http] Unhandled route error:', err?.stack || err);
+  if (status >= 500) {
+    req.logger?.error('[http] Unhandled route error', { error: err?.message || String(err), stack: err?.stack });
+    sentryHub.captureException(err, { req, extra: { url: req.originalUrl, method: req.method } });
+  }
   res.status(status).json({ error: status >= 500 ? 'Internal server error' : (err.message || 'Request failed') });
 });
 
@@ -3358,10 +3418,10 @@ async function ensureDemoMedia() {
       fixed++;
     }
     if (fixed > 0) {
-      console.log(`✓ Repaired ${fixed} feed posts with missing demo media`);
+      appLogger.info('Repaired feed posts with missing demo media', { fixed });
     }
   } catch (err) {
-    console.error('ensureDemoMedia error:', err.message);
+    appLogger.error('ensureDemoMedia error', { error: err?.message || String(err) });
   }
 }
 
@@ -3414,7 +3474,7 @@ const initialize = async () => {
         idleDays: parseInt(process.env.GUEST_IDLE_DAYS, 10) || 14,
       });
     } catch (err) {
-      console.warn('Guest cleanup could not start (non-fatal):', err.message);
+      appLogger.warn('Guest cleanup could not start (non-fatal)', { error: err?.message || String(err) });
     }
 
     // Automated encrypted backups: SQLite VACUUM INTO + integrity verify, or
@@ -3424,7 +3484,7 @@ const initialize = async () => {
       const { buildBackupJob } = require('./jobs/backupJob');
       buildBackupJob({ sequelize, logger: console }).start();
     } catch (err) {
-      console.warn('Backup job could not start (non-fatal):', err.message);
+      appLogger.warn('Backup job could not start (non-fatal)', { error: err?.message || String(err) });
     };
     
     // Ensure storage directories exist
@@ -3448,7 +3508,7 @@ const initialize = async () => {
       console.log(`iKHWEZI Backend running on port ${PORT}`);
     });
   } catch (err) {
-    console.error('Initialization error:', err);
+    appLogger.error('Initialization error', { error: err?.message || String(err), stack: err?.stack });
     process.exit(1);
   }
 };

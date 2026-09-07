@@ -52,7 +52,7 @@ function buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY }) {
         // Keep requests authenticated even if optional activity tracking write fails.
         user.lastActive = new Date();
         user.save().catch((saveErr) => {
-          console.warn('Last active update failed:', saveErr.message);
+          req.logger?.warn('Last active update failed', { error: saveErr?.message || String(saveErr) });
         });
       } else {
         req.user = null;
@@ -95,6 +95,7 @@ function buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY }) {
       || null;
     if (!rawToken) {
       socket.user = null;
+      socket.logger = require('../lib/logger').createNoopLogger();
       return next();
     }
     try {
@@ -104,6 +105,9 @@ function buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY }) {
     } catch {
       socket.user = null;
     }
+    socket.logger = socket.user?.id
+      ? require('../lib/logger').bindCorrelationId(require('../lib/logger').createLogger(), socket.user.id)
+      : require('../lib/logger').createNoopLogger();
     return next();
   };
 

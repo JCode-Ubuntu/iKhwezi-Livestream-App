@@ -104,7 +104,7 @@ function buildTranscodeService(opts = {}) {
   const {
     env = process.env,
     videosDir = path.join(__dirname, '..', 'storage', 'videos'),
-    log = console,
+    log = opts.log || require('../lib/logger').createLogger(),
     ffmpegProbeCache = {},
   } = opts;
 

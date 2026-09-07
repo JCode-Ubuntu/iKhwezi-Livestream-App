@@ -57,7 +57,7 @@ function safeEqual(a, b) {
   return ba.length === bb.length && ba.length > 0 && crypto.timingSafeEqual(ba, bb);
 }
 
-function buildRtmpWebhookGuard({ secret, isProduction, trustInternal, internalOnly, logger = console }) {
+function buildRtmpWebhookGuard({ secret, isProduction, trustInternal, internalOnly, logger = require('../lib/logger').createLogger() }) {
   if (trustInternal) {
     logger.warn('⚠️  TRUST_INTERNAL_RTMP_WEBHOOK is enabled — any private-network caller can toggle live status. '
       + 'Wire RTMP_WEBHOOK_SECRET into nginx (see nginx/README) and remove this flag.');

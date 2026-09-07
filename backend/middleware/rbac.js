@@ -41,7 +41,7 @@ const crypto = require('crypto');
 
 const ROLES = Object.freeze(['user', 'moderator', 'admin']);
 
-function buildRbacMiddleware({ User, JWT_SECRET, ADMIN_KEY, logAudit, adminKeyEnabled, logger = console }) {
+function buildRbacMiddleware({ User, JWT_SECRET, ADMIN_KEY, logAudit, adminKeyEnabled, logger = require('../lib/logger').createLogger() }) {
   if (!User || !JWT_SECRET || !ADMIN_KEY) {
     throw new Error('buildRbacMiddleware requires User, JWT_SECRET and ADMIN_KEY');
   }
