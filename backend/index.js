@@ -3126,30 +3126,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Handle duet requests (legacy UI — still require auth to prevent spam)
-  socket.on('duet-request', (data) => {
-    const { roomId } = data || {};
-    if (!socket.user || socket.user.isGuest || !isValidSocketRoomId(roomId)) return;
-
-    io.to(String(roomId).trim()).emit('duet-request', {
-      userId: socket.user.id,
-      username: socket.user.username || socket.user.displayName,
-      timestamp: new Date(),
-    });
-  });
-
-  // Handle co-host invites
-  socket.on('co-host-invite', (data) => {
-    const { roomId } = data || {};
-    if (!socket.user || socket.user.isGuest || !isValidSocketRoomId(roomId)) return;
-
-    io.to(String(roomId).trim()).emit('co-host-invite', {
-      userId: socket.user.id,
-      username: socket.user.username || socket.user.displayName,
-      timestamp: new Date(),
-    });
-  });
-
   // WebRTC 1:1 voice/video call signaling — a thin relay. The client packs
   // { toUserId, type: 'invite'|'accept'|'reject'|'offer'|'answer'|'ice-candidate'|'end', payload, from }
   // and we forward it verbatim to the target user's personal room.

@@ -48,8 +48,6 @@ export const SocketProvider = ({ children }) => {
   }, []);
   const sendChatMessage = useCallback((room, msg) => socketRef.current?.emit('chat-message', { roomId: room, message: msg }), []);
   const sendReaction    = useCallback((room, rxn) => socketRef.current?.emit('reaction', { roomId: room, reaction: rxn }), []);
-  const requestDuet     = useCallback((room, uid, uname)      => socketRef.current?.emit('duet-request', { roomId: room, userId: uid, username: uname }), []);
-  const inviteCoHost    = useCallback((room, uid, uname)      => socketRef.current?.emit('co-host-invite', { roomId: room, userId: uid, username: uname }), []);
 
   // ---- Group Chat socket helpers ----
   const groupJoin        = useCallback((groupId) => socketRef.current?.emit('group-join', groupId), []);
@@ -60,7 +58,7 @@ export const SocketProvider = ({ children }) => {
 
   return (
     <SocketContext.Provider value={{
-      socket, joinRoom, leaveRoom, joinUserRoom, sendChatMessage, sendReaction, requestDuet, inviteCoHost,
+      socket, joinRoom, leaveRoom, joinUserRoom, sendChatMessage, sendReaction,
       groupJoin, groupLeave, groupTyping, groupRead, groupReactSocket,
     }}>
       {children}
