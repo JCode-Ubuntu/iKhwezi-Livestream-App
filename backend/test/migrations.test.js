@@ -34,9 +34,10 @@ test('migrator builds the full V2 schema on a fresh database', async (t) => {
 
   const result = await migrate({ sequelize, logger: silentLogger });
   assert.equal(result.adoptedBaseline, false, 'fresh DB must not hit the adopt path');
-  assert.equal(result.executed.length, 2, 'both migrations execute on a fresh DB');
+  assert.equal(result.executed.length, 3, 'all migrations execute on a fresh DB');
   assert.match(result.executed[0], /initial-v2-schema\.js$/);
   assert.match(result.executed[1], /roles-and-devices\.js$/);
+  assert.match(result.executed[2], /message-idempotency\.js$/);
 
   const tables = await sequelize.getQueryInterface().showAllTables();
   const lower = tables.map((t) => String(t).toLowerCase());
@@ -139,7 +140,7 @@ test('BASELINE-ADOPT: legacy V1 database is recorded, not re-created', async (t)
 
   const result = await migrate({ sequelize, logger: silentLogger });
   assert.equal(result.adoptedBaseline, true, 'V1 DB must adopt, not execute');
-  assert.equal(result.executed.length, 2, 'baseline recorded + 0002 executed for real');
+  assert.equal(result.executed.length, 3, 'baseline recorded + post-baseline migrations executed for real');
   assert.ok(result.recordedBaselines.includes('20260906-0001-initial-v2-schema.js'),
     'the initial migration must be RECORDED only (its DDL must not re-run)');
 
@@ -149,7 +150,7 @@ test('BASELINE-ADOPT: legacy V1 database is recorded, not re-created', async (t)
   const tables = (await qi.showAllTables()).map((x) => String(x).toLowerCase());
   assert.ok(tables.includes('watchparties'), 'V1 leftover table survives an adopt (cleanup happens at the planned V2 wipe)');
 
-  // PHASE 3A: the post-baseline migration EXECUTED on the adopted DB —
+  // PHASE 3A/4: the post-baseline migrations EXECUTED on the adopted DB —
   // role column added (defensive backfill skipped: no isAdmin column in
   // this legacy shape) and Devices table created for real.
   const usersCols = await qi.describeTable('Users');
@@ -158,6 +159,11 @@ test('BASELINE-ADOPT: legacy V1 database is recorded, not re-created', async (t)
   assert.ok(tables.includes('devices'), 'adopted DB must gain the Devices table from migration 0002');
   const [roleRows] = await sequelize.query('SELECT role FROM Users');
   assert.equal(roleRows[0].role, 'user', 'defensive backfill leaves role=user when isAdmin column is absent');
+
+  // Phase 4/5: message idempotency columns are skipped because the legacy
+  // V1 stub has no DirectMessages/GroupMessages tables yet; that's expected.
+  assert.ok(!tables.includes('directmessages'), 'legacy stub has no DirectMessages');
+  assert.ok(!tables.includes('groupmessages'), 'legacy stub has no GroupMessages');
 
   // And a second run over the adopted DB is a plain no-op.
   const second = await migrate({ sequelize, logger: silentLogger });
@@ -211,10 +217,11 @@ test('migrate CLI runner works against a real sqlite file (SQLITE_PATH)', async 
 
   const sequelize = require('../config/database').createSequelize({ logging: false });
   const result = await migrate({ sequelize, logger: silentLogger });
-  assert.equal(result.executed.length, 2);
+  assert.equal(result.executed.length, 3);
   const tables = await sequelize.getQueryInterface().showAllTables();
   assert.ok(tables.includes('SequelizeMeta'), 'SequelizeMeta bookkeeping table created');
   assert.ok(tables.includes('Users'));
   assert.ok(tables.includes('Devices'), 'Phase 3A Devices table comes from 0002');
+  assert.ok(tables.includes('DirectMessages'), 'Phase 4/5 message idempotency table exists');
   await sequelize.close();
 });

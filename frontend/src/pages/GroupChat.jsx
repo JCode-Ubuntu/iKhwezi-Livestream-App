@@ -136,13 +136,13 @@ function GroupChat({ groupId, onBack, onOpenInfo, initialMeetingId = null }) {
     };
   }, [socket, groupId, groupJoin, groupLeave]);
 
-  // Incoming message.
+  // Incoming message + sender ack.
   useEffect(() => {
     if (!socket) return undefined;
     const handler = (msg) => {
       if (!msg || msg.groupId !== groupId) return;
       setMessages((prev) => {
-        if (prev.find((m) => m.id === msg.id)) return prev;
+        if (prev.find((m) => m.id === msg.id || (msg.clientMessageId && m.clientMessageId === msg.clientMessageId))) return prev;
         return [...prev, msg];
       });
       // Mark read if it's from someone else and we're viewing.
@@ -150,8 +150,16 @@ function GroupChat({ groupId, onBack, onOpenInfo, initialMeetingId = null }) {
         groupRead(groupId, msg.id);
       }
     };
+    const ackHandler = (ack) => {
+      if (!ack || ack.groupId !== groupId) return;
+      setMessages((prev) => prev.map((m) => (m.id === ack.clientMessageId || m.clientMessageId === ack.clientMessageId) ? { ...m, id: ack.messageId } : m));
+    };
     socket.on('group-message', handler);
-    return () => socket.off('group-message', handler);
+    socket.on('group-message-ack', ackHandler);
+    return () => {
+      socket.off('group-message', handler);
+      socket.off('group-message-ack', ackHandler);
+    };
   }, [socket, groupId, user?.id, groupRead]);
 
   // Typing.
@@ -222,8 +230,10 @@ function GroupChat({ groupId, onBack, onOpenInfo, initialMeetingId = null }) {
 
   // Send text (optimistic).
   const sendText = useCallback(async (content) => {
+    const clientMessageId = crypto.randomUUID();
     const optimistic = {
-      id: `tmp-${Date.now()}`,
+      id: clientMessageId,
+      clientMessageId,
       groupId,
       senderId: user.id,
       content,
@@ -234,23 +244,25 @@ function GroupChat({ groupId, onBack, onOpenInfo, initialMeetingId = null }) {
     };
     setMessages((prev) => [...prev, optimistic]);
     try {
-      const msg = await api.sendText(groupId, content);
+      const msg = await api.sendText(groupId, content, clientMessageId);
       // Dedup: remove the optimistic temp AND any socket-broadcast copy that
       // may have arrived with the real id, then append the canonical one.
       setMessages((prev) => {
-        const without = prev.filter((m) => m.id !== optimistic.id && m.id !== msg.id);
+        const without = prev.filter((m) => m.id !== optimistic.id && m.clientMessageId !== clientMessageId && m.id !== msg.id);
         return [...without, msg];
       });
     } catch (err) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id && m.clientMessageId !== clientMessageId));
       showToast(err.message || 'Failed to send', 'error');
     }
   }, [api, groupId, user, showToast]);
 
   // Send media (optimistic).
   const sendMedia = useCallback(async (file, caption) => {
+    const clientMessageId = crypto.randomUUID();
     const optimistic = {
-      id: `tmp-${Date.now()}`,
+      id: clientMessageId,
+      clientMessageId,
       groupId,
       senderId: user.id,
       content: caption || null,
@@ -262,15 +274,15 @@ function GroupChat({ groupId, onBack, onOpenInfo, initialMeetingId = null }) {
     };
     setMessages((prev) => [...prev, optimistic]);
     try {
-      const msg = await api.sendMedia(groupId, file, caption);
+      const msg = await api.sendMedia(groupId, file, caption, clientMessageId);
       URL.revokeObjectURL(optimistic.mediaUrl);
       setMessages((prev) => {
-        const without = prev.filter((m) => m.id !== optimistic.id && m.id !== msg.id);
+        const without = prev.filter((m) => m.id !== optimistic.id && m.clientMessageId !== clientMessageId && m.id !== msg.id);
         return [...without, msg];
       });
     } catch (err) {
       URL.revokeObjectURL(optimistic.mediaUrl);
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id && m.clientMessageId !== clientMessageId));
       showToast(err.message || 'Failed to upload', 'error');
     }
   }, [api, groupId, user, showToast]);

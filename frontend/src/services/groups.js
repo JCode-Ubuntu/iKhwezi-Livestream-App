@@ -61,19 +61,22 @@ function buildGroupsApi(fetchWithAuth) {
     return { messages: data.messages || [], hasMore: !!data.hasMore, total: data.total || 0 };
   }
 
-  async function sendText(id, content) {
+  async function sendText(id, content, clientMessageId = null) {
+    const body = { content, messageType: 'text' };
+    if (clientMessageId) body.clientMessageId = clientMessageId;
     const { res, data } = await call(`/groups/${id}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content, messageType: 'text' }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw fail(data, 'Failed to send');
     return data;
   }
 
-  async function sendMedia(id, file, caption = '') {
+  async function sendMedia(id, file, caption = '', clientMessageId = null) {
     const form = new FormData();
     form.append('media', file);
     if (caption) form.append('caption', caption);
+    if (clientMessageId) form.append('clientMessageId', clientMessageId);
     const { res, data } = await multipart(`/groups/${id}/messages`, 'POST', form);
     if (!res.ok) throw fail(data, 'Failed to upload');
     return data;

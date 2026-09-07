@@ -140,7 +140,8 @@ function defineCoreModels(sequelize, DataTypes) {
     content: { type: DataTypes.TEXT, allowNull: false },
     mediaUrl: { type: DataTypes.STRING, allowNull: true },
     mediaType: { type: DataTypes.STRING, allowNull: true }, // 'image' | 'video'
-    readAt: { type: DataTypes.DATE, allowNull: true }
+    readAt: { type: DataTypes.DATE, allowNull: true },
+    clientMessageId: { type: DataTypes.STRING(255), allowNull: true },
   });
 
   const TextPost = sequelize.define('TextPost', {

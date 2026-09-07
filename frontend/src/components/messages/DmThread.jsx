@@ -35,9 +35,21 @@ function DmThread({ otherUser, onBack }) {
 
   useEffect(() => {
     if (!socket) return;
-    const handler = (msg) => { if (msg.senderId === otherUser.id) setMessages(prev => [...prev, msg]); };
-    socket.on('new-dm', handler);
-    return () => socket.off('new-dm', handler);
+    const newHandler = (msg) => {
+      if (msg.senderId === otherUser.id) {
+        setMessages(prev => (prev.find((m) => m.id === msg.id || m.clientMessageId === msg.clientMessageId) ? prev : [...prev, msg]));
+      }
+    };
+    const ackHandler = (ack) => {
+      if (ack.receiverId !== otherUser.id) return;
+      setMessages(prev => prev.map(m => (m.id === ack.clientMessageId || m.clientMessageId === ack.clientMessageId) ? { ...m, id: ack.messageId } : m));
+    };
+    socket.on('new-dm', newHandler);
+    socket.on('dm-ack', ackHandler);
+    return () => {
+      socket.off('new-dm', newHandler);
+      socket.off('dm-ack', ackHandler);
+    };
   }, [socket, otherUser.id]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -46,22 +58,23 @@ function DmThread({ otherUser, onBack }) {
     e.preventDefault();
     if (!input.trim() || sending) return;
     const content = input.trim();
+    const clientMessageId = crypto.randomUUID();
     setSending(true);
-    const optimistic = { id: `tmp-${Date.now()}`, senderId: user?.id, receiverId: otherUser.id, content, createdAt: new Date().toISOString() };
+    const optimistic = { id: clientMessageId, senderId: user?.id, receiverId: otherUser.id, content, createdAt: new Date().toISOString(), clientMessageId };
     setMessages(prev => [...prev, optimistic]);
     setInput('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
     try {
-      const res = await fetchWithAuth(`/messages/${otherUser.id}`, { method: 'POST', body: JSON.stringify({ content }) });
+      const res = await fetchWithAuth(`/messages/${otherUser.id}`, { method: 'POST', body: JSON.stringify({ content, clientMessageId }) });
       if (res.ok) {
         const msg = await res.json();
-        setMessages(prev => prev.map(m => m.id === optimistic.id ? msg : m));
+        setMessages(prev => prev.map(m => (m.id === optimistic.id || m.clientMessageId === clientMessageId) ? msg : m));
       } else {
-        setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+        setMessages(prev => prev.filter(m => m.id !== optimistic.id && m.clientMessageId !== clientMessageId));
         showToast('Failed to send', 'error');
       }
     } catch {
-      setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+      setMessages(prev => prev.filter(m => m.id !== optimistic.id && m.clientMessageId !== clientMessageId));
       showToast('Failed to send', 'error');
     } finally {
       setSending(false);

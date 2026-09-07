@@ -27,7 +27,7 @@
  * group-deleted (the last four are emitted from the REST layer).
  */
 
-const { isUuid, validateMessage } = require('./validation');
+const { isUuid, validateMessage, isValidClientMessageId } = require('./validation');
 
 const GROUP_ROOM = (id) => `group_${id}`;
 
@@ -60,19 +60,37 @@ function buildGroupSocket({ io, models, service }) {
       const user = actor();
       if (!user) return ack?.({ error: 'Sign in to continue' });
       try {
-        const { groupId, content } = payload || {};
+        const { groupId, content, clientMessageId } = payload || {};
         if (!isUuid(groupId)) return ack?.({ error: 'Invalid group' });
+        if (clientMessageId && !isValidClientMessageId(clientMessageId)) {
+          return ack?.({ error: 'Invalid clientMessageId' });
+        }
         const v = validateMessage(content, 'text');
         if (!v.ok) return ack?.({ error: v.error });
-        const msg = await service.sendMessage(groupId, user, {
+        const { message: msg, isExisting } = await service.sendMessage(groupId, user, {
           content: v.value,
           messageType: 'text',
           mediaUrl: null,
+          clientMessageId,
         });
         if (!msg) return ack?.({ error: 'Not a member' });
-        io.to(GROUP_ROOM(groupId)).emit('group-message', msg);
+        if (!isExisting) io.to(GROUP_ROOM(groupId)).emit('group-message', msg);
+        // Ack to the sending socket specifically (replaces optimistic UI).
+        socket.emit('group-message-ack', {
+          groupId,
+          clientMessageId,
+          messageId: msg.id,
+          status: 'delivered',
+          wasExisting: isExisting,
+        });
         return ack?.({ ok: true, message: msg });
       } catch (err) {
+        if (err?.name === 'SequelizeUniqueConstraintError') {
+          const existing = await models.GroupMessage.findOne({
+            where: { senderId: user.id, clientMessageId: payload?.clientMessageId },
+          });
+          if (existing) return ack?.({ ok: true, message: existing });
+        }
         if (err.status === 403) return ack?.({ error: 'Not a member' });
         console.error('socket group-message error', err);
         return ack?.({ error: 'Failed to send' });

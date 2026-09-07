@@ -11,7 +11,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 
-const { validateGroupName, validateDescription, validateMessage, parsePaging, isUuid } = require('./validation');
+const { validateGroupName, validateDescription, validateMessage, parsePaging, isUuid, isValidClientMessageId } = require('./validation');
 
 function buildGroupRoutes({ app, models, service, io, authenticate, requireRegistered, interactionRateLimit, logAudit }) {
   const storage = multer.diskStorage({
@@ -235,15 +235,36 @@ function buildGroupRoutes({ app, models, service, io, authenticate, requireRegis
       const v = validateMessage(content, messageType);
       if (!v.ok && messageType === 'text') return res.status(400).json({ error: v.error });
 
-      const msg = await service.sendMessage(req.params.id, req.user, {
+      const clientMessageId = req.body.clientMessageId || null;
+      if (clientMessageId && !isValidClientMessageId(clientMessageId)) {
+        return res.status(400).json({ error: 'Invalid clientMessageId' });
+      }
+
+      const { message: msg, isExisting } = await service.sendMessage(req.params.id, req.user, {
         content: messageType === 'text' ? v.value : content,
         messageType,
         mediaUrl,
+        clientMessageId,
       });
       if (!msg) return res.status(403).json({ error: 'Not a member' });
-      emitToGroup(req.params.id, 'group-message', msg);
-      res.status(201).json(msg);
+      if (!isExisting) emitToGroup(req.params.id, 'group-message', msg);
+      // Sender ack (targeted delivery guarantees the sender can reconcile
+      // optimistic state even if broadcast fails).
+      io.to(`user_${req.user.id}`).emit('group-message-ack', {
+        groupId: req.params.id,
+        clientMessageId,
+        messageId: msg.id,
+        status: 'delivered',
+        wasExisting: isExisting,
+      });
+      res.status(isExisting ? 200 : 201).json(msg);
     } catch (err) {
+      if (err?.name === 'SequelizeUniqueConstraintError') {
+        const existing = await models.GroupMessage.findOne({
+          where: { senderId: req.user.id, clientMessageId: req.body?.clientMessageId },
+        });
+        if (existing) return res.json(existing);
+      }
       if (err.status === 403) return res.status(403).json({ error: 'Not a member' });
       console.error('send group message error', err);
       res.status(500).json({ error: 'Failed to send message' });

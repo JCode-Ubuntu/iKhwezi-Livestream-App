@@ -11,6 +11,7 @@ const NAME_MIN = 3;
 const NAME_MAX = 100;
 const DESC_MAX = 280;
 const MESSAGE_MAX = 2000;
+const CLIENT_MSG_ID_MAX = 64;
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -69,11 +70,16 @@ function parsePaging(query) {
   return { page, limit, offset: (page - 1) * limit };
 }
 
+function isValidClientMessageId(v) {
+  return typeof v === 'string' && v.length > 0 && v.length <= CLIENT_MSG_ID_MAX && /^[a-zA-Z0-9_-]+$/.test(v);
+}
+
 module.exports = {
   NAME_MIN,
   NAME_MAX,
   DESC_MAX,
   MESSAGE_MAX,
+  CLIENT_MSG_ID_MAX,
   isUuid,
   sanitizeText,
   containsProfanity,
@@ -81,4 +87,5 @@ module.exports = {
   validateDescription,
   validateMessage,
   parsePaging,
+  isValidClientMessageId,
 };

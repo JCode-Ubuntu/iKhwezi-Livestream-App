@@ -54,10 +54,12 @@ function defineGroupModels({ sequelize, DataTypes, User }) {
     content: { type: DataTypes.TEXT, allowNull: true },
     messageType: { type: DataTypes.ENUM('text', 'image', 'video', 'system'), allowNull: false, defaultValue: 'text' },
     mediaUrl: { type: DataTypes.STRING, allowNull: true },
+    clientMessageId: { type: DataTypes.STRING(255), allowNull: true },
   }, {
     indexes: [
       { fields: ['groupId', 'createdAt'] },
       { fields: ['senderId'] },
+      { unique: true, fields: ['senderId', 'clientMessageId'] },
     ],
   });
 

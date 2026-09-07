@@ -449,26 +449,40 @@ function buildGroupService(models) {
     };
   }
 
-  async function sendMessage(groupId, sender, { content, messageType, mediaUrl }) {
+  async function sendMessage(groupId, sender, { content, messageType, mediaUrl, clientMessageId = null }) {
     const m = await assertMember(groupId, sender.id);
     if (!m) { const err = new Error('FORBIDDEN'); err.status = 403; throw err; }
-    const msg = await GroupMessage.create({
-      groupId,
-      senderId: sender.id,
-      content: messageType === 'text' ? content : content || null,
-      messageType: messageType || 'text',
-      mediaUrl: mediaUrl || null,
-    });
-    // Sender has implicitly read their own message.
-    m.lastReadMessageId = msg.id;
-    await m.save();
+
+    let msg;
+    if (clientMessageId) {
+      const existing = await GroupMessage.findOne({
+        where: { senderId: sender.id, clientMessageId },
+      });
+      if (existing) msg = existing;
+    }
+
+    const isExisting = !!msg;
+    if (!msg) {
+      msg = await GroupMessage.create({
+        groupId,
+        senderId: sender.id,
+        content: messageType === 'text' ? content : content || null,
+        messageType: messageType || 'text',
+        mediaUrl: mediaUrl || null,
+        clientMessageId,
+      });
+      // Sender has implicitly read their own message only on first create.
+      m.lastReadMessageId = msg.id;
+      await m.save();
+    }
+
     const full = await GroupMessage.findByPk(msg.id, {
       include: [
         { model: User, as: 'sender', attributes: USER_ATTRS },
         { model: GroupReaction, as: 'reactions', include: [{ model: User, as: 'user', attributes: USER_ATTRS }] },
       ],
     });
-    return full;
+    return { message: full, isExisting };
   }
 
   async function setRead(groupId, userId, messageId) {

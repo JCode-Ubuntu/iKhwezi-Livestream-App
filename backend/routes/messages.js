@@ -3,28 +3,36 @@
 /**
  * Direct messages (1:1) — REST routes.
  *
- * Extracted from backend/index.js. API surface is unchanged:
+ * API surface:
  *   GET  /api/messages/conversations
  *   GET  /api/messages/:userId
- *   POST /api/messages/:userId   { content }
+ *   POST /api/messages/:userId   { content, clientMessageId? }
  *
- * Hardening added during extraction (previously missing):
- *  - :userId must be a UUID and resolve to a real, non-guest, non-banned user
- *    (a DM could previously be written to a non-existent receiver, leaving an
- *    orphaned conversation the sender could see but nobody could answer).
+ * Hardening:
+ *  - :userId must be a UUID and resolve to a real, non-guest, non-banned user.
  *  - A user cannot message themselves.
  *  - Conversation list is computed with one grouped query for unread counts
  *    instead of filtering the full message history in JS per conversation.
+ *  - clientMessageId makes retries idempotent: the same (sender, id) pair
+ *    returns the existing row instead of creating a duplicate.
+ *  - After persistence the server emits 'dm-ack' to the sender and 'new-dm'
+ *    to the receiver so both sides can reconcile optimistic UI state.
  */
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const isUuid = (v) => typeof v === 'string' && UUID_RE.test(v);
 const MESSAGE_MAX = 1000;
+const CLIENT_MSG_ID_MAX = 64;
 const USER_ATTRS = ['id', 'username', 'displayName', 'avatar'];
 
-function buildMessageRoutes({ app, io, sequelize, Op, User, DirectMessage, authenticate, requireRegistered, interactionRateLimit }) {
+function isValidClientMessageId(v) {
+  return typeof v === 'string' && v.length > 0 && v.length <= CLIENT_MSG_ID_MAX && /^[a-zA-Z0-9_-]+$/.test(v);
+}
+
+function buildMessageRoutes({ app, io, sequelize, Op, User, DirectMessage, authenticate, requireRegistered, interactionRateLimit, logger = null }) {
   const guards = [authenticate, requireRegistered];
   const sendGuards = interactionRateLimit ? [...guards, interactionRateLimit] : guards;
+  const log = logger || { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} };
 
   /** Resolve the other party or answer the request with the right error. */
   async function resolveCounterpart(req, res) {
@@ -84,7 +92,7 @@ function buildMessageRoutes({ app, io, sequelize, Op, User, DirectMessage, authe
         }));
       return res.json(conversations);
     } catch (err) {
-      console.error('conversations error', err);
+      req.logger?.error('conversations error', { error: err?.message || String(err) });
       return res.status(500).json({ error: 'Failed to load conversations' });
     }
   });
@@ -111,7 +119,7 @@ function buildMessageRoutes({ app, io, sequelize, Op, User, DirectMessage, authe
       });
       return res.json(messages);
     } catch (err) {
-      console.error('load messages error', err);
+      req.logger?.error('load messages error', { error: err?.message || String(err) });
       return res.status(500).json({ error: 'Failed to load messages' });
     }
   });
@@ -127,19 +135,61 @@ function buildMessageRoutes({ app, io, sequelize, Op, User, DirectMessage, authe
       if (content.length > MESSAGE_MAX) {
         return res.status(400).json({ error: `Message too long (max ${MESSAGE_MAX} characters)` });
       }
-      const msg = await DirectMessage.create({
-        senderId: me,
+      const clientMessageId = req.body?.clientMessageId || null;
+      if (clientMessageId && !isValidClientMessageId(clientMessageId)) {
+        return res.status(400).json({ error: 'Invalid clientMessageId' });
+      }
+
+      let msg;
+      let wasExisting = false;
+      if (clientMessageId) {
+        const existing = await DirectMessage.findOne({
+          where: { senderId: me, clientMessageId },
+        });
+        if (existing) {
+          msg = existing;
+          wasExisting = true;
+        }
+      }
+
+      if (!msg) {
+        msg = await DirectMessage.create({
+          senderId: me,
+          receiverId: target.id,
+          content,
+          clientMessageId,
+        });
+      }
+
+      const payload = { ...msg.toJSON(), senderId: me };
+      // Receiver gets the message if online (only on first create; a retry
+      // would be a duplicate broadcast).
+      if (!wasExisting) {
+        io.to(`user_${target.id}`).emit('new-dm', payload);
+      }
+      // Sender gets a delivery ack with their client id so optimistic UI can
+      // be replaced reliably.
+      io.to(`user_${me}`).emit('dm-ack', {
         receiverId: target.id,
-        content,
+        clientMessageId,
+        messageId: msg.id,
+        status: 'delivered',
+        wasExisting,
       });
-      // Real-time notification via socket
-      io.to(`user_${target.id}`).emit('new-dm', { ...msg.toJSON(), senderId: me });
-      return res.status(201).json(msg);
+      return res.status(wasExisting ? 200 : 201).json(msg);
     } catch (err) {
-      console.error('send message error', err);
+      if (err?.name === 'SequelizeUniqueConstraintError') {
+        // Another request with the same clientMessageId won the race. Return
+        // the persisted row so the client still gets a canonical id.
+        const existing = await DirectMessage.findOne({
+          where: { senderId: req.user.id, clientMessageId: req.body?.clientMessageId },
+        });
+        if (existing) return res.json(existing);
+      }
+      req.logger?.error('send message error', { error: err?.message || String(err) });
       return res.status(500).json({ error: 'Failed to send message' });
     }
   });
 }
 
-module.exports = { buildMessageRoutes, isUuid };
+module.exports = { buildMessageRoutes, isUuid, isValidClientMessageId };
