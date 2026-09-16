@@ -24,6 +24,9 @@ frontend/android/.gradle/
 frontend/android/build/
 frontend/android/app/build/
 frontend/android/local.properties
+# Firebase config (contains project API key; each build machine adds its own —
+# the Gradle build gracefully skips the google-services plugin when absent)
+frontend/android/app/google-services.json
 
 # Capacitor iOS
 frontend/ios/App/Pods/
@@ -40,6 +43,18 @@ backend/storage/videos/*
 !backend/storage/videos/.gitkeep
 backend/storage/hls/*
 !backend/storage/hls/.gitkeep
+# Backup job artifacts (backend/jobs/backupJob.js output)
+backend/storage/backups/
+# Health probe scratch files (lib/health.js)
+backend/storage/health/
+
+# npm audit snapshots (regenerate with npm audit; not source)
+audit-backend.json
+audit-frontend.json
+
+# Tester lists / operator CSV exports (PII — never commit)
+play-console-tester-list/
+ikhwezi-internal-testers.csv
 
 # IDE
 .idea/

@@ -36,12 +36,14 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 
 ### Live (Production)
 - **User App**: https://ikhwezi.site
-- **Admin Panel**: https://ikhwezi.site/admin (Key: `ikhwezi_admin_26`)
+- **Admin Panel**: https://ikhwezi.site/admin (requires an account with the
+  `admin` role — see RBAC below; the legacy shared ADMIN_KEY is a transition
+  mechanism only)
 - **Server IP**: 13.62.54.198 (AWS Lightsail — Stockholm)
 
 ### Local (Development)
 - **User App**: http://localhost:8080
-- **Admin Panel**: http://localhost:8080/admin (Key: `ikhwezi_admin_26`)
+- **Admin Panel**: http://localhost:8080/admin
 - **API**: http://localhost:3001
 - **HLS Stream**: http://localhost:8080/hls/stream.m3u8
 
@@ -72,18 +74,35 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 
 ## Architecture
 
-- **Frontend**: React + Vite
-- **Backend**: Node.js + Express + SQLite
-- **Streaming**: nginx-rtmp (RTMP → HLS)
-- **Auth**: JWT tokens
+- **Frontend**: React + Vite (Capacitor for Android/iOS)
+- **Backend**: Node.js + Express (modular: `routes/`, `middleware/`,
+  `services/`, `jobs/`, `queues/`, `lib/`, feature packages `groups/`,
+  `meetings/`, `storage-v2/`)
+- **Database**: PostgreSQL in production (via `DATABASE_URL`), SQLite for
+  local dev. Schema is managed by **versioned migrations**
+  (`backend/migrations/`, run on boot via `backend/db/migrate.js`)
+- **Queue / rate limiting**: BullMQ + Redis when `REDIS_URL` is set;
+  in-process/in-memory fallbacks otherwise (single-server default)
+- **Streaming**: nginx-rtmp (RTMP → HLS), authenticated publish webhooks
+- **Meetings A/V**: LiveKit SFU + coturn TURN relay (presence-only when
+  unconfigured)
+- **Storage**: local disk by default; S3/R2 object-storage copy in the
+  background when `S3_*` is set
+- **Backups**: automated, encrypted, optionally off-site to the S3 bucket
+  (`backend/jobs/backupJob.js`)
+- **Auth**: JWT tokens + per-user RBAC roles (`admin` / `moderator`)
 
 ## Environment Variables
 
+See `.env.dist` for the complete, documented list. Key variables:
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| ADMIN_KEY | ikhwezi_admin_26 | Admin access key |
-| JWT_SECRET | (auto-generated) | JWT signing secret |
-| PORT | 3001 | Backend port |
+| JWT_SECRET | (auto-generated) | JWT signing secret — set a persistent value in production |
+| ADMIN_KEY | (auto-generated) | Legacy transition key (bootstrap admin grant) — set in server `.env` |
+| DATABASE_URL | *(empty → SQLite)* | `postgresql://…` switches the backend to PostgreSQL |
+| REDIS_URL | *(empty → in-process)* | `redis://…` enables BullMQ queues + Redis rate limiting |
+| RTMP_WEBHOOK_SECRET | *(required by compose)* | Shared secret for nginx-rtmp publish callbacks |
 
 ## Creator Economy
 

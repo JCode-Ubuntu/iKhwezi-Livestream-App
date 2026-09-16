@@ -85,6 +85,10 @@ const sentryHub = createSentryHub({ env: process.env, logger: appLogger });
 const { createAlerter } = require('./lib/alerts');
 const alerter = createAlerter({ env: process.env, logger: appLogger });
 
+// Shared Redis client (null when REDIS_URL is unset) — used by rate
+// limiting, the health probe, and the queue layer. See lib/redis.js.
+const { getRedisClient } = require('./lib/redis');
+
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
@@ -491,30 +495,17 @@ async function attachVideoMeta(videos, userId) {
   });
 }
 
-// ── In-memory rate limiter (no extra dependencies) ────────────────
-const _rlStore = new Map();
-setInterval(() => {
-  const cut = Date.now() - 15 * 60 * 1000;
-  for (const [k, hits] of _rlStore) {
-    const fresh = hits.filter(t => t > cut);
-    if (fresh.length === 0) _rlStore.delete(k); else _rlStore.set(k, fresh);
-  }
-}, 5 * 60 * 1000).unref();
-
-function createRateLimiter(windowMs, max, message) {
-  return (req, res, next) => {
-    const key = (req.ip || req.socket?.remoteAddress || 'x') + ':' + req.path;
-    const now = Date.now();
-    const window = now - windowMs;
-    const hits = (_rlStore.get(key) || []).filter(t => t > window);
-    if (hits.length >= max) {
-      return res.status(429).json({ error: message || 'Too many requests. Please slow down.' });
-    }
-    hits.push(now);
-    _rlStore.set(key, hits);
-    next();
-  };
-}
+// ── Rate limiting ─────────────────────────────────────────────────
+// In-memory by default (single node); Redis-backed fixed-window counters
+// when REDIS_URL is set so limits are shared across instances and survive
+// restarts. Redis failures fall back to the in-memory store per request —
+// see middleware/rateLimit.js.
+const { buildRateLimiterFactory } = require('./middleware/rateLimit');
+const { createRateLimiter } = buildRateLimiterFactory({
+  env: process.env,
+  redisClient: getRedisClient({ env: process.env, log: appLogger }),
+  log: appLogger,
+});
 
 const authRateLimit = createRateLimiter(15 * 60 * 1000, 20, 'Too many auth attempts. Try again in 15 minutes.');
 const commentRateLimit = createRateLimiter(60 * 1000, 10, 'Posting too fast. Please wait a moment.');
@@ -576,9 +567,11 @@ const mediaPipeline = (() => {
 })();
 
 // Phase 3B: health/readiness service with dependency checks and short cache.
+// Redis is probed with the shared client when REDIS_URL is configured.
 const { createHealthService } = require('./lib/health');
 const healthService = createHealthService({
   sequelize,
+  redisClient: getRedisClient({ env: process.env, log: appLogger }),
   storageProvider: mediaPipeline?.storageProvider || null,
   env: process.env,
   logger: appLogger,
