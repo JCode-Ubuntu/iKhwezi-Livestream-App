@@ -89,6 +89,37 @@ const alerter = createAlerter({ env: process.env, logger: appLogger });
 // limiting, the health probe, and the queue layer. See lib/redis.js.
 const { getRedisClient } = require('./lib/redis');
 
+// Socket.IO Redis adapter helpers. The adapter needs its OWN dedicated
+// pub/sub pair (a client blocked in subscribe mode cannot issue regular
+// commands), separate from the shared command client.
+const { createAdapter: createRedisAdapter } = require('@socket.io/redis-adapter');
+
+function buildAdapterClients(redisUrl) {
+  const Redis = require('ioredis');
+  const opts = {
+    // Capped reconnect with backoff — same policy as the shared client.
+    retryStrategy: (times) => Math.min(times * 200, 5_000),
+  };
+  const pubClient = new Redis(redisUrl, opts);
+  const subClient = pubClient.duplicate();
+  // Surface connection problems without ever crashing the process; the
+  // adapter itself buffers/resends on reconnect.
+  pubClient.on('error', (err) => appLogger.warn('socket adapter pub client error', { error: err?.message || String(err) }));
+  subClient.on('error', (err) => appLogger.warn('socket adapter sub client error', { error: err?.message || String(err) }));
+  return { pubClient, subClient };
+}
+
+/** Never log credentials embedded in a Redis URL. */
+function sanitizeRedisUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.password) u.password = '***';
+    return u.toString();
+  } catch {
+    return '(unparseable url)';
+  }
+}
+
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
@@ -102,6 +133,28 @@ const io = new Server(server, {
   transports: ['polling', 'websocket'],
   allowEIO3: true,
 });
+
+// Redis Socket.IO adapter (multi-instance readiness): when REDIS_URL is
+// set, room membership + event delivery are coordinated through Redis so
+// two or more backend instances behind a load balancer behave as one.
+// SINGLE-INSTANCE deployments are unaffected — the adapter is purely
+// additive. Honest degradation: when REDIS_URL is unset (local dev) the
+// default in-memory adapter stays; when the adapter cannot be built
+// (module or connection failure) we log loudly and keep the default, so
+// realtime NEVER goes down because of Redis.
+if (process.env.REDIS_URL && process.env.REDIS_URL.trim()) {
+  try {
+    const { pubClient, subClient } = buildAdapterClients(process.env.REDIS_URL.trim());
+    io.adapter(createRedisAdapter(pubClient, subClient));
+    appLogger.info('Socket.IO Redis adapter attached (multi-instance ready)', {
+      redisUrl: sanitizeRedisUrl(process.env.REDIS_URL),
+    });
+  } catch (err) {
+    appLogger.warn('Socket.IO Redis adapter could NOT be attached — continuing with the in-memory adapter (single-instance mode)', {
+      error: err?.message || String(err),
+    });
+  }
+}
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
