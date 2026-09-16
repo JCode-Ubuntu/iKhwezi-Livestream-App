@@ -69,6 +69,8 @@ Thumbs.db
 
 # Docker
 .docker/
+# Local compose overrides (host port remaps; machine-specific)
+docker-compose.override.yml
 
 # Logs
 logs/
