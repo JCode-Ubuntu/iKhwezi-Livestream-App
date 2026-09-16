@@ -21,6 +21,7 @@ function createHealthService({
   sequelize,
   redisClient = null,
   storageProvider = null,
+  mediaPipeline = null,
   env = process.env,
   logger = null,
 } = {}) {
@@ -92,6 +93,20 @@ function createHealthService({
       version: process.env.npm_package_version || null,
       environment: process.env.NODE_ENV || 'development',
       dependencies: { database, redis, storage },
+      // Media pipeline observability — informational, NOT a readiness
+      // gate. Transcode disabled / FFmpeg missing / local-only storage are
+      // all VALID operating states (every stage fails open), so a false
+      // "unhealthy" here would page an operator for nothing. This gives
+      // the operator an honest one-glance pipeline posture instead.
+      media: mediaPipeline ? {
+        storageType: mediaPipeline.storageProvider?.type || 'unknown',
+        objectStorage: !!mediaPipeline.storageProvider?.capabilities?.objectStorage,
+        transcodeRequested: !!mediaPipeline.transcode?.capabilities?.requested,
+        transcodeEnabled: !!mediaPipeline.transcode?.capabilities?.enabled,
+        transcodeProfiles: mediaPipeline.transcode?.capabilities?.profiles || [],
+        queueType: mediaPipeline.transcodeQueue?.capabilities?.type || 'unknown',
+        queueRedis: !!mediaPipeline.transcodeQueue?.capabilities?.redis,
+      } : { status: 'unavailable', reason: 'media pipeline did not initialize (uploads stay local-only)' },
     };
 
     cache = result;

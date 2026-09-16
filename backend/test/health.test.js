@@ -104,4 +104,43 @@ test.describe('health service (Phase 3B)', () => {
       try { fs.unlinkSync(dbPath); } catch {}
     }
   });
+
+  test('media section reports pipeline posture (informational, never gates)', async () => {
+    const { sequelize, dbPath } = await buildDb();
+    try {
+      const health = createHealthService({
+        sequelize,
+        mediaPipeline: {
+          storageProvider: { type: 'local', capabilities: { objectStorage: false } },
+          transcode: { capabilities: { requested: false, enabled: false, profiles: ['480p'] } },
+          transcodeQueue: { capabilities: { type: 'in-process', redis: false } },
+        },
+        env: { HEALTH_CACHE_TTL_MS: '0' },
+      });
+      const result = await health.health();
+      assert.strictEqual(result.healthy, true, 'pipeline posture must not affect overall health');
+      assert.strictEqual(result.media.storageType, 'local');
+      assert.strictEqual(result.media.objectStorage, false);
+      assert.strictEqual(result.media.transcodeEnabled, false);
+      assert.deepStrictEqual(result.media.transcodeProfiles, ['480p']);
+      assert.strictEqual(result.media.queueType, 'in-process');
+    } finally {
+      await sequelize.close();
+      try { fs.unlinkSync(dbPath); } catch {}
+    }
+  });
+
+  test('media section reports honest unavailability when pipeline is null', async () => {
+    const { sequelize, dbPath } = await buildDb();
+    try {
+      const health = createHealthService({ sequelize, mediaPipeline: null, env: { HEALTH_CACHE_TTL_MS: '0' } });
+      const result = await health.health();
+      assert.strictEqual(result.healthy, true, 'pipeline absence must not affect overall health');
+      assert.strictEqual(result.media.status, 'unavailable');
+      assert.ok(result.media.reason.includes('local-only'));
+    } finally {
+      await sequelize.close();
+      try { fs.unlinkSync(dbPath); } catch {}
+    }
+  });
 });

@@ -621,11 +621,14 @@ const mediaPipeline = (() => {
 
 // Phase 3B: health/readiness service with dependency checks and short cache.
 // Redis is probed with the shared client when REDIS_URL is configured.
+// The media pipeline posture (storage driver, transcode state, queue type)
+// is reported in the /api/health payload — informational, never a gate.
 const { createHealthService } = require('./lib/health');
 const healthService = createHealthService({
   sequelize,
   redisClient: getRedisClient({ env: process.env, log: appLogger }),
   storageProvider: mediaPipeline?.storageProvider || null,
+  mediaPipeline: mediaPipeline || null,
   env: process.env,
   logger: appLogger,
 });
