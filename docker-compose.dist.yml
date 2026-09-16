@@ -55,6 +55,37 @@ services:
       - LIVEKIT_PUBLIC_URL=${LIVEKIT_PUBLIC_URL:-}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      # ==================== PAYMENTS (Stripe) ====================
+      # Wallet coin top-ups: both set → real Stripe Checkout; either unset →
+      # top-up disabled in production (503), free instant grant in dev (see
+      # backend/index.js /api/wallet/topup + PAYMENTS section in .env.dist).
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      # Public site URL for Stripe checkout success/cancel redirects; the
+      # backend falls back to http://localhost:5173 when unset. Set this in
+      # production — it is also what the frontend build bakes in as
+      # VITE_API_URL (frontend service below).
+      - FRONTEND_URL=${FRONTEND_URL:-}
+      # ==================== OBJECT STORAGE (S3 / R2) ====================
+      # Background upload copy + off-site backup target, fail-open (uploads
+      # never fail because of these). Bucket + keys set → S3/R2 driver,
+      # empty → local-disk driver (default). S3_ENDPOINT is required for
+      # Cloudflare R2/MinIO; leave empty for real AWS.
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - S3_REGION=${S3_REGION:-}
+      - S3_ENDPOINT=${S3_ENDPOINT:-}
+      # Public URL base for publicUrl() (CDN/bucket). STORAGE_PUBLIC_URL
+      # takes precedence; S3_PUBLIC_URL is the legacy alias.
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:-}
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL:-}
+      # ==================== ERROR MONITORING (Sentry) ====================
+      # Unset DSN → no-op hub. A DSN only takes effect when @sentry/node is
+      # npm-installed (otherwise a loud warning is logged at first use).
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
       - LOG_LEVEL=info
     volumes:
       - backend-storage-prod:/app/storage
