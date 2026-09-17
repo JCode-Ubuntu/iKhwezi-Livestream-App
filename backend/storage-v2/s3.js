@@ -3,11 +3,10 @@
 /**
  * storage-v2 S3-compatible driver (AWS S3 / Cloudflare R2).
  *
- * Uses @aws-sdk/client-s3 (PutObject/GetObject/DeleteObject). The presigner
- * package (@aws-sdk/s3-request-presigner) is NOT installed in this repo —
- * verified via require.resolve — so presigned URLs report false in
- * capabilities and publicUrl() falls back to the configurable public base
- * URL (works for R2 custom domains / public buckets) or null.
+ * Uses @aws-sdk/client-s3 (PutObject/GetObject/DeleteObject) plus
+ * @aws-sdk/s3-request-presigner for short-lived private reads (presignGet).
+ * publicUrl() serves the long-lived public base URL (R2 custom domain /
+ * CDN / public bucket) when STORAGE_PUBLIC_URL is configured, else null.
  *
  * Secondary fallback: if S3_* env is set but the S3 client itself cannot be
  * constructed (bad install), buildS3StorageProvider throws — the env
@@ -35,6 +34,7 @@ function buildS3StorageProvider({
   // Lazy require so requiring this module never pulls AWS SDK cost when the
   // local driver is in play, and a broken SDK install surfaces at build time.
   const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+  const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
   const client = new S3Client({
     region,
@@ -45,20 +45,26 @@ function buildS3StorageProvider({
   return {
     type: 's3',
 
-    // Truthful: real object storage; presigned URLs are NOT available in this
-    // repo (the presigner package is not installed) — long-lived public URLs
-    // only, and only when S3_PUBLIC_URL is configured.
+    // Truthful: real object storage; presigned GET URLs available when the
+    // presigner package is installed (it is, since the S3-activation phase) —
+    // used for short-lived private reads. publicUrl() still serves the
+    // long-lived public base URL path (R2 custom domain / CDN / public bucket).
     capabilities: Object.freeze({
       type: 's3',
       objectStorage: true,
-      presigned: false,
+      presigned: true,
     }),
 
     /** COPY the local file at `absoluteLocalPath` into the bucket at `key`. */
-    async put(key, absoluteLocalPath) {
+    async put(key, absoluteLocalPath, { contentType } = {}) {
       const safe = assertSafeKey(key);
       const body = await fsp.readFile(absoluteLocalPath);
-      await client.send(new PutObjectCommand({ Bucket: bucket, Key: safe, Body: body }));
+      const params = { Bucket: bucket, Key: safe, Body: body };
+      // Content-type is metadata hygiene (correct rendering + future CDN
+      // correctness); omitting it leaves S3's default octet-stream. Extension
+      // inference keeps the driver self-contained; explicit contentType wins.
+      params.ContentType = contentType || inferContentType(safe);
+      await client.send(new PutObjectCommand(params));
       return { key: safe, bytes: Buffer.byteLength(body) };
     },
 
@@ -91,9 +97,8 @@ function buildS3StorageProvider({
 
     /**
      * Long-lived public URL from S3_PUBLIC_URL (e.g. an R2 custom domain or a
-     * CDN in front of the bucket), else null. NOTE: @aws-sdk/s3-request-presigner
-     * is not installed in this repo, so short-lived presigned URLs are out of
-     * scope — documented in .env.dist.
+     * CDN in front of the bucket), else null. When no public base is
+     * configured, use get() + presignGet() for short-lived private reads.
      */
     publicUrl(key) {
       if (!publicBaseUrl) return null;
@@ -101,8 +106,39 @@ function buildS3StorageProvider({
       return `${publicBaseUrl.replace(/\/$/, '')}/${safe}`;
     },
 
+    /**
+     * Short-lived presigned GET URL (~1h default) for private buckets — the
+     * production read path when no public CDN base is configured. Returns
+     * null rather than throwing when presigning cannot be built, so callers
+     * can fall back to their local-file path.
+     */
+    async presignGet(key, { expiresInSeconds = 3600 } = {}) {
+      try {
+        const safe = assertSafeKey(key);
+        return await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: safe }), { expiresIn: expiresInSeconds });
+      } catch (err) {
+        return null;
+      }
+    },
+
     bucket() { return bucket; },
   };
+}
+
+// Minimal extension→MIME map for the media types iKHWEZI actually stores.
+// Explicit contentType passed to put() always wins over this inference.
+const CONTENT_TYPES = {
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.gif': 'image/gif', '.webp': 'image/webp',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+  '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t',
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.wav': 'audio/wav',
+  '.pdf': 'application/pdf',
+};
+
+function inferContentType(key) {
+  const ext = path.extname(key).toLowerCase();
+  return CONTENT_TYPES[ext] || 'application/octet-stream';
 }
 
 async function ensureParent(absolutePath) {

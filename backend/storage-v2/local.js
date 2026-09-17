@@ -91,6 +91,15 @@ function buildLocalStorageProvider({ root, publicBaseUrl = null } = {}) {
 
     /** Exposed for tests/diagnostics. */
     root() { return resolvedRoot; },
+
+    /**
+     * Contract parity with the S3 driver. The local driver has nothing to
+     * presign — media is served directly from /storage/** — so this resolves
+     * null and callers transparently fall back to the local path.
+     */
+    async presignGet() {
+      return null;
+    },
   };
 }
 
