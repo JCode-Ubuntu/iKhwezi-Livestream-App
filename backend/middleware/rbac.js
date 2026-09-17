@@ -45,7 +45,10 @@ function buildRbacMiddleware({ User, JWT_SECRET, ADMIN_KEY, logAudit, adminKeyEn
   if (!User || !JWT_SECRET || !ADMIN_KEY) {
     throw new Error('buildRbacMiddleware requires User, JWT_SECRET and ADMIN_KEY');
   }
-  const isKeyEnabled = adminKeyEnabled !== false; // default true (transition)
+  // SECURITY REMEDIATION (audit C1): default OFF — RBAC is authoritative.
+  // Callers pass adminKeyEnabled=true explicitly to re-enable the legacy key
+  // for a bootstrap grant; anything else (false/undefined) disables it.
+  const isKeyEnabled = adminKeyEnabled === true;
 
   /** Constant-time ADMIN_KEY compare (same property as middleware/auth.js). */
   const adminKeyMatches = (provided) => {

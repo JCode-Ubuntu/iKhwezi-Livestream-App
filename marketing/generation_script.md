@@ -119,9 +119,8 @@ marketing/
 │   ├── feature_live_streaming.png
 │   ├── feature_social_chat.png
 │   ├── feature_stories.png
-│   ├── feature_duets.png
-│   ├── feature_challenges.png
-│   ├── feature_watch_parties.png
+│   ├── feature_reels.png
+│   ├── feature_meetings.png
 │   └── feature_graphics_guide.md
 ├── mockups/
 │   ├── mockup_phone_portrait.png

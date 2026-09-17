@@ -30,6 +30,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # Disposable Postgres for backend/test/postgres.integration.test.js
+    # (forensic audit remediation Phase 9). Suite skips cleanly when
+    # PG_TEST_URL is unset (local default); CI always provides it.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ikhwezi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       # ── Backend: install → test ─────────────────────────────────────────
       - name: Checkout repository
@@ -50,6 +68,8 @@ jobs:
 
       - name: Run backend tests
         working-directory: backend
+        env:
+          PG_TEST_URL: postgresql://postgres:postgres@localhost:5432/ikhwezi_test
         run: npm test
 
       # ── Frontend: install → test → build ───────────────────────────────
@@ -78,25 +98,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Immutable release identity: every image is tagged with the commit SHA
+      # (plus :latest for compose). SHA tags make rollback exact — the server
+      # keeps the previous release's tarballs and can `docker load` them again
+      # (rollback.yml re-runs this job for a known-good SHA).
       # Runner-side builds mirror exactly what the server used to do (same
       # Dockerfiles, same --no-cache semantics via fresh runners).
       - name: Build nginx-rtmp image
-        run: docker build -t ikhwezi-nginx-rtmp:latest ./nginx
+        run: |
+          SHA_TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker build -t ikhwezi-nginx-rtmp:latest -t ikhwezi-nginx-rtmp:$SHA_TAG ./nginx
 
       - name: Build backend image
-        run: docker build -t ikhwezi-backend:latest ./backend
+        run: |
+          SHA_TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker build -t ikhwezi-backend:latest -t ikhwezi-backend:$SHA_TAG ./backend
 
       - name: Build frontend image
-        run: docker build -t ikhwezi-frontend:latest ./frontend
+        run: |
+          SHA_TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker build -t ikhwezi-frontend:latest -t ikhwezi-frontend:$SHA_TAG ./frontend
 
       # Export as gzipped tarballs for the SSH transfer. gzip drops the
       # backend image (~200MB) to a fraction of its size.
       - name: Export images
         run: |
           mkdir -p deploy-artifacts
-          docker save ikhwezi-nginx-rtmp:latest | gzip > deploy-artifacts/nginx-rtmp.tar.gz
-          docker save ikhwezi-backend:latest    | gzip > deploy-artifacts/backend.tar.gz
-          docker save ikhwezi-frontend:latest   | gzip > deploy-artifacts/frontend.tar.gz
+          SHA_TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker save ikhwezi-nginx-rtmp:latest ikhwezi-nginx-rtmp:$SHA_TAG | gzip > deploy-artifacts/nginx-rtmp.tar.gz
+          docker save ikhwezi-backend:latest    ikhwezi-backend:$SHA_TAG    | gzip > deploy-artifacts/backend.tar.gz
+          docker save ikhwezi-frontend:latest   ikhwezi-frontend:$SHA_TAG   | gzip > deploy-artifacts/frontend.tar.gz
           ls -lh deploy-artifacts/
 
       - name: Upload image artifacts
@@ -202,6 +233,10 @@ jobs:
               if [ -n "$PAYFAST_MODE" ]; then sync_env PAYFAST_MODE "$PAYFAST_MODE"; fi
               echo "payfast credentials synced"
             fi
+            # Sentry release metadata: tag every error with the exact deployed
+            # commit (forensic audit remediation, Phase 14) so errors are
+            # attributable to a release. DSN itself stays operator-managed.
+            sync_env SENTRY_RELEASE "$(git rev-parse HEAD)"
 
             if docker compose version >/dev/null 2>&1; then
               COMPOSE="docker compose"
@@ -213,7 +248,6 @@ jobs:
             gunzip -c ~/ikhwezi-deploy/nginx-rtmp.tar.gz | docker load
             gunzip -c ~/ikhwezi-deploy/backend.tar.gz    | docker load
             gunzip -c ~/ikhwezi-deploy/frontend.tar.gz   | docker load
-            rm -f ~/ikhwezi-deploy/*.tar.gz
 
             # nginx-rtmp renders the RTMP webhook secret into nginx.conf at
             # start, so it is recreated alongside the app services.
@@ -229,23 +263,41 @@ jobs:
 
             timeout 60 docker image prune -f || echo "WARN: image prune skipped (non-fatal)"
 
-            # ── Observable truth: the deploy is only successful if the app
-            # answers. Retries cover container start-up time.
-            echo "waiting for app to answer..."
+            # ── Observable truth: the deploy is only successful if the app is
+            # genuinely READY — /api/ready gates on database + redis + storage
+            # (liveness alone would green-light a degraded deployment; forensic
+            # audit 2026-09-17, Phase 4). Retries cover container start-up.
+            echo "waiting for app to be READY..."
             ok=""
             for i in $(seq 1 30); do
-              if curl -sk -o /dev/null --max-time 5 "https://ikhwezi.site/api/health"; then
-                ok="yes"; break
+              # /api/ready answers 200 only when critical dependencies pass.
+              if curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "https://ikhwezi.site/api/ready" | grep -q '^200$'; then
+                ok="ready"; break
               fi
               # Local fallback in case the public TLS path is slow:
-              if curl -s -o /dev/null --max-time 5 "http://localhost:3002/api/health"; then
-                ok="local"; break
+              if curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:3002/api/ready" | grep -q '^200$'; then
+                ok="ready-local"; break
               fi
               sleep 4
             done
             if [ -z "$ok" ]; then
-              echo "ERROR: app did not become healthy after deploy"
+              echo "ERROR: app did not become READY after deploy (dependencies failing?)"
+              curl -s --max-time 5 "http://localhost:3002/api/health/dependencies" || true
               $COMPOSE ps || true
               exit 1
             fi
-            echo "✅ Deployed $(git rev-parse --short HEAD) at $(date) (health: $ok)"
+
+            # ── Release retention (rollback path, forensic audit Phase 13) ──
+            # Rotated ONLY after the readiness gate passed: a failed deploy
+            # leaves the previous known-good release artifacts untouched, so
+            # rollback.yml can always restore the last healthy release.
+            RELEASE_DIR="$HOME/ikhwezi-releases"
+            mkdir -p "$RELEASE_DIR"
+            rm -f "$RELEASE_DIR"/previous-*.tar.gz
+            for f in nginx-rtmp backend frontend; do
+              cp ~/ikhwezi-deploy/$f.tar.gz "$RELEASE_DIR/previous-$f.tar.gz"
+            done
+            git rev-parse HEAD > "$RELEASE_DIR/previous-release.sha"
+            rm -f ~/ikhwezi-deploy/*.tar.gz
+
+            echo "✅ Deployed $(git rev-parse --short HEAD) at $(date) (readiness: $ok)"

@@ -37,6 +37,9 @@ Content to include:
 Key message: "Share live moments that disappear after 24 hours"
 
 ## Duets & Co-Hosts (feature_duets.png)
+> **V3-DEFERRED — DO NOT SHIP/USE THIS ASSET IN V2 LAUNCH MATERIALS.**
+> Kept here only as a design placeholder for the V3 roadmap.
+
 **Showcase interactive streaming features**
 
 Content to include:
@@ -61,6 +64,9 @@ Content to include:
 Key message: "Join challenges and compete with the community"
 
 ## Watch Parties (feature_watch_parties.png)
+> **V3-DEFERRED — DO NOT SHIP/USE THIS ASSET IN V2 LAUNCH MATERIALS.**
+> Kept here only as a design placeholder for the V3 roadmap.
+
 **Showcase group viewing experience**
 
 Content to include:

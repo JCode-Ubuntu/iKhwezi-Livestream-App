@@ -26,7 +26,6 @@ Content to include:
 - LIVE badge with viewer count
 - Chat panel (partially open)
 - Reaction emojis floating
-- Duet/Co-Host buttons
 - Story creation button
 - Stream title and description
 - Host information

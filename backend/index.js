@@ -167,8 +167,15 @@ const HLS_HOST = (process.env.HLS_HOST || process.env.HLS_URL || '').replace(/\/
 const RTMP_SERVER = (process.env.RTMP_SERVER || process.env.RTMP_HOST || 'rtmp://localhost:1935/live').replace(/\/$/, '');
 // Public ingest URL shown in Admin / OBS (defaults to RTMP_SERVER — override when backend uses internal Docker hostname)
 const RTMP_PUBLIC_SERVER = (process.env.RTMP_PUBLIC_SERVER || RTMP_SERVER).replace(/\/$/, '');
+// SECURITY REMEDIATION (audit C4): TRUST_INTERNAL_RTMP_WEBHOOK bypass REMOVED
+// — network position no longer substitutes for the shared secret. The env var
+// is still parsed so an operator's stale .env produces a clear deprecation
+// warning instead of a silent no-op.
 const TRUST_INTERNAL_RTMP_WEBHOOK = process.env.TRUST_INTERNAL_RTMP_WEBHOOK === '1'
   || process.env.TRUST_INTERNAL_RTMP_WEBHOOK === 'true';
+if (TRUST_INTERNAL_RTMP_WEBHOOK) {
+  console.warn('⚠️  TRUST_INTERNAL_RTMP_WEBHOOK is set but the bypass was REMOVED (security remediation 2026-09-17). Remove the flag from your .env.');
+}
 
 // Real-money top-ups go through the provider-agnostic payment service
 // (services/payments/). Providers are selected purely by env:
@@ -232,7 +239,6 @@ const RTMP_WEBHOOK_INTERNAL_ONLY = process.env.RTMP_WEBHOOK_INTERNAL_ONLY === 't
 const { requireRtmpWebhook } = require('./middleware/rtmpWebhook').buildRtmpWebhookGuard({
   secret: RTMP_WEBHOOK_SECRET,
   isProduction: IS_PRODUCTION,
-  trustInternal: TRUST_INTERNAL_RTMP_WEBHOOK,
   internalOnly: RTMP_WEBHOOK_INTERNAL_ONLY,
 });
 
@@ -407,11 +413,13 @@ const {
 } = buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY });
 
 // ==================== RBAC (Phase 3A) ====================
-// ADMIN_KEY disposition: demoted to a transition/ops key. Default
-// enabled for the transition window; ADMIN_KEY_ENABLED=false hard-disables
-// every remaining key path (V2-launch intent — documented in the final
-// report). Built fully below once logAudit exists (needs it for auditing).
-const ADMIN_KEY_ENABLED = process.env.ADMIN_KEY_ENABLED !== 'false'; // default true: transition
+// ADMIN_KEY disposition: demoted to a transition/ops key. SECURITY REMEDIATION
+// (forensic audit 2026-09-17, finding C1): the transition ended — RBAC is
+// authoritative, so the legacy shared key now defaults OFF. Set
+// ADMIN_KEY_ENABLED=true EXPLICITLY to re-enable it for one bootstrap grant.
+// ADMIN_KEY_ENABLED=false (or unset) hard-disables every remaining key path.
+// Built fully below once logAudit exists (needs it for auditing).
+const ADMIN_KEY_ENABLED = process.env.ADMIN_KEY_ENABLED === 'true'; // default OFF
 
 // Socket.IO JWT handshake — populates socket.user (null for anonymous/banned).
 // Registered here, before any feature module attaches `io.on('connection')`

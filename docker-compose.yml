@@ -30,10 +30,11 @@ services:
       # logged-in session.
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_KEY=${ADMIN_KEY}
-      # Phase 3A RBAC transition: ADMIN_KEY_ENABLED=false hard-disables all
-      # remaining shared-key paths (bootstrap grant + ban fallback) once the
-      # first admin account exists. Default true during transition.
-      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-true}
+      # Legacy ADMIN_KEY disposition: RBAC is authoritative; the shared key
+      # defaults OFF (hard-disabled paths: bootstrap grant + ban fallback).
+      # Set ADMIN_KEY_ENABLED=true EXPLICITLY only for a one-time bootstrap
+      # grant on a fresh deployment, then remove it again.
+      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-false}
       # Shared secret for nginx-rtmp → backend on-publish callbacks. The
       # nginx-rtmp service below is built from ./nginx, whose entrypoint
       # renders the SAME value into nginx.conf (?secret=...), so the backend
@@ -99,6 +100,18 @@ services:
       # backend/index.js /api/wallet/topup + PAYMENTS section in .env.dist).
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      # ==================== PAYMENTS (PayFast — production SA gateway) ====================
+      # Provider-agnostic service picks PayFast when PAYFAST_MERCHANT_ID is
+      # set (precedence over Stripe — see backend/index.js
+      # buildPaymentProviderFromEnv). Values arrive via the deploy pipeline's
+      # .env sync (GitHub secrets) or the operator's .env — never committed.
+      - PAYFAST_MERCHANT_ID=${PAYFAST_MERCHANT_ID:-}
+      - PAYFAST_MERCHANT_KEY=${PAYFAST_MERCHANT_KEY:-}
+      - PAYFAST_PASSPHRASE=${PAYFAST_PASSPHRASE:-}
+      - PAYFAST_ZAR_PER_USD=${PAYFAST_ZAR_PER_USD:-}
+      - PAYFAST_MODE=${PAYFAST_MODE:-sandbox}
+      - PAYFAST_NOTIFY_URL=${PAYFAST_NOTIFY_URL:-}
+      - PAYFAST_SKIP_VALIDATE=${PAYFAST_SKIP_VALIDATE:-}
       # Public site URL for Stripe checkout success/cancel redirects; the
       # backend falls back to http://localhost:5173 when unset.
       - FRONTEND_URL=${FRONTEND_URL:-}

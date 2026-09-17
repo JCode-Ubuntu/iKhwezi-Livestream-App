@@ -37,8 +37,8 @@ Open the URL Vite prints (usually **http://localhost:3000**). The API runs on **
 ### Live (Production)
 - **User App**: https://ikhwezi.site
 - **Admin Panel**: https://ikhwezi.site/admin (requires an account with the
-  `admin` role — see RBAC below; the legacy shared ADMIN_KEY is a transition
-  mechanism only)
+  `admin` role — RBAC is the authoritative authorization; the legacy shared
+  ADMIN_KEY is disabled by default and only used for one-time bootstrap)
 - **Server IP**: 13.62.54.198 (AWS Lightsail — Stockholm)
 
 ### Local (Development)
@@ -99,7 +99,7 @@ See `.env.dist` for the complete, documented list. Key variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | JWT_SECRET | (auto-generated) | JWT signing secret — set a persistent value in production |
-| ADMIN_KEY | (auto-generated) | Legacy transition key (bootstrap admin grant) — set in server `.env` |
+| ADMIN_KEY | (auto-generated) | Legacy bootstrap key — **disabled by default** (`ADMIN_KEY_ENABLED=false`); set `ADMIN_KEY_ENABLED=true` explicitly only for a one-time admin bootstrap grant |
 | DATABASE_URL | *(empty → SQLite)* | `postgresql://…` switches the backend to PostgreSQL |
 | REDIS_URL | *(empty → in-process)* | `redis://…` enables BullMQ queues + Redis rate limiting |
 | RTMP_WEBHOOK_SECRET | *(required by compose)* | Shared secret for nginx-rtmp publish callbacks |

@@ -84,7 +84,10 @@ async function boot(opts = {}) {
   const logAudit = async (action, details, ip) => { auditLog.push({ action, details, ip }); };
   const rbac = buildRbacMiddleware({
     User, JWT_SECRET, ADMIN_KEY,
-    logAudit, adminKeyEnabled: opts.adminKeyEnabled,
+    logAudit,
+    // SECURITY REMEDIATION default-OFF semantics: the middleware's key layer
+    // is enabled ONLY when explicitly requested (mirrors index.js).
+    adminKeyEnabled: opts.adminKeyEnabled === true,
   });
   const { requireRole, requireModerationAccess } = rbac;
 
@@ -256,7 +259,9 @@ test('moderator cannot ban an admin; moderators cannot self-ban', async () => {
 });
 
 test('legacy ADMIN_KEY: ban transition guard works, is audited; ADMIN_KEY_ENABLED=false kills every key path', async () => {
-  const h = await boot();
+  // SECURITY REMEDIATION default-OFF semantics: the key layer exists ONLY
+  // when explicitly enabled — the first boot opts in to test that path.
+  const h = await boot({ adminKeyEnabled: true });
   try {
     const { user: target } = await h.mkUser({});
 

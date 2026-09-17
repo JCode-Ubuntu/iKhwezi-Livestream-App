@@ -45,3 +45,41 @@
   (parallel builds) with three sequential `build` invocations, and add
   `COMPOSE_HTTP_TIMEOUT=300` env for the livekit start. Both are
   safe, surgical changes that reduce peak memory + tolerate slow starts.
+
+---
+
+# UPDATE 2 — 2026-09-17 ~18:00 UTC (build-on-runner era, third outage)
+
+## What changed between UPDATE 1 and now
+The pipeline was rebuilt to eliminate on-server builds entirely
+(commit `5bc5e76`): GitHub Actions builds all three images on the 16GB
+runner, ships them as gzipped tarballs over scp, and the server only runs
+`docker load` + `docker compose up -d`.
+
+## Third outage timeline (UTC)
+- 14:42 owner reboots the host (per UPDATE 1 request)
+- 15:22 run 35239767019 — the OLD build-on-server workflow (pre-`5bc5e76`)
+  starts Docker builds on the server again before being CANCELLED
+  mid-run. Cancelled ≠ harmless: half-built image layers + docker build
+  activity on the 2GB host re-trigger the same OOM/wedge class.
+- 15:51 run 35242891160 — the NEW pipeline: quality gate PASS ✅, runner
+  image builds PASS ✅, then scp fails: `dial tcp :22: connection
+  timed out`.
+- 17:52 external probe: ICMP ping FAIL, TCP 22 FAIL, TCP 443 FAIL →
+  **the host itself is down at the OS/network level**, not the app.
+
+## Root cause (evidence-based)
+The host was already dead BEFORE the new pipeline touched it — killed by
+the cancelled-but-mid-build old workflow at 15:22. The new pipeline is
+exonerated by run 35242891160: it never got past scp because there was
+nothing to connect to.
+
+## Required action (owner, unchanged)
+AWS Console → Lightsail → instance (Stockholm) → **Reboot**. After the
+reboot, ONLY the new pipeline (build-on-runner) will deploy to this host —
+the 15:22 failure class (on-server builds) no longer exists in the repo.
+
+## Post-reboot verification plan (mine)
+1. `gh run watch` the next deploy run end-to-end.
+2. `curl https://ikhwezi.site/api/ready` → 200 with dependencies ok.
+3. Record image SHA tags running on the server for the rollback ledger.

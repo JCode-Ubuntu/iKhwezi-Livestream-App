@@ -58,10 +58,10 @@ Individual feature highlight graphics
 - `feature_live_streaming.png` - Live streaming capability
 - `feature_social_chat.png` - Real-time chat and reactions
 - `feature_stories.png` - 24h story highlights
-- `feature_duets.png` - Duet and co-host features
-- `feature_challenges.png` - Community challenges
-- `feature_watch_parties.png` - Group viewing
-
+- `feature_reels.png` - Reels short-form video feed
+- `feature_meetings.png` - Group meetings and calls
+<!-- feature_duets.png / feature_watch_parties.png are V3-DEFERRED — excluded
+     from V2 launch materials (see feature_graphics_guide.md status notes) -->
 **Specifications:**
 - Size: 1024 x 500 pixels
 - Format: PNG with transparent elements

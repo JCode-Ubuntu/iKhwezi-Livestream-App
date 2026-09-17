@@ -44,6 +44,12 @@ const REDACTED_KEYS = Object.freeze(new Set([
   'x-admin-key',
   'x-rtmp-secret',
   'jwt',
+  // SECURITY REMEDIATION (audit C4): request URLs are redacted wholesale —
+  // nginx cannot compute HMACs so the RTMP webhook secret legitimately
+  // travels as ?secret= on the callback URL, and full URLs end up in
+  // request-log extras. Redacting the `url` key keeps the secret out of
+  // logs; structured fields (method/path/status) carry the debugging value.
+  'url',
 ]));
 
 const REDACTED_SUFFIXES = Object.freeze([

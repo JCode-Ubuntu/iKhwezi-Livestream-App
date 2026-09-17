@@ -47,8 +47,8 @@ function createRateLimiter(windowMs, max, message) {
   };
 }
 
-async function boot({ internalOnly, secret = SECRET, rateLimit, trustInternal = false, isProduction = true }) {
-  const guard = buildRtmpWebhookGuard({ secret, isProduction, trustInternal, internalOnly });
+async function boot({ internalOnly, secret = SECRET, rateLimit, isProduction = true }) {
+  const guard = buildRtmpWebhookGuard({ secret, isProduction, internalOnly });
   const requireRtmpWebhook = guard.requireRtmpWebhook;
   const app = express();
   app.use(express.urlencoded({ extended: false }));
@@ -187,4 +187,43 @@ test('internalOnly=false (dev): valid secret still enforced, misconfig loud', as
   } finally {
     await h.close();
   }
+});
+
+// ── SECURITY REMEDIATION (audit C4) ─────────────────────────────────────────
+// The legacy TRUST_INTERNAL_RTMP_WEBHOOK private-IP bypass was REMOVED.
+// These tests pin the new fail-closed behavior.
+
+test('REMOVAL: legacy trustInternal bypass is gone — network position NEVER substitutes for the secret', async () => {
+  const guard = buildRtmpWebhookGuard({
+    secret: undefined,
+    isProduction: true,
+    // Legacy callers passed trustInternal=true here and got through with no
+    // secret; the parameter no longer exists, so this construction ignores it.
+    internalOnly: false,
+  });
+  const calls = [];
+  const fakeRes = {
+    status(code) { calls.push(code); return { send: () => calls.push('sent') }; },
+  };
+  // Private-network source + no secret + production → 503, NOT a pass.
+  const allowed = guard.requireRtmpWebhook({ socket: { remoteAddress: '10.0.0.5' }, headers: {} }, fakeRes);
+  assert.equal(allowed, false, 'no-secret production request must fail closed');
+  assert.equal(calls[0], 503);
+});
+
+test('REMOVAL: valid-secret path unaffected by legacy flag removal (private source + secret passes)', async () => {
+  const guard = buildRtmpWebhookGuard({ secret: SECRET, isProduction: true, internalOnly: true });
+  const fakeRes = {
+    status() { return { send: () => {} }; },
+  };
+  const ok = guard.requireRtmpWebhook(
+    { socket: { remoteAddress: '10.0.0.5' }, headers: {}, query: { secret: SECRET } },
+    fakeRes,
+  );
+  assert.equal(ok, true, 'private source WITH secret still passes');
+  const bad = guard.requireRtmpWebhook(
+    { socket: { remoteAddress: '10.0.0.5' }, headers: {}, query: { secret: 'nope' } },
+    fakeRes,
+  );
+  assert.equal(bad, false, 'private source with WRONG secret fails (bypass gone)');
 });

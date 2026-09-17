@@ -26,10 +26,8 @@ services:
       - PORT=3001
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_KEY=${ADMIN_KEY}
-      # Phase 3A RBAC transition: ADMIN_KEY_ENABLED=false hard-disables all
-      # remaining shared-key paths (bootstrap grant + ban fallback) once the
-      # first admin account exists. Default true during transition.
-      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-true}
+      # Legacy ADMIN_KEY disposition: RBAC is authoritative; default OFF.
+      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-false}
       - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
       # Webhook source allow-list: production keeps internal-only ON.
       - RTMP_WEBHOOK_INTERNAL_ONLY=${RTMP_WEBHOOK_INTERNAL_ONLY:-true}
@@ -68,6 +66,18 @@ services:
       # backend/index.js /api/wallet/topup + PAYMENTS section in .env.dist).
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      # ==================== PAYMENTS (PayFast — production SA gateway) ====================
+      # Provider-agnostic service selects PayFast when PAYFAST_MERCHANT_ID is
+      # set (takes precedence over Stripe). Credentials arrive via the deploy
+      # pipeline's .env sync (GitHub secrets) or the operator's .env — never
+      # committed to git. SEE docs/ops/payment-gateway-activation.md.
+      - PAYFAST_MERCHANT_ID=${PAYFAST_MERCHANT_ID:-}
+      - PAYFAST_MERCHANT_KEY=${PAYFAST_MERCHANT_KEY:-}
+      - PAYFAST_PASSPHRASE=${PAYFAST_PASSPHRASE:-}
+      - PAYFAST_ZAR_PER_USD=${PAYFAST_ZAR_PER_USD:-}
+      - PAYFAST_MODE=${PAYFAST_MODE:-sandbox}
+      - PAYFAST_NOTIFY_URL=${PAYFAST_NOTIFY_URL:-}
+      - PAYFAST_SKIP_VALIDATE=${PAYFAST_SKIP_VALIDATE:-}
       # Public site URL for Stripe checkout success/cancel redirects; the
       # backend falls back to http://localhost:5173 when unset. Set this in
       # production — it is also what the frontend build bakes in as
@@ -354,7 +364,8 @@ services:
       - PORT=3001
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_KEY=${ADMIN_KEY}
-      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-true}
+      # Legacy ADMIN_KEY disposition: RBAC is authoritative; default OFF.
+      - ADMIN_KEY_ENABLED=${ADMIN_KEY_ENABLED:-false}
       - RTMP_WEBHOOK_SECRET=${RTMP_WEBHOOK_SECRET:?RTMP_WEBHOOK_SECRET must be set in .env}
       - RTMP_WEBHOOK_INTERNAL_ONLY=${RTMP_WEBHOOK_INTERNAL_ONLY:-true}
       - RTMP_SERVER=${RTMP_SERVER:-rtmp://nginx-rtmp-prod:1935/live}

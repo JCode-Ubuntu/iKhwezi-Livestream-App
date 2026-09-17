@@ -1,0 +1,95 @@
+name: Rollback production
+
+# ── ROLLBACK (forensic audit remediation, Phase 13) ────────────────────────
+# Restores the PREVIOUS known-good release from the server's release
+# retention directory (~/ikhwezi-releases, rotated only after a successful
+# readiness-gated deploy). The server never builds: rollback re-loads the
+# retained image tarballs and re-pins compose to that exact SHA tag, so the
+# restored system is bit-identical to the last healthy release.
+#
+# Run manually: gh workflow run rollback.yml -f confirm=ROLLBACK
+# (or Actions tab → Rollback production → Run workflow → confirm=ROLLBACK).
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type ROLLBACK to confirm'
+        required: true
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Restore previous known-good release
+    if: ${{ github.event.inputs.confirm == 'ROLLBACK' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Roll back via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          port: 22
+          command_timeout: 12m
+          script: |
+            set -e
+            export COMPOSE_HTTP_TIMEOUT=300
+            APP_DIR="$HOME/iKhwezi-Livestream-App"
+            RELEASE_DIR="$HOME/ikhwezi-releases"
+
+            if [ ! -f "$RELEASE_DIR/previous-backend.tar.gz" ]; then
+              echo "ERROR: no previous release artifacts found in $RELEASE_DIR"
+              exit 1
+            fi
+
+            PREV_SHA="$(cat "$RELEASE_DIR/previous-release.sha" 2>/dev/null || echo unknown)"
+            echo "Rolling back to previous release: $PREV_SHA"
+
+            cd "$APP_DIR"
+            if docker compose version >/dev/null 2>&1; then
+              COMPOSE="docker compose"
+            else
+              COMPOSE="docker-compose"
+            fi
+
+            # 1. Restore the retained images (they carry both :latest and the
+            #    SHA tag of that release — loading re-pins :latest to the
+            #    previous release).
+            gunzip -c "$RELEASE_DIR/previous-nginx-rtmp.tar.gz" | docker load
+            gunzip -c "$RELEASE_DIR/previous-backend.tar.gz"    | docker load
+            gunzip -c "$RELEASE_DIR/previous-frontend.tar.gz"   | docker load
+
+            # 2. Re-pins :latest on the host to the previous SHA so compose
+            #    uses the restored images (compose references ikhwezi-*:latest).
+            SHA_TAG="$(echo "$PREV_SHA" | cut -c1-7)"
+            docker tag "ikhwezi-backend:$SHA_TAG"    "ikhwezi-backend:latest"    2>/dev/null || true
+            docker tag "ikhwezi-frontend:$SHA_TAG"   "ikhwezi-frontend:latest"   2>/dev/null || true
+            docker tag "ikhwezi-nginx-rtmp:$SHA_TAG" "ikhwezi-nginx-rtmp:latest" 2>/dev/null || true
+
+            # 3. Restart the app services on the restored images. livekit is
+            #    untouched (prebuilt upstream image, config from .env only).
+            timeout 120 $COMPOSE up -d frontend backend nginx-rtmp
+
+            # 4. Readiness gate — same semantics as the deploy workflow.
+            ok=""
+            for i in $(seq 1 30); do
+              if curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:3002/api/ready" | grep -q '^200$'; then
+                ok="ready-local"; break
+              fi
+              if curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "https://ikhwezi.site/api/ready" | grep -q '^200$'; then
+                ok="ready"; break
+              fi
+              sleep 4
+            done
+            if [ -z "$ok" ]; then
+              echo "ERROR: rollback completed but app is NOT ready — investigate immediately"
+              $COMPOSE ps || true
+              exit 1
+            fi
+            echo "✅ Rollback to $PREV_SHA complete (readiness: $ok)"

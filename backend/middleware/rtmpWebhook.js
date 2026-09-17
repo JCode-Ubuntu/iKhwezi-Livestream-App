@@ -27,12 +27,16 @@
  *     RTMP_WEBHOOK_SECRET via .env + container restart; nginx re-renders
  *     its config from the same value, so both sides stay in sync.
  *
- * Policy (secret layer, unchanged from before):
+ * Policy (secret layer):
  *  - secret configured → callback must carry it (403 otherwise).
  *  - secret missing, production → 503 (misconfiguration must be loud).
- *    The legacy TRUST_INTERNAL_RTMP_WEBHOOK private-IP bypass is still
- *    honoured for operators mid-migration, but logs a deprecation warning.
  *  - secret missing, development → allow (local nginx testing).
+ *
+ * SECURITY REMEDIATION (forensic audit 2026-09-17, finding C4): the legacy
+ * TRUST_INTERNAL_RTMP_WEBHOOK private-IP bypass has been REMOVED. With the
+ * secret mandatory in compose (`:?` enforced), the bypass had no remaining
+ * legitimate use and silently weakened the secret layer. Network position
+ * (layer 1) is still enforced, but it no longer substitutes for the secret.
  */
 
 const crypto = require('crypto');
@@ -57,11 +61,7 @@ function safeEqual(a, b) {
   return ba.length === bb.length && ba.length > 0 && crypto.timingSafeEqual(ba, bb);
 }
 
-function buildRtmpWebhookGuard({ secret, isProduction, trustInternal, internalOnly, logger = require('../lib/logger').createLogger() }) {
-  if (trustInternal) {
-    logger.warn('⚠️  TRUST_INTERNAL_RTMP_WEBHOOK is enabled — any private-network caller can toggle live status. '
-      + 'Wire RTMP_WEBHOOK_SECRET into nginx (see nginx/README) and remove this flag.');
-  }
+function buildRtmpWebhookGuard({ secret, isProduction, internalOnly, logger = require('../lib/logger').createLogger() }) {
   if (isProduction && !secret) {
     logger.warn('⚠️  RTMP_WEBHOOK_SECRET is not set — nginx-rtmp on-publish callbacks will be rejected (503).');
   }
@@ -90,7 +90,8 @@ function buildRtmpWebhookGuard({ secret, isProduction, trustInternal, internalOn
     }
     if (!secret) {
       if (isProduction) {
-        if (trustInternal && isPrivateNetworkIp(remote)) return true;
+        // SECURITY REMEDIATION: no bypass — a missing secret in production is
+        // a hard fail-closed (compose makes the secret mandatory anyway).
         logger.error('RTMP_WEBHOOK_SECRET is not set — rejecting on-publish callback in production');
         res.status(503).send('RTMP webhook not configured');
         return false;
@@ -99,7 +100,6 @@ function buildRtmpWebhookGuard({ secret, isProduction, trustInternal, internalOn
     }
     const provided = req.headers['x-rtmp-secret'] || req.query?.secret;
     if (safeEqual(provided, secret)) return true;
-    if (trustInternal && isPrivateNetworkIp(remote)) return true;
     logger.warn(`Rejected RTMP webhook from ${remote}: bad or missing secret`);
     res.status(403).send('Forbidden');
     return false;

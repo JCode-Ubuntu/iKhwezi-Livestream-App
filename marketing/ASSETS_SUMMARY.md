@@ -49,12 +49,16 @@ This folder contains everything needed for Play Store submission and marketing c
 - **Colors:** Dark cosmic (#0D0F1A), neon blue (#3B82F6), purple (#8B5CF6)
 
 ### Key Features to Highlight
+> Status note (V2 launch): Duets, Co-Hosts and Watch Parties are
+> **intentionally deferred to V3** — do not market them as current features.
+> The shipped V2 feature set is listed below.
+
 1. **Live Streaming** - Real-time video broadcasting
-2. **Social Chat** - Real-time messaging and reactions
-3. **Stories** - 24-hour live moment sharing
-4. **Duets & Co-Hosts** - Interactive collaborations
-5. **Community Challenges** - Social competitions
-6. **Watch Parties** - Group viewing experiences
+2. **Reels** - Short-form video feed with engagement
+3. **Social Chat & Group Chats** - Real-time messaging, groups with meetings and calls
+4. **Stories** - 24-hour live moment sharing
+5. **Creator Profiles & Monetization** - Wallet, coin top-ups, creator support
+6. **Meetings** - Group video meetings (LiveKit-powered)
 
 ## 📋 Next Steps
 

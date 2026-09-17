@@ -1,5 +1,14 @@
 # V2 Launch — Backup, Wipe & Relaunch Runbook (OPERATOR CHECKLIST)
 
+> **⚠️ STALENESS WARNING (2026-09-17 remediation):** the "Ground truth"
+> below predates the SQLite→PostgreSQL migration. Production now runs
+> **PostgreSQL** via `docker-compose.dist.yml` (verify against the actual
+> compose file the server uses before executing anything). Backup/restore
+> behavior for Postgres is documented in `docs/ops/backup-restore.md` §5;
+> the wipe-verification principle ("a fresh DB must re-create all tables on
+> first boot") is unchanged — migrations now own that, not `sync()`.
+> Re-validate every path/step against live compose before running Phases 4–6.
+
 > ## ⛔ NOTHING IN THIS RUNBOOK RUNS WITHOUT THE OWNER'S EXPLICIT GO
 >
 > This is a **draft operational plan**. No step in Phases 4–6 (wipe,
