@@ -71,6 +71,7 @@ jobs:
           command_timeout: 25m
           script: |
             set -e
+            export COMPOSE_HTTP_TIMEOUT=300
             APP_DIR="$HOME/iKhwezi-Livestream-App"
             REPO="https://github.com/JCode-Ubuntu/iKhwezi-Livestream-App.git"
 
@@ -88,16 +89,22 @@ jobs:
               COMPOSE="docker-compose"
             fi
 
-            # nginx-rtmp is now built from ./nginx (renders the RTMP webhook
+            # nginx-rtmp is built from ./nginx (renders the RTMP webhook
             # secret into nginx.conf at start), so it must be rebuilt and
             # recreated alongside the app services.
-            $COMPOSE build --no-cache frontend backend nginx-rtmp
-            $COMPOSE up -d --force-recreate frontend backend nginx-rtmp
+            # Builds run SEQUENTIALLY (one image at a time): parallel
+            # --no-cache builds of three images on a small instance caused
+            # an OOM-style docker daemon wedge (incident 2026-09-17).
+            $COMPOSE build --no-cache nginx-rtmp
+            $COMPOSE build --no-cache backend
+            $COMPOSE build --no-cache frontend
+            $COMPOSE up -d frontend backend nginx-rtmp
 
-            # Meeting A/V SFU (prebuilt image). Boot order does not matter to
-            # the app: the backend tolerates a missing/unreachable SFU and the
-            # meetings degrade to presence-only. LIVEKIT_* values in .env decide
-            # whether the backend mints tokens at all.
+            # Meeting A/V SFU (prebuilt image — no build cost). Boot order
+            # does not matter to the app: the backend tolerates a missing/
+            # unreachable SFU and meetings degrade to presence-only.
+            # LIVEKIT_* values in .env decide whether the backend mints
+            # tokens at all.
             $COMPOSE up -d livekit || echo "WARN: livekit SFU failed to start; meetings stay presence-only"
             docker image prune -f
             echo "✅ Deployed $(git rev-parse --short HEAD) at $(date)"
