@@ -220,6 +220,31 @@ function defineCoreModels(sequelize, DataTypes) {
     coins: { type: DataTypes.INTEGER, allowNull: true },
   });
 
+  // Provider-agnostic payment transaction ledger. ONE row per payment intent,
+  // created BEFORE the user is redirected to the provider (status 'pending'),
+  // finalized by the provider's webhook. The provider is recorded per row, so
+  // the future South African gateway (and optionally Stripe) coexist cleanly.
+  // providerRef = the provider's own id for the payment (Stripe session id,
+  // gateway transaction/reference id) — used for reconciliation/support.
+  const Payment = sequelize.define('Payment', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    userId: { type: DataTypes.UUID, allowNull: false },
+    provider: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'dev-grant' },
+    providerRef: { type: DataTypes.STRING(255), allowNull: true },
+    coins: { type: DataTypes.INTEGER, allowNull: false },
+    amountCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    currency: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'USD' },
+    status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'pending' },
+    failureReason: { type: DataTypes.STRING(255), allowNull: true },
+    metadata: { type: DataTypes.TEXT, allowNull: true },
+  }, {
+    indexes: [
+      { fields: ['userId'] },
+      { fields: ['status'] },
+      { unique: true, fields: ['provider', 'providerRef'] },
+    ],
+  });
+
   // Admin-managed tailored ads (image or video) shown inline in the main feed.
   const Ad = sequelize.define('Ad', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
@@ -304,7 +329,7 @@ function defineCoreModels(sequelize, DataTypes) {
     User, Video, Like, VideoSave, VideoRepost, Comment, Follow, Story, StoryView,
     StoryComment, Challenge, Star, DirectMessage,
     TextPost, PostLike, Points, Wallet, Subscription, GiftLog, LiveStatus, AuditLog,
-    ProcessedStripeEvent, Ad, Device,
+    ProcessedStripeEvent, Ad, Device, Payment,
   };
 }
 

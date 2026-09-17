@@ -34,7 +34,10 @@ test('migrator builds the full V2 schema on a fresh database', async (t) => {
 
   const result = await migrate({ sequelize, logger: silentLogger });
   assert.equal(result.adoptedBaseline, false, 'fresh DB must not hit the adopt path');
-  assert.equal(result.executed.length, 3, 'all migrations execute on a fresh DB');
+  // Count = the number of migration files actually committed (dynamic, so
+  // adding a migration never breaks this test; 0001-0004 today).
+  const expectedCount = fs.readdirSync(path.join(__dirname, '..', 'migrations')).filter((f) => f.endsWith('.js')).length;
+  assert.equal(result.executed.length, expectedCount, 'all migrations execute on a fresh DB');
   assert.match(result.executed[0], /initial-v2-schema\.js$/);
   assert.match(result.executed[1], /roles-and-devices\.js$/);
   assert.match(result.executed[2], /message-idempotency\.js$/);
@@ -140,7 +143,10 @@ test('BASELINE-ADOPT: legacy V1 database is recorded, not re-created', async (t)
 
   const result = await migrate({ sequelize, logger: silentLogger });
   assert.equal(result.adoptedBaseline, true, 'V1 DB must adopt, not execute');
-  assert.equal(result.executed.length, 3, 'baseline recorded + post-baseline migrations executed for real');
+  // Baseline 0001 is RECORDED (not executed) + every post-baseline migration
+  // executes for real → executed.length equals the total migration file count.
+  const expectedCount = fs.readdirSync(path.join(__dirname, '..', 'migrations')).filter((f) => f.endsWith('.js')).length;
+  assert.equal(result.executed.length, expectedCount, 'baseline recorded + post-baseline migrations executed for real');
   assert.ok(result.recordedBaselines.includes('20260906-0001-initial-v2-schema.js'),
     'the initial migration must be RECORDED only (its DDL must not re-run)');
 
@@ -217,7 +223,8 @@ test('migrate CLI runner works against a real sqlite file (SQLITE_PATH)', async 
 
   const sequelize = require('../config/database').createSequelize({ logging: false });
   const result = await migrate({ sequelize, logger: silentLogger });
-  assert.equal(result.executed.length, 3);
+  const expectedCount = fs.readdirSync(path.join(__dirname, '..', 'migrations')).filter((f) => f.endsWith('.js')).length;
+  assert.equal(result.executed.length, expectedCount);
   const tables = await sequelize.getQueryInterface().showAllTables();
   assert.ok(tables.includes('SequelizeMeta'), 'SequelizeMeta bookkeeping table created');
   assert.ok(tables.includes('Users'));

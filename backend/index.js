@@ -170,14 +170,13 @@ const RTMP_PUBLIC_SERVER = (process.env.RTMP_PUBLIC_SERVER || RTMP_SERVER).repla
 const TRUST_INTERNAL_RTMP_WEBHOOK = process.env.TRUST_INTERNAL_RTMP_WEBHOOK === '1'
   || process.env.TRUST_INTERNAL_RTMP_WEBHOOK === 'true';
 
-// Real-money top-ups activate automatically once these are set — no code
-// changes needed. Until then, /api/wallet/topup runs in dev mode and grants
-// coins directly (clearly flagged in the response) so gifting/subscriptions
-// are fully testable end-to-end without a payment processor.
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
-const STRIPE_ENABLED = !!STRIPE_SECRET_KEY;
-const stripeClient = STRIPE_ENABLED ? require('stripe')(STRIPE_SECRET_KEY) : null;
+// Real-money top-ups go through the provider-agnostic payment service
+// (services/payments/). Providers are selected purely by env:
+//   STRIPE_SECRET_KEY set → isolated Stripe provider (OPTIONAL future provider
+//   — Stripe is deliberately PAUSED as the production provider; a South
+//   African gateway will plug into the same interface later).
+//   nothing set → dev provider (instant grant; refused in production).
+// No credentials are ever logged.
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // Database setup — see ./config/database.js. SQLite by default (absolute path so
@@ -193,7 +192,7 @@ const {
   User, Video, Like, VideoSave, VideoRepost, Comment, Follow, Story, StoryView,
   StoryComment, Challenge, Star, DirectMessage,
   TextPost, PostLike, Points, Wallet, Subscription, GiftLog, LiveStatus, AuditLog,
-  ProcessedStripeEvent, Ad, Device,
+  ProcessedStripeEvent, Ad, Device, Payment,
 } = coreModels;
 
 // Public HLS playback URL — safe to expose (watch-only). Never expose streamKey/RTMP on public routes.
@@ -265,51 +264,71 @@ app.use(cors({
   credentials: false,
 }));
 
-// Stripe webhook must read the raw request body for signature verification,
-// so it's registered before the global JSON parser below.
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  if (!STRIPE_ENABLED) return res.status(503).json({ error: 'Stripe not configured' });
-  let event;
-  try {
-    event = stripeClient.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    req.logger?.error('Stripe webhook signature verification failed', { error: err.message });
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const userId = session.metadata?.userId;
-    const coins = parseInt(session.metadata?.coins || '0', 10);
-    if (userId && coins > 0) {
-      try {
-        const already = await ProcessedStripeEvent.findOne({ where: { eventId: event.id } });
-        if (already) {
-          return res.json({ received: true, duplicate: true });
-        }
-        const [wallet] = await Wallet.findOrCreate({ where: { userId }, defaults: { userId, coins: 500 } });
-        wallet.coins += coins;
-        await wallet.save();
-        await ProcessedStripeEvent.create({
-          eventId: event.id,
-          sessionId: session.id,
-          userId,
-          coins,
-        });
-        io.to(`user_${userId}`).emit('wallet-updated', { coins: wallet.coins });
-        await logAudit('WALLET_TOPUP_STRIPE', { userId, coins, sessionId: session.id }, null);
-      } catch (err) {
-        req.logger?.error('Stripe webhook wallet credit failed', { error: err.message });
-        return res.status(500).json({ error: 'Webhook processing failed' });
-      }
+// ── PAYMENTS: provider-agnostic webhook (registered BEFORE express.json so
+// the raw body is available for provider signature verification).
+// Provider selection happens in buildPaymentProviderFromEnv (below, after
+// models load) — this route only routes raw bodies per provider id.
+const PAYMENT_WEBHOOK_PATHS = ['/api/payments/webhook/stripe', '/api/stripe/webhook'];
+for (const webhookPath of PAYMENT_WEBHOOK_PATHS) {
+  app.post(webhookPath, express.raw({ type: 'application/json' }), (req, res, next) => {
+    if (!paymentService || paymentService.providerId !== 'stripe') {
+      return res.status(503).json({ error: 'Payment processor not configured' });
     }
-  }
-
-  res.json({ received: true });
-});
+    req.paymentWebhook = { rawBody: req.body };
+    next();
+  }, async (req, res) => {
+    try {
+      const result = await paymentService.handleWebhook({
+        rawBody: req.paymentWebhook.rawBody,
+        headers: req.headers,
+      });
+      if (result?.duplicate) return res.json({ received: true, duplicate: true });
+      if (result?.ignored) return res.json({ received: true, ignored: true });
+      if (result?.unknown) return res.json({ received: true, unknown: true });
+      return res.json({ received: true, ...result });
+    } catch (err) {
+      req.logger?.error('payment webhook failed', { provider: paymentService.providerId, error: err?.message || String(err) });
+      return res.status(err?.status || 400).json({ error: err?.message || 'Webhook processing failed' });
+    }
+  });
+}
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// ── Object-storage read path (S3 ACTIVATION) ──────────────────────────────
+// S3-active deployments serve uploads FROM S3, not from this process:
+//   - STORAGE_PUBLIC_URL set → redirect /storage/uploads/<f> to the public
+//     base (CDN/bucket). Long-lived URL; CDN-cacheable.
+//   - No public base → 302 to a short-lived presigned GET URL (~1h) for
+//     private buckets.
+//   - Neither / S3 not configured / presign failure → fall through to the
+//     local-disk static below (local file stays canonical; dev unaffected).
+// The redirect is capped at 5s and NEVER fails a request — any error falls
+// through to local serving.
+app.get(/^\/storage\/uploads\/([^/]+)\/?$/, async (req, res, next) => {
+  try {
+    const provider = mediaPipeline?.storageProvider;
+    if (!provider || provider.type !== 's3') return next();
+    const filename = req.params[0];
+    // Defense in depth: filenames are server-generated UUIDs; reject anything
+    // else (traversal, nested paths) so the redirect can never be abused as
+    // an open proxy into the bucket.
+    if (!/^[A-Za-z0-9._-]+$/.test(filename) || filename.includes('..')) return next();
+    const key = `uploads/${filename}`;
+    let target = provider.publicUrl(key);
+    if (!target) target = await Promise.race([
+      provider.presignGet(key, { expiresInSeconds: 3600 }),
+      new Promise((resolve) => setTimeout(() => resolve(null), 5000).unref()),
+    ]);
+    if (!target) return next();
+    return res.redirect(302, target);
+  } catch (err) {
+    appLogger.warn('storage read-path redirect failed — falling through to local', { error: err?.message || String(err) });
+    return next();
+  }
+});
+
 app.use('/storage', express.static(path.join(__dirname, 'storage')));
 
 // File upload config
@@ -411,6 +430,39 @@ const {
   requireRole, requireModerationAccess, adminKeyMatches,
 } = buildRbacMiddleware({
   User, JWT_SECRET, ADMIN_KEY, logAudit, adminKeyEnabled: ADMIN_KEY_ENABLED,
+});
+
+// ==================== PAYMENTS bootstrap (provider-agnostic) ====================
+// Env-selected provider; buildPaymentProviderFromEnv NEVER throws (a broken
+// optional-dependency install or malformed env degrades to no provider with
+// a loud warning — top-ups honestly disabled, nothing else affected).
+const { buildPaymentService } = require('./services/payments');
+const { buildStripeProvider } = require('./services/payments/stripe');
+const { buildDevProvider } = require('./services/payments/dev');
+
+function buildPaymentProviderFromEnv(env = process.env) {
+  const stripeKey = (env.STRIPE_SECRET_KEY || '').trim();
+  const stripeWebhookSecret = (env.STRIPE_WEBHOOK_SECRET || '').trim();
+  if (stripeKey) {
+    try {
+      return buildStripeProvider({ secretKey: stripeKey, webhookSecret: stripeWebhookSecret });
+    } catch (err) {
+      appLogger.warn(`stripe provider could not be built — payments disabled (${err?.message || err})`);
+      return null;
+    }
+  }
+  // Dev provider: local dev convenience (instant grant). Refused in
+  // production by the routes themselves; here it's just the honest default.
+  return IS_PRODUCTION ? null : buildDevProvider();
+}
+
+const paymentService = buildPaymentService({
+  models: coreModels,
+  provider: buildPaymentProviderFromEnv(),
+  isProduction: IS_PRODUCTION,
+  logAudit,
+  emit: (room, event, payload) => io.to(room).emit(event, payload),
+  logger: appLogger,
 });
 
 const normalizeCommentContent = (raw) => String(raw || '').trim().replace(/\s+/g, ' ');
@@ -641,6 +693,30 @@ function persistUploadToStorage(filename) {
   Promise.resolve()
     .then(() => mediaPipeline.storageProvider.put(`uploads/${filename}`, filePath))
     .catch((err) => appLogger.error('storage-v2: background copy failed (local file stays canonical)', { filename, error: err?.message || String(err) }));
+}
+
+/** Delete an uploaded media object everywhere it lives. The local unlink
+ *  keeps the exact pre-S3 semantics (sync, existsSync-guarded); the S3 copy
+ *  is removed fire-and-forget — never blocks or fails the DB delete, and a
+ *  failure is logged loudly since it would leave an orphaned billable object. */
+function deleteUploadFromStorage(filename) {
+  if (!filename) return;
+  const safe = path.basename(filename); // DB fields hold bare filenames; defense in depth anyway
+  try {
+    const filePath = path.join(__dirname, 'storage', 'uploads', safe);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch (err) {
+    appLogger.warn('local upload delete failed', { filename: safe, error: err?.message || String(err) });
+  }
+  const provider = mediaPipeline?.storageProvider;
+  if (provider?.type === 's3') {
+    Promise.resolve()
+      .then(() => provider.remove(`uploads/${safe}`))
+      .then((removed) => {
+        if (removed === false) appLogger.warn('storage-v2: object delete found no object (already gone)', { filename: safe });
+      })
+      .catch((err) => appLogger.error('storage-v2: object delete failed (orphan possible)', { filename: safe, error: err?.message || String(err) }));
+  }
 }
 
 /** Enqueue transcode profiles for an uploaded video. Runs only after the
@@ -1459,51 +1535,37 @@ async function getOrCreateWallet(userId) {
 app.get('/api/wallet/me', authenticate, requireAuth, async (req, res) => {
   try {
     const wallet = await getOrCreateWallet(req.user.id);
-    res.json({ coins: wallet.coins, giftCatalog: GIFT_CATALOG, stripeEnabled: STRIPE_ENABLED });
+    res.json({
+      coins: wallet.coins,
+      giftCatalog: GIFT_CATALOG,
+      payments: paymentService.capabilities,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load wallet' });
   }
 });
 
-// Top up coins. In dev mode (no Stripe keys configured) coins are granted
-// instantly so the gifting/subscription economy is fully testable. Once
-// STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET are set, this creates a real
-// Checkout session instead and coins are granted by the webhook above.
+// Top up coins via the provider-agnostic payment service. The env-selected
+// provider decides the mode: a real hosted checkout (Stripe today, the South
+// African gateway tomorrow — same interface), or the dev instant grant
+// (local dev only — the service refuses it in production).
 app.post('/api/wallet/topup', authenticate, requireRegistered, async (req, res) => {
   try {
     const coins = Math.min(10000, Math.max(1, parseInt(req.body.coins, 10) || 0));
     if (!coins) return res.status(400).json({ error: 'coins must be a positive number' });
 
-    if (STRIPE_ENABLED) {
-      const priceUsd = (coins / 100).toFixed(2); // 100 coins = $1
-      const session = await stripeClient.checkout.sessions.create({
-        mode: 'payment',
-        payment_method_types: ['card'],
-        line_items: [{
-          price_data: {
-            currency: 'usd',
-            product_data: { name: `${coins} iKHWEZI Coins` },
-            unit_amount: Math.round(priceUsd * 100),
-          },
-          quantity: 1,
-        }],
-        metadata: { userId: req.user.id, coins: String(coins) },
-        success_url: `${FRONTEND_URL}/profile/${req.user.id}?topup=success`,
-        cancel_url: `${FRONTEND_URL}/profile/${req.user.id}?topup=cancelled`,
-      });
-      return res.json({ checkoutUrl: session.url, devMode: false });
-    }
+    const result = await paymentService.createTopup({
+      user: req.user,
+      coins,
+      returnUrl: `${FRONTEND_URL}/profile/${req.user.id}`,
+    });
 
-    // Dev-mode instant grant — blocked in production to prevent free unlimited coins.
-    if (IS_PRODUCTION) {
-      return res.status(503).json({ error: 'Payment processor not configured' });
+    if (result.mode === 'dev-grant') {
+      return res.json({ coins: result.coins, devMode: true, paymentId: result.paymentId });
     }
-
-    const wallet = await getOrCreateWallet(req.user.id);
-    wallet.coins += coins;
-    await wallet.save();
-    res.json({ coins: wallet.coins, devMode: true });
+    return res.json({ checkoutUrl: result.checkoutUrl, devMode: false, paymentId: result.paymentId });
   } catch (err) {
+    if (err?.status) return res.status(err.status).json({ error: err.message });
     req.logger?.error('Wallet topup error', { error: err?.message || String(err) });
     res.status(500).json({ error: 'Failed to top up wallet' });
   }
@@ -2039,9 +2101,8 @@ app.delete('/api/stories/:id', authenticate, requireRegistered, async (req, res)
     if (!story) return res.status(404).json({ error: 'Story not found' });
     if (story.userId !== req.user.id) return res.status(403).json({ error: 'Not your story' });
 
-    // Delete file from disk
-    const filePath = path.join(__dirname, 'storage/uploads', path.basename(story.url));
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    // Delete file from disk + object storage
+    deleteUploadFromStorage(path.basename(story.url));
 
   await StoryComment.destroy({ where: { storyId: story.id } });
     await StoryView.destroy({ where: { storyId: story.id } });
@@ -2310,8 +2371,7 @@ app.delete('/api/videos/:id', authenticate, requireRegistered, async (req, res) 
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
     if (video.userId !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
-    const filePath = path.join(__dirname, 'storage/uploads', video.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    deleteUploadFromStorage(video.filename);
     await video.destroy();
     res.json({ success: true });
   } catch (err) {
@@ -2513,8 +2573,7 @@ app.delete('/api/admin/videos/:id', authenticate, requireRole('admin'), async (r
     const video = await Video.findByPk(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
 
-    const filePath = path.join(__dirname, 'storage/uploads', video.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    deleteUploadFromStorage(video.filename);
 
     await video.destroy();
     await logAudit('VIDEO_DELETED', { videoId: req.params.id }, req.ip);
@@ -2592,8 +2651,7 @@ app.delete('/api/admin/ads/:id', authenticate, requireRole('admin'), async (req,
     const ad = await Ad.findByPk(req.params.id);
     if (!ad) return res.status(404).json({ error: 'Ad not found' });
 
-    const filePath = path.join(__dirname, 'storage/uploads', ad.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    deleteUploadFromStorage(ad.filename);
 
     await ad.destroy();
     await logAudit('AD_DELETED', { adId: req.params.id }, req.ip);
