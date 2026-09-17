@@ -1,5 +1,16 @@
 name: Deploy to Lightsail
 
+# ── ARCHITECTURE (incident 2026-09-17, second occurrence) ──────────────────
+# Building images ON the Lightsail instance wedged its docker daemon twice
+# (OOM-style: parallel builds first, then even serialized builds + up during
+# the livekit step). A 2GB host cannot build three images reliably.
+#
+# NEW MODEL: GitHub Actions builds ALL images on the runner (16GB), ships
+# them as compressed tarballs over SSH, and the server only runs
+# `docker load` + `docker compose up -d`. The server never builds again —
+# the entire OOM/wedge failure class is eliminated. Deploy cost: a ~1-2 min
+# image upload instead of a ~20 min on-server build.
+
 on:
   push:
     branches:
@@ -54,13 +65,74 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  deploy:
-    name: SSH Deploy
+  images:
+    name: Build & export images (on the runner — never on the server)
     needs: quality-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Runner-side builds mirror exactly what the server used to do (same
+      # Dockerfiles, same --no-cache semantics via fresh runners).
+      - name: Build nginx-rtmp image
+        run: docker build -t ikhwezi-nginx-rtmp:latest ./nginx
+
+      - name: Build backend image
+        run: docker build -t ikhwezi-backend:latest ./backend
+
+      - name: Build frontend image
+        run: docker build -t ikhwezi-frontend:latest ./frontend
+
+      # Export as gzipped tarballs for the SSH transfer. gzip drops the
+      # backend image (~200MB) to a fraction of its size.
+      - name: Export images
+        run: |
+          mkdir -p deploy-artifacts
+          docker save ikhwezi-nginx-rtmp:latest | gzip > deploy-artifacts/nginx-rtmp.tar.gz
+          docker save ikhwezi-backend:latest    | gzip > deploy-artifacts/backend.tar.gz
+          docker save ikhwezi-frontend:latest   | gzip > deploy-artifacts/frontend.tar.gz
+          ls -lh deploy-artifacts/
+
+      - name: Upload image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: images
+          path: deploy-artifacts/*.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  deploy:
+    name: SSH Deploy (load prebuilt images — server builds nothing)
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Download image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: images
+          path: deploy-artifacts
+
+      # Ship the image tarballs first (scp), so the SSH deploy step is short.
+      - name: Upload images to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          port: 22
+          source: "deploy-artifacts/*.tar.gz"
+          target: ~/ikhwezi-deploy/
+          strip_components: 1
+          timeout: 600s
+
       - name: Deploy to Lightsail via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -68,7 +140,7 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: 22
-          command_timeout: 25m
+          command_timeout: 20m
           script: |
             set -e
             export COMPOSE_HTTP_TIMEOUT=300
@@ -89,22 +161,43 @@ jobs:
               COMPOSE="docker-compose"
             fi
 
-            # nginx-rtmp is built from ./nginx (renders the RTMP webhook
-            # secret into nginx.conf at start), so it must be rebuilt and
-            # recreated alongside the app services.
-            # Builds run SEQUENTIALLY (one image at a time): parallel
-            # --no-cache builds of three images on a small instance caused
-            # an OOM-style docker daemon wedge (incident 2026-09-17).
-            $COMPOSE build --no-cache nginx-rtmp
-            $COMPOSE build --no-cache backend
-            $COMPOSE build --no-cache frontend
+            # ── Load prebuilt images (no build on this host, ever) ──
+            gunzip -c ~/ikhwezi-deploy/nginx-rtmp.tar.gz | docker load
+            gunzip -c ~/ikhwezi-deploy/backend.tar.gz    | docker load
+            gunzip -c ~/ikhwezi-deploy/frontend.tar.gz   | docker load
+            rm -f ~/ikhwezi-deploy/*.tar.gz
+
+            # nginx-rtmp renders the RTMP webhook secret into nginx.conf at
+            # start, so it is recreated alongside the app services.
             $COMPOSE up -d frontend backend nginx-rtmp
 
             # Meeting A/V SFU (prebuilt image — no build cost). Boot order
             # does not matter to the app: the backend tolerates a missing/
             # unreachable SFU and meetings degrade to presence-only.
             # LIVEKIT_* values in .env decide whether the backend mints
-            # tokens at all.
-            $COMPOSE up -d livekit || echo "WARN: livekit SFU failed to start; meetings stay presence-only"
-            docker image prune -f
-            echo "✅ Deployed $(git rev-parse --short HEAD) at $(date)"
+            # tokens at all. Guarded by `timeout`: a wedged docker call can
+            # never hang the deploy (incident 2026-09-17, twice).
+            timeout 90 $COMPOSE up -d livekit || echo "WARN: livekit SFU failed to start; meetings stay presence-only"
+
+            timeout 60 docker image prune -f || echo "WARN: image prune skipped (non-fatal)"
+
+            # ── Observable truth: the deploy is only successful if the app
+            # answers. Retries cover container start-up time.
+            echo "waiting for app to answer..."
+            ok=""
+            for i in $(seq 1 30); do
+              if curl -sk -o /dev/null --max-time 5 "https://ikhwezi.site/api/health"; then
+                ok="yes"; break
+              fi
+              # Local fallback in case the public TLS path is slow:
+              if curl -s -o /dev/null --max-time 5 "http://localhost:3002/api/health"; then
+                ok="local"; break
+              fi
+              sleep 4
+            done
+            if [ -z "$ok" ]; then
+              echo "ERROR: app did not become healthy after deploy"
+              $COMPOSE ps || true
+              exit 1
+            fi
+            echo "✅ Deployed $(git rev-parse --short HEAD) at $(date) (health: $ok)"

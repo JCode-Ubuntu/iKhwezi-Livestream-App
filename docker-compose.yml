@@ -3,6 +3,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # EXPLICIT image name (deploy pipeline contract): GitHub Actions builds
+    # `ikhwezi-backend:latest` on the runner and ships the tarball; the server
+    # runs `docker load` + `up -d` and must adopt this exact image. Without
+    # the pinned name, compose derives one from the project dir and ignores
+    # the loaded image (forcing an on-server build — the failure class we
+    # removed; see incident 2026-09-17 in .github/workflows/deploy.yml).
+    # `build:` is retained so local dev can still `docker compose build`.
+    image: ikhwezi-backend:latest
     container_name: ikhwezi-backend
     ports:
       - "3001:3001"
@@ -185,6 +193,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: ikhwezi-frontend:latest
     container_name: ikhwezi-frontend
     ports:
       - "8080:80"
@@ -199,6 +208,7 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
+    image: ikhwezi-nginx-rtmp:latest
     container_name: ikhwezi-rtmp
     ports:
       - "1935:1935"
