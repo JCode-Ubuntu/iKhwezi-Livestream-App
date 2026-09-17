@@ -65,8 +65,16 @@ async function up({ context }) {
     // rather than crashing boot for a schema we cannot interpret.
     const hasIsAdmin = Object.prototype.hasOwnProperty.call(usersTable, 'isAdmin');
     if (hasIsAdmin) {
+      // POSTGRES PORTABILITY (launch verification fix): the table was created
+      // quoted-camelCase ("Users") by 0001, but this raw statement referenced
+      // it unquoted — Postgres folds unquoted identifiers to lowercase and
+      // failed with `relation "users" does not exist`. Quoting works on both
+      // dialects (SQLite is case-insensitive). `isAdmin = 1` also breaks on
+      // Postgres BOOLEAN columns (`operator does not exist: boolean = integer`);
+      // a bare boolean predicate in WHERE is valid on Postgres (real boolean)
+      // and SQLite (non-zero integer is truthy), so it stays portable.
       await sequelize.query(
-        "UPDATE Users SET role = 'admin' WHERE isAdmin = 1 AND (role IS NULL OR role <> 'admin')",
+        "UPDATE \"Users\" SET role = 'admin' WHERE \"isAdmin\" AND (role IS NULL OR role <> 'admin')",
         { transaction }
       );
     } else {
