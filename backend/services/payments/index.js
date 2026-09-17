@@ -86,6 +86,14 @@ function buildPaymentService({
         await payment.save();
       }
 
+      // Audit enrichment: providers may return checkout-time metadata (e.g.
+      // PayFast: the exact ZAR amount + FX rate in force). Stored on the
+      // ledger row so the audit trail shows what the user was charged.
+      if (result.metadata) {
+        payment.metadata = result.metadata;
+        await payment.save();
+      }
+
       if (result.devGrant) {
         // Dev-mode instant grant — the route refuses this in production.
         const newBalance = await Payment.sequelize.transaction((t) =>
@@ -116,7 +124,7 @@ function buildPaymentService({
       if (!parsed || parsed.handled === false) {
         return { ignored: true };
       }
-      const { eventId, providerRef, outcome, failureReason } = parsed;
+      const { eventId, providerRef, outcome, failureReason, fields } = parsed;
 
       // Legacy Stripe-replay guard (ProcessedStripeEvents.eventId unique):
       // preserves behavior parity with the pre-refactor webhook path. Other
@@ -137,6 +145,25 @@ function buildPaymentService({
       }
       if (payment.status === 'succeeded') {
         return { duplicate: true };
+      }
+
+      // Ledger integrity hook (contract extension): providers with an amount
+      // dimension (PayFast ZAR) verify the notification against the ledger
+      // row BEFORE any credit. A mismatch fails the payment fail-closed.
+      if (outcome === 'succeeded' && typeof provider.verifyPayment === 'function') {
+        let verified = false;
+        try {
+          verified = await provider.verifyPayment({ payment, fields });
+        } catch (err) {
+          log.warn?.('verifyPayment hook threw (treating as failed)', { provider: provider.id, error: err?.message || String(err) });
+        }
+        if (!verified) {
+          payment.status = 'failed';
+          payment.failureReason = 'amount verification failed';
+          await payment.save();
+          await logAudit('WALLET_TOPUP_FAILED', { userId: payment.userId, provider: provider.id, paymentId: payment.id, reason: payment.failureReason }, null);
+          return { failed: true, reason: payment.failureReason };
+        }
       }
 
       if (outcome === 'succeeded') {

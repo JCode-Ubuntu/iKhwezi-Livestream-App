@@ -259,6 +259,25 @@ function Profile() {
         return;
       }
       if (data.checkoutUrl) {
+        // POST-checkout providers (PayFast) require a signed HTML form POST —
+        // a plain redirect would drop the signature. GET providers (Stripe)
+        // keep using the simple redirect. The form is created imperatively,
+        // submitted immediately and then removed.
+        if (data.checkoutMethod === 'post' && data.checkoutFields) {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = data.checkoutUrl;
+          Object.entries(data.checkoutFields).forEach(([name, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = String(value);
+            form.appendChild(input);
+          });
+          document.body.appendChild(form);
+          form.submit();
+          return;
+        }
         window.location.href = data.checkoutUrl;
         return;
       }

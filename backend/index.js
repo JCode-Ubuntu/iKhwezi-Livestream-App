@@ -268,15 +268,22 @@ app.use(cors({
 // the raw body is available for provider signature verification).
 // Provider selection happens in buildPaymentProviderFromEnv (below, after
 // models load) — this route only routes raw bodies per provider id.
-const PAYMENT_WEBHOOK_PATHS = ['/api/payments/webhook/stripe', '/api/stripe/webhook'];
-for (const webhookPath of PAYMENT_WEBHOOK_PATHS) {
-  app.post(webhookPath, express.raw({ type: 'application/json' }), (req, res, next) => {
-    if (!paymentService || paymentService.providerId !== 'stripe') {
-      return res.status(503).json({ error: 'Payment processor not configured' });
-    }
-    req.paymentWebhook = { rawBody: req.body };
-    next();
-  }, async (req, res) => {
+const PAYMENT_WEBHOOKS = [
+  // Stripe: JSON body, HMAC signature header.
+  { paths: ['/api/payments/webhook/stripe', '/api/stripe/webhook'], contentType: 'application/json', provider: 'stripe' },
+  // PayFast: ITN notifications are application/x-www-form-urlencoded POSTs;
+  // the raw body is required for the MD5 signature check.
+  { paths: ['/api/payments/webhook/payfast'], contentType: 'application/x-www-form-urlencoded', provider: 'payfast' },
+];
+for (const webhook of PAYMENT_WEBHOOKS) {
+  for (const webhookPath of webhook.paths) {
+    app.post(webhookPath, express.raw({ type: webhook.contentType }), (req, res, next) => {
+      if (!paymentService || paymentService.providerId !== webhook.provider) {
+        return res.status(503).json({ error: 'Payment processor not configured' });
+      }
+      req.paymentWebhook = { rawBody: req.body };
+      next();
+    }, async (req, res) => {
     try {
       const result = await paymentService.handleWebhook({
         rawBody: req.paymentWebhook.rawBody,
@@ -439,8 +446,19 @@ const {
 const { buildPaymentService } = require('./services/payments');
 const { buildStripeProvider } = require('./services/payments/stripe');
 const { buildDevProvider } = require('./services/payments/dev');
+const { buildPayfastProviderFromEnv } = require('./services/payments/payfast');
 
 function buildPaymentProviderFromEnv(env = process.env) {
+  // PayFast takes precedence: it is the production gateway for the SA market.
+  const payfastId = (env.PAYFAST_MERCHANT_ID || '').trim();
+  if (payfastId) {
+    try {
+      return buildPayfastProviderFromEnv(env);
+    } catch (err) {
+      appLogger.warn(`payfast provider could not be built — payments disabled (${err?.message || err})`);
+      return null;
+    }
+  }
   const stripeKey = (env.STRIPE_SECRET_KEY || '').trim();
   const stripeWebhookSecret = (env.STRIPE_WEBHOOK_SECRET || '').trim();
   if (stripeKey) {
@@ -1546,9 +1564,10 @@ app.get('/api/wallet/me', authenticate, requireAuth, async (req, res) => {
 });
 
 // Top up coins via the provider-agnostic payment service. The env-selected
-// provider decides the mode: a real hosted checkout (Stripe today, the South
-// African gateway tomorrow — same interface), or the dev instant grant
-// (local dev only — the service refuses it in production).
+// provider decides the mode: a real hosted checkout (Stripe = redirect URL;
+// PayFast = signed HTML form POST — see checkoutMethod/checkoutFields), or
+// the dev instant grant (local dev only — the service refuses it in
+// production).
 app.post('/api/wallet/topup', authenticate, requireRegistered, async (req, res) => {
   try {
     const coins = Math.min(10000, Math.max(1, parseInt(req.body.coins, 10) || 0));
@@ -1563,7 +1582,16 @@ app.post('/api/wallet/topup', authenticate, requireRegistered, async (req, res) 
     if (result.mode === 'dev-grant') {
       return res.json({ coins: result.coins, devMode: true, paymentId: result.paymentId });
     }
-    return res.json({ checkoutUrl: result.checkoutUrl, devMode: false, paymentId: result.paymentId });
+    // POST-checkout extension (PayFast): the client renders an auto-POSTing
+    // form to checkoutUrl with these signed fields. GET-redirect providers
+    // (Stripe) simply omit checkoutMethod/checkoutFields.
+    return res.json({
+      checkoutUrl: result.checkoutUrl,
+      checkoutMethod: result.checkoutMethod || 'get',
+      ...(result.checkoutFields ? { checkoutFields: result.checkoutFields } : {}),
+      devMode: false,
+      paymentId: result.paymentId,
+    });
   } catch (err) {
     if (err?.status) return res.status(err.status).json({ error: err.message });
     req.logger?.error('Wallet topup error', { error: err?.message || String(err) });
