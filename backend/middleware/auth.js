@@ -25,6 +25,10 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
+// Activity-tracking write throttle: a user's lastActive is persisted at most
+// once per this window (5 minutes). Everything else keeps the in-memory value.
+const LAST_ACTIVE_WRITE_INTERVAL_MS = 5 * 60 * 1000;
+
 function buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY }) {
   if (!User || !JWT_SECRET || !ADMIN_KEY) {
     throw new Error('buildAuthMiddleware requires User, JWT_SECRET and ADMIN_KEY');
@@ -49,11 +53,20 @@ function buildAuthMiddleware({ User, JWT_SECRET, ADMIN_KEY }) {
       const user = await User.findByPk(decoded.id);
       if (user && !user.isBanned) {
         req.user = user;
-        // Keep requests authenticated even if optional activity tracking write fails.
-        user.lastActive = new Date();
-        user.save().catch((saveErr) => {
-          req.logger?.warn('Last active update failed', { error: saveErr?.message || String(saveErr) });
-        });
+        // Activity tracking: throttled to one write per user per window.
+        // A naive `user.save()` here turns EVERY authenticated request into
+        // a Users-row write — lock contention + WAL churn for a statistic
+        // nothing reads at request frequency. The timer is unref'd so tests
+        // and shutdown never hang on it.
+        const lastActive = user.get('lastActive') ? new Date(user.get('lastActive')) : null;
+        const stale = !lastActive || (Date.now() - lastActive.getTime()) > LAST_ACTIVE_WRITE_INTERVAL_MS;
+        if (stale) {
+          const now = new Date();
+          user.set('lastActive', now);
+          user.save({ fields: ['lastActive'] }).catch((saveErr) => {
+            req.logger?.warn('Last active update failed', { error: saveErr?.message || String(saveErr) });
+          });
+        }
       } else {
         req.user = null;
       }
