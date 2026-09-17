@@ -141,6 +141,9 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: 22
           command_timeout: 20m
+          # Secrets are forwarded so the remote script can sync them into the
+          # server's .env (single source of truth for compose interpolation).
+          envs: LIVEKIT_API_KEY,LIVEKIT_API_SECRET,S3_BUCKET,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,S3_REGION,S3_ENDPOINT,S3_PUBLIC_URL,PAYFAST_MERCHANT_ID,PAYFAST_MERCHANT_KEY,PAYFAST_PASSPHRASE,PAYFAST_ZAR_PER_USD,PAYFAST_MODE
           script: |
             set -e
             export COMPOSE_HTTP_TIMEOUT=300
@@ -154,6 +157,51 @@ jobs:
             cd "$APP_DIR"
             git fetch origin master
             git reset --hard origin/master
+
+            # ── Sync operator-managed secrets into the server .env ──
+            # Idempotent + non-destructive: only values actually provided via
+            # GitHub secrets are written; everything else on the server keeps
+            # whatever the operator configured. Compose re-reads .env on every
+            # `up -d`, so changed values recreate just the affected containers.
+            ENV_FILE="$APP_DIR/.env"
+            touch "$ENV_FILE"
+            sync_env() {
+              key="$1"; val="$2"
+              if grep -q "^${key}=" "$ENV_FILE"; then
+                sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
+              else
+                printf '%s=%s\n' "$key" "$val" >> "$ENV_FILE"
+              fi
+            }
+            # LiveKit (self-hosted SFU): real keys activate token minting. The
+            # livekit container's `keys:` block reads the SAME vars from this
+            # file, so backend and SFU always agree.
+            if [ -n "$LIVEKIT_API_KEY" ] && [ -n "$LIVEKIT_API_SECRET" ]; then
+              sync_env LIVEKIT_API_KEY "$LIVEKIT_API_KEY"
+              sync_env LIVEKIT_API_SECRET "$LIVEKIT_API_SECRET"
+              echo "livekit credentials synced"
+            fi
+            # S3 / R2 object storage (set S3_* secrets to activate; see
+            # docs/ops/s3-activation-checklist.md).
+            if [ -n "$S3_BUCKET" ] && [ -n "$S3_ACCESS_KEY_ID" ] && [ -n "$S3_SECRET_ACCESS_KEY" ]; then
+              sync_env S3_BUCKET "$S3_BUCKET"
+              sync_env S3_ACCESS_KEY_ID "$S3_ACCESS_KEY_ID"
+              sync_env S3_SECRET_ACCESS_KEY "$S3_SECRET_ACCESS_KEY"
+              if [ -n "$S3_REGION" ]; then sync_env S3_REGION "$S3_REGION"; fi
+              if [ -n "$S3_ENDPOINT" ]; then sync_env S3_ENDPOINT "$S3_ENDPOINT"; fi
+              if [ -n "$S3_PUBLIC_URL" ]; then sync_env S3_PUBLIC_URL "$S3_PUBLIC_URL"; fi
+              echo "s3 storage credentials synced"
+            fi
+            # PayFast (production payment provider; see
+            # docs/ops/payment-gateway-activation.md).
+            if [ -n "$PAYFAST_MERCHANT_ID" ] && [ -n "$PAYFAST_MERCHANT_KEY" ] && [ -n "$PAYFAST_PASSPHRASE" ]; then
+              sync_env PAYFAST_MERCHANT_ID "$PAYFAST_MERCHANT_ID"
+              sync_env PAYFAST_MERCHANT_KEY "$PAYFAST_MERCHANT_KEY"
+              sync_env PAYFAST_PASSPHRASE "$PAYFAST_PASSPHRASE"
+              if [ -n "$PAYFAST_ZAR_PER_USD" ]; then sync_env PAYFAST_ZAR_PER_USD "$PAYFAST_ZAR_PER_USD"; fi
+              if [ -n "$PAYFAST_MODE" ]; then sync_env PAYFAST_MODE "$PAYFAST_MODE"; fi
+              echo "payfast credentials synced"
+            fi
 
             if docker compose version >/dev/null 2>&1; then
               COMPOSE="docker compose"
