@@ -1,6 +1,6 @@
 /**
  * iKHWEZI Backend Smoke Test
- * Run: node test-smoke.js  (backend must be running on PORT or 3101)
+ * Run: node smoke.js  (backend must be running on PORT or 3101)
  */
 'use strict';
 const http = require('http');
