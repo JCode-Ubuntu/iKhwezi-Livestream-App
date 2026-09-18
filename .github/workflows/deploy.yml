@@ -249,13 +249,14 @@ jobs:
             gunzip -c ~/ikhwezi-deploy/backend.tar.gz    | docker load
             gunzip -c ~/ikhwezi-deploy/frontend.tar.gz   | docker load
 
-            # Free published ports before recreate. After reboot / partial
-            # deploys, compose leftovers OR a host process can hold 3001/3002.
+            # Free published ports before recreate. Diagnostics showed port
+            # 3001 LISTEN with backend stuck in "Created" and no published
+            # owner — a docker-proxy ghost. Needs sudo fuser / dockerd bounce.
             echo "=== pre-up port holders ==="
             docker ps -a --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}\t{{.Status}}' || true
             (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null || true) | grep -E ':3001|:3002' || true
 
-            for pattern in ikhwezi-backend ikhwezi-frontend ikhwezi-rtmp backend-debug; do
+            for pattern in ikhwezi-backend ikhwezi-frontend ikhwezi-rtmp backend-debug livekit; do
               ids=$(docker ps -aq --filter "name=${pattern}" 2>/dev/null || true)
               if [ -n "$ids" ]; then docker rm -f $ids || true; fi
             done
@@ -263,10 +264,18 @@ jobs:
               ids=$(docker ps -aq --filter "publish=${port}" 2>/dev/null || true)
               if [ -n "$ids" ]; then docker rm -f $ids || true; fi
             done
-            # Last resort: drop whatever still owns the TCP ports (docker-proxy
-            # ghosts / stray node). Postgres/redis do not use these ports.
-            fuser -k 3001/tcp 3002/tcp 2>/dev/null || true
+            sudo fuser -k 3001/tcp 3002/tcp 2>/dev/null || fuser -k 3001/tcp 3002/tcp 2>/dev/null || true
             sleep 2
+            if ss -ltn 2>/dev/null | grep -qE ':3001\s'; then
+              echo "port 3001 still held — restarting docker to clear proxy ghost"
+              sudo systemctl restart docker
+              for i in $(seq 1 40); do
+                docker info >/dev/null 2>&1 && break
+                sleep 2
+              done
+              $COMPOSE up -d postgres redis
+              sleep 5
+            fi
 
             # nginx-rtmp renders the RTMP webhook secret into nginx.conf at
             # start, so it is recreated alongside the app services.
