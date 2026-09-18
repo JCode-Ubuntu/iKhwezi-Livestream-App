@@ -144,7 +144,7 @@ test('migrations: fresh schema built on Postgres, meta recorded', maybeSkip, asy
 // 2. AUTH: register-shaped user creation + authenticate() core logic on PG
 // ---------------------------------------------------------------------------
 test('auth: bcrypt-verified user with UUID PK and Postgres timestamps', maybeSkip, async () => {
-  const { models: m } = await getDb();
+  const { sequelize: db, models: m } = await getDb();
   await truncateAll();
 
   // Exactly what the /api/auth/register route does (bcryptjs, cost 10).
@@ -300,9 +300,11 @@ test('messages: duplicate clientMessageId rejected, distinct one accepted', mayb
 test('hot-path indexes: 0005 indexes exist in pg_indexes', maybeSkip, async () => {
   const { sequelize: db } = await getDb();
 
+  // Use IN (:names) — Sequelize expands the array correctly. ANY(:names)
+  // expands to ANY('a','b') which is invalid Postgres.
   const [rows] = await db.query(
     `SELECT indexname FROM pg_indexes
-     WHERE schemaname = current_schema() AND indexname = ANY(:names)`,
+     WHERE schemaname = current_schema() AND indexname IN (:names)`,
     { replacements: { names: HOT_PATH_INDEXES } }
   );
   const present = new Set(rows.map((r) => r.indexname));
@@ -318,8 +320,9 @@ test('casing portability: 0002 quoted-camelCase backfill UPDATE runs on PG', may
   const { sequelize: db, models: m } = await getDb();
   await truncateAll();
 
-  // An admin promoted via the legacy flag but with no role set yet.
-  const user = await m.User.create({ username: 'legacy_admin', password: 'x', isAdmin: true, role: null });
+  // Legacy-flag admin still on the default 'user' role (role is NOT NULL with
+  // default 'user' after 0002 — the migration UPDATE also matches role <> 'admin').
+  const user = await m.User.create({ username: 'legacy_admin', password: 'x', isAdmin: true, role: 'user' });
 
   // The exact statement from migrations/20260906-0002-roles-and-devices.js —
   // quoted camelCase identifiers survive Postgres case-folding, and the bare
