@@ -131,10 +131,10 @@ test('migrations: fresh schema built on Postgres, meta recorded', maybeSkip, asy
     assert.ok(lower.includes(expected.toLowerCase()), `${expected} table must exist on Postgres`);
   }
 
-  // SequelizeMeta recorded ≥5 migrations, names carry the .js extension
+  // SequelizeMeta recorded ≥6 migrations, names carry the .js extension
   // (umzug's default resolver names = file names).
   const [metaRows] = await db.query('SELECT "name" FROM "SequelizeMeta"');
-  assert.ok(metaRows.length >= 5, `expected ≥5 recorded migrations, got ${metaRows.length}`);
+  assert.ok(metaRows.length >= 6, `expected ≥6 recorded migrations, got ${metaRows.length}`);
   for (const row of metaRows) {
     assert.match(String(row.name), /\.js$/, 'migration name must include the .js extension');
   }

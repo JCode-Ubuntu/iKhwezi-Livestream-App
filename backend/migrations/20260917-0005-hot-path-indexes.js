@@ -50,24 +50,14 @@ async function up({ context }) {
   ];
 
   await sequelize.transaction(async (transaction) => {
-    // Guard each statement on table existence so the migration stays safe on
-    // adopted legacy V1 databases that may lack feature tables (V1 had no
-    // Groups/Meetings, and this list only touches core tables — but a legacy
-    // DB could pre-date Videos-era tables in theory).
+    // Prefer QueryInterface.showAllTables — information_schema + current_schema()
+    // silently matched zero tables on Postgres in CI (indexes skipped, migration
+    // still recorded as executed). showAllTables is the same path the rest of
+    // the suite already trusts.
+    const tables = await qi.showAllTables({ transaction });
+    const names = new Set(tables.map((t) => String(t).toLowerCase()));
+
     for (const [table, indexName, sql] of statements) {
-      let tables;
-      if (sequelize.getDialect() === 'postgres') {
-        tables = await sequelize.query(
-          'SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()',
-          { transaction },
-        );
-      } else {
-        tables = await sequelize.query(
-          "SELECT name FROM sqlite_master WHERE type='table'",
-          { transaction },
-        );
-      }
-      const names = new Set(tables[0].map((r) => String(Object.values(r)[0]).toLowerCase()));
       if (!names.has(table.toLowerCase())) {
         continue; // table absent on this database — index is irrelevant
       }
