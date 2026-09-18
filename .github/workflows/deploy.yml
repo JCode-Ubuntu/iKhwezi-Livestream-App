@@ -249,33 +249,29 @@ jobs:
             gunzip -c ~/ikhwezi-deploy/backend.tar.gz    | docker load
             gunzip -c ~/ikhwezi-deploy/frontend.tar.gz   | docker load
 
-            # Free published ports before recreate. Diagnostics showed port
-            # 3001 LISTEN with backend stuck in "Created" and no published
-            # owner — a docker-proxy ghost. Needs sudo fuser / dockerd bounce.
+            # Free published ports before recreate. Port 3001 has repeatedly
+            # been LISTEN with backend stuck in "Created" and no owner in
+            # `docker ps` — a docker-proxy/libnetwork ghost. fuser alone does
+            # not clear Docker's port map; restarting dockerd does (data
+            # volumes for postgres/redis survive).
             echo "=== pre-up port holders ==="
             docker ps -a --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}\t{{.Status}}' || true
-            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null || true) | grep -E ':3001|:3002' || true
+            (ss -ltnp 2>/dev/null || true) | grep -E ':3001|:3002' || true
 
             for pattern in ikhwezi-backend ikhwezi-frontend ikhwezi-rtmp backend-debug livekit; do
               ids=$(docker ps -aq --filter "name=${pattern}" 2>/dev/null || true)
               if [ -n "$ids" ]; then docker rm -f $ids || true; fi
             done
-            for port in 3001 3002; do
-              ids=$(docker ps -aq --filter "publish=${port}" 2>/dev/null || true)
-              if [ -n "$ids" ]; then docker rm -f $ids || true; fi
+
+            echo "restarting docker to clear stale port allocations"
+            sudo systemctl restart docker
+            for i in $(seq 1 40); do
+              docker info >/dev/null 2>&1 && break
+              sleep 2
             done
-            sudo fuser -k 3001/tcp 3002/tcp 2>/dev/null || fuser -k 3001/tcp 3002/tcp 2>/dev/null || true
-            sleep 2
-            if ss -ltn 2>/dev/null | grep -qE ':3001\s'; then
-              echo "port 3001 still held — restarting docker to clear proxy ghost"
-              sudo systemctl restart docker
-              for i in $(seq 1 40); do
-                docker info >/dev/null 2>&1 && break
-                sleep 2
-              done
-              $COMPOSE up -d postgres redis
-              sleep 5
-            fi
+            $COMPOSE up -d postgres redis
+            # Wait briefly for DB/redis health before app containers.
+            sleep 8
 
             # nginx-rtmp renders the RTMP webhook secret into nginx.conf at
             # start, so it is recreated alongside the app services.
