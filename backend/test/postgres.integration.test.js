@@ -300,16 +300,15 @@ test('messages: duplicate clientMessageId rejected, distinct one accepted', mayb
 test('hot-path indexes: 0005 indexes exist in pg_indexes', maybeSkip, async () => {
   const { sequelize: db } = await getDb();
 
-  // Use IN (:names) — Sequelize expands the array correctly. ANY(:names)
-  // expands to ANY('a','b') which is invalid Postgres.
+  // Fetch all schema indexes and filter in JS — avoids Sequelize named-array
+  // expansion quirks with IN (:names) / ANY(:names) on Postgres.
   const [rows] = await db.query(
-    `SELECT indexname FROM pg_indexes
-     WHERE schemaname = current_schema() AND indexname IN (:names)`,
-    { replacements: { names: HOT_PATH_INDEXES } }
+    `SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()`
   );
   const present = new Set(rows.map((r) => r.indexname));
+  const idxSample = [...present].filter((n) => String(n).startsWith('idx_')).sort().join(',');
   for (const name of HOT_PATH_INDEXES) {
-    assert.ok(present.has(name), `hot-path index ${name} must exist in pg_indexes`);
+    assert.ok(present.has(name), `hot-path index ${name} must exist in pg_indexes (have: ${idxSample})`);
   }
 });
 
@@ -327,16 +326,12 @@ test('casing portability: 0002 quoted-camelCase backfill UPDATE runs on PG', may
   // The exact statement from migrations/20260906-0002-roles-and-devices.js —
   // quoted camelCase identifiers survive Postgres case-folding, and the bare
   // boolean predicate ("isAdmin" AND ...) works on a real PG BOOLEAN column.
-  const [result] = await db.query(
+  // Sequelize returns [rows, metadata] for UPDATE — rowCount lives on metadata.
+  const [, metadata] = await db.query(
     "UPDATE \"Users\" SET role = 'admin' WHERE \"isAdmin\" AND (role IS NULL OR role <> 'admin')"
   );
 
-  assert.ok(result, 'UPDATE statement must execute without throwing');
-  assert.equal(
-    typeof result.rowCount === 'number' ? result.rowCount : Number(result),
-    1,
-    'exactly the legacy-flag admin row is promoted'
-  );
+  assert.equal(metadata.rowCount, 1, 'exactly the legacy-flag admin row is promoted');
 
   const readBack = await m.User.findByPk(user.id);
   assert.equal(readBack.role, 'admin');
