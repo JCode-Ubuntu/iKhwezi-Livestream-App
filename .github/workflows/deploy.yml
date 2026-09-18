@@ -249,9 +249,17 @@ jobs:
             gunzip -c ~/ikhwezi-deploy/backend.tar.gz    | docker load
             gunzip -c ~/ikhwezi-deploy/frontend.tar.gz   | docker load
 
+            # Free published ports before recreate. After reboot / partial
+            # deploys, a stale container can still hold 3001/3002 and cause
+            # "Bind for 0.0.0.0:3001 failed: port is already allocated".
+            for c in ikhwezi-backend ikhwezi-frontend ikhwezi-rtmp \
+                     ikhwezi-backend-prod ikhwezi-frontend-prod ikhwezi-nginx-rtmp-prod; do
+              docker rm -f "$c" 2>/dev/null || true
+            done
+
             # nginx-rtmp renders the RTMP webhook secret into nginx.conf at
             # start, so it is recreated alongside the app services.
-            $COMPOSE up -d frontend backend nginx-rtmp
+            $COMPOSE up -d --remove-orphans frontend backend nginx-rtmp
 
             # LiveKit SFU is intentionally NOT started on the 2GB Lightsail
             # host (incidents 2026-09-17 / 2026-09-18): `compose up livekit`
