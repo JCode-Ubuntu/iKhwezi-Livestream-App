@@ -303,7 +303,8 @@ for (const webhook of PAYMENT_WEBHOOKS) {
       req.logger?.error('payment webhook failed', { provider: paymentService.providerId, error: err?.message || String(err) });
       return res.status(err?.status || 400).json({ error: err?.message || 'Webhook processing failed' });
     }
-  });
+    });
+  }
 }
 
 app.use(express.json());
