@@ -250,11 +250,15 @@ jobs:
             gunzip -c ~/ikhwezi-deploy/frontend.tar.gz   | docker load
 
             # Free published ports before recreate. After reboot / partial
-            # deploys, a stale container can still hold 3001/3002 and cause
-            # "Bind for 0.0.0.0:3001 failed: port is already allocated".
-            for c in ikhwezi-backend ikhwezi-frontend ikhwezi-rtmp \
-                     ikhwezi-backend-prod ikhwezi-frontend-prod ikhwezi-nginx-rtmp-prod; do
-              docker rm -f "$c" 2>/dev/null || true
+            # deploys, compose may leave recreate leftovers named like
+            # `6f3f8899cd40_ikhwezi-backend` that still hold 3001/3002.
+            for pattern in ikhwezi-backend ikhwezi-frontend ikhwezi-rtmp; do
+              ids=$(docker ps -aq --filter "name=${pattern}" 2>/dev/null || true)
+              if [ -n "$ids" ]; then docker rm -f $ids || true; fi
+            done
+            for port in 3001 3002; do
+              ids=$(docker ps -aq --filter "publish=${port}" 2>/dev/null || true)
+              if [ -n "$ids" ]; then docker rm -f $ids || true; fi
             done
 
             # nginx-rtmp renders the RTMP webhook secret into nginx.conf at
