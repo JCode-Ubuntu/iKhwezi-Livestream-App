@@ -253,15 +253,14 @@ jobs:
             # start, so it is recreated alongside the app services.
             $COMPOSE up -d frontend backend nginx-rtmp
 
-            # Meeting A/V SFU (prebuilt image — no build cost). Boot order
-            # does not matter to the app: the backend tolerates a missing/
-            # unreachable SFU and meetings degrade to presence-only.
-            # LIVEKIT_* values in .env decide whether the backend mints
-            # tokens at all. Guarded by `timeout`: a wedged docker call can
-            # never hang the deploy (incident 2026-09-17, twice).
-            timeout 90 $COMPOSE up -d livekit || echo "WARN: livekit SFU failed to start; meetings stay presence-only"
-
-            timeout 60 docker image prune -f || echo "WARN: image prune skipped (non-fatal)"
+            # LiveKit SFU is intentionally NOT started on the 2GB Lightsail
+            # host (incidents 2026-09-17 / 2026-09-18): `compose up livekit`
+            # + prune wedged dockerd / userland even under `timeout`, leaving
+            # ports accepting TCP with no HTTP. Meetings degrade to
+            # presence-only until the instance is upsized. Keep any prior
+            # livekit container stopped so it cannot reclaim RAM mid-deploy.
+            timeout 30 $COMPOSE stop livekit 2>/dev/null || true
+            echo "livekit SFU skipped on this host (meetings stay presence-only)"
 
             # ── Observable truth: the deploy is only successful if the app is
             # genuinely READY — /api/ready gates on database + redis + storage
@@ -269,14 +268,14 @@ jobs:
             # audit 2026-09-17, Phase 4). Retries cover container start-up.
             echo "waiting for app to be READY..."
             ok=""
-            for i in $(seq 1 30); do
-              # /api/ready answers 200 only when critical dependencies pass.
-              if curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "https://ikhwezi.site/api/ready" | grep -q '^200$'; then
-                ok="ready"; break
-              fi
-              # Local fallback in case the public TLS path is slow:
+            for i in $(seq 1 45); do
+              # Prefer local probe first — avoids depending on public TLS while
+              # containers are still settling after recreate.
               if curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:3002/api/ready" | grep -q '^200$'; then
                 ok="ready-local"; break
+              fi
+              if curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "https://ikhwezi.site/api/ready" | grep -q '^200$'; then
+                ok="ready"; break
               fi
               sleep 4
             done
